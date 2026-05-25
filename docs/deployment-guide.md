@@ -4,10 +4,10 @@ This guide covers deploying BT ParkShare to a GoDaddy Plesk Linux server.
 
 ## Requirements
 
-- PHP 8.0 or higher
+- PHP 8.0 or higher with cURL extension
 - SQLite3 PHP extension (usually included)
-- PHP `mail()` function enabled (or SMTP configured via Plesk)
 - Apache with `mod_rewrite` enabled
+- Brevo account (free tier available) for email and SMS notifications
 
 ## Step 1: Upload Files
 
@@ -36,6 +36,70 @@ Generate a secure cron token:
 ```bash
 openssl rand -hex 32
 ```
+
+## Step 2b: Set Up Brevo API Key (Email & SMS)
+
+The Brevo API key is stored as a **server environment variable** — never in the codebase.
+
+1. Sign up at [brevo.com](https://www.brevo.com/) and generate a transactional API key under **SMTP & API > API Keys**.
+
+2. On your Plesk server, add the environment variable to Apache. Create or edit `/etc/apache2/conf.d/brevo.conf` (or your distro's equivalent):
+
+   ```apache
+   SetEnv BREVO_API_KEY "xkeysib-your-api-key-here"
+   ```
+
+   Then restart Apache:
+
+   ```bash
+   systemctl restart apache2
+   ```
+
+   **Alternative — per-vhost in Plesk:** Add the `SetEnv` directive in Plesk under **Domains > yourdomain > Apache & nginx Settings > Additional directives for HTTP** and **HTTPS**.
+
+   **Alternative — PHP-FPM:** If using PHP-FPM instead of mod_php, add to your pool config (e.g., `/etc/php/8.x/fpm/pool.d/yourdomain.conf`):
+
+   ```ini
+   env[BREVO_API_KEY] = "xkeysib-your-api-key-here"
+   ```
+
+3. For the **cron job** (CLI context), add the variable to the crontab or a shell profile:
+
+   ```bash
+   export BREVO_API_KEY="xkeysib-your-api-key-here"
+   ```
+
+   Or prefix the cron command:
+
+   ```
+   BREVO_API_KEY=xkeysib-your-api-key-here php /var/www/vhosts/yourdomain/httpdocs/cron.php YOUR_CRON_TOKEN
+   ```
+
+4. **Verify** the key is visible to PHP:
+
+   ```bash
+   php -r "echo getenv('BREVO_API_KEY') ? 'OK' : 'NOT SET';"
+   ```
+
+> **Fallback:** If `BREVO_API_KEY` is not set, the app falls back to PHP's built-in `mail()` function for emails. SMS notifications require the Brevo API key.
+
+### Enabling SMS Notifications
+
+SMS is disabled by default. To enable it, set an additional environment variable:
+
+```bash
+export BREVO_SMS_ENABLED=1
+```
+
+Add this alongside `BREVO_API_KEY` in the same locations (Apache conf, PHP-FPM pool, crontab).
+
+Optionally customize the SMS sender name (max 11 alphanumeric characters, default `BTParkShare`):
+
+```bash
+export BREVO_SMS_SENDER="BTParkShr"
+```
+
+> **Note:** Brevo SMS requires purchasing SMS credits separately from email. Phone numbers are collected at registration and should be in a format that includes country code for best results (e.g., +12065551234).
 
 ## Step 3: Set Directory Permissions
 
@@ -93,7 +157,9 @@ If you need a specific SMTP server, configure it at the Plesk domain level under
 - [ ] `data/` directory is not accessible via browser (should return 403)
 - [ ] `config.php` is not accessible via browser (should return 403)
 - [ ] Cron job is configured and running
+- [ ] `BREVO_API_KEY` environment variable is set and accessible to PHP
 - [ ] Test email sending (register a test account, check admin receives notification)
+- [ ] SMS sending works (if enabled — check PHP error log for issues)
 
 ## Troubleshooting
 
@@ -110,9 +176,17 @@ If you need a specific SMTP server, configure it at the Plesk domain level under
 
 ### Emails not sending
 
-- Verify PHP `mail()` function is not disabled in `php.ini`
-- Check Plesk mail logs
-- Consider configuring an SMTP relay in Plesk
+- Verify `BREVO_API_KEY` is set: `php -r "echo getenv('BREVO_API_KEY') ? 'OK' : 'NOT SET';"`
+- Check your PHP error log for "Brevo email failed" messages
+- Verify your Brevo sender email is authorized in Brevo under **Senders & IPs**
+- If not using Brevo: verify PHP `mail()` function is not disabled in `php.ini`
+
+### SMS not sending
+
+- Verify `BREVO_SMS_ENABLED` is set to `1` in the environment
+- Check your PHP error log for "Brevo SMS failed" messages
+- Ensure you have SMS credits in your Brevo account
+- Verify phone numbers include country code (e.g., +12065551234)
 
 ### Cron not running
 

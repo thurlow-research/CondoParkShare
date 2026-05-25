@@ -16,6 +16,9 @@ define('MAIL_FROM_NAME', 'Test');
 define('ADMIN_EMAIL', 'admin@test.com');
 define('SESSION_LIFETIME', 86400);
 define('CRON_TOKEN', 'test-cron-token');
+define('BREVO_API_KEY', '');           // Disabled in tests — falls back to mail()
+define('BREVO_SMS_SENDER', 'Test');
+define('SMS_ENABLED', false);
 
 date_default_timezone_set(TIMEZONE);
 
