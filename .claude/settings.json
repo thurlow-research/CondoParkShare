@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh repo:*)",
+      "Bash(gh pr:*)",
+      "Bash(rsvg-convert /Users/scott/Code/bt-parkshare/images/bt-silhouette.svg -w 32 -h 32 -o /tmp/favicon-32.png)",
+      "Bash(rsvg-convert /Users/scott/Code/bt-parkshare/images/bt-silhouette.svg -w 16 -h 16 -o /tmp/favicon-16.png)",
+      "Bash(rsvg-convert /Users/scott/Code/bt-parkshare/images/bt-silhouette.svg -w 180 -h 180 -o /Users/scott/Code/bt-parkshare/images/apple-touch-icon.png)"
+    ]
+  }
+}

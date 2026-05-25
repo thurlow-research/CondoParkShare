@@ -7,6 +7,9 @@ data/*.db-shm
 vendor/
 composer.phar
 
+# Environment / secrets
+.env
+
 # IDE
 .idea/
 .vscode/
@@ -18,3 +21,8 @@ composer.phar
 # OS
 .DS_Store
 Thumbs.db
+
+# AI oversight protocol
+# prompts/ and AGENTS.md are always committed — never ignore them
+.ai-local/
+.claude/settings.local.json
