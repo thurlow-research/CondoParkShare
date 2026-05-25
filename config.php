@@ -16,10 +16,17 @@ if (!defined('SITE_NAME')) {
     // Database (SQLite file path — kept outside web root ideally, but .htaccess protects it)
     define('DB_PATH', __DIR__ . '/data/parkshare.db');
 
-    // Email settings (uses PHP mail() by default; configure SMTP on Plesk if needed)
+    // Brevo API (email + SMS) — key must be set as an environment variable
+    define('BREVO_API_KEY', getenv('BREVO_API_KEY') ?: '');
+    define('BREVO_SMS_SENDER', getenv('BREVO_SMS_SENDER') ?: 'BTParkShare'); // max 11 alphanumeric chars
+
+    // Email settings
     define('MAIL_FROM', 'noreply@btparkshare.com');
     define('MAIL_FROM_NAME', 'BT ParkShare');
     define('ADMIN_EMAIL', 'admin@btparkshare.com');
+
+    // SMS notifications (set to true once Brevo SMS is configured)
+    define('SMS_ENABLED', (bool)getenv('BREVO_SMS_ENABLED'));
 
     // Session
     define('SESSION_LIFETIME', 86400); // 24 hours

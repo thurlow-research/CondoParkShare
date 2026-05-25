@@ -28,7 +28,7 @@ $now = date('Y-m-d H:i:s');
 // Find active bookings that have expired and haven't been notified
 $stmt = $db->prepare("
     SELECT b.*, d.parking_spot, d.donor_id,
-        bu.name as borrower_name, bu.email as borrower_email
+        bu.name as borrower_name, bu.email as borrower_email, bu.phone as borrower_phone
     FROM bookings b
     JOIN donations d ON d.id = b.donation_id
     JOIN users bu ON bu.id = b.borrower_id
@@ -41,7 +41,7 @@ $count = 0;
 foreach ($expired as $booking) {
     // Send expiry notice to borrower
     sendExpiryNotice(
-        ['name' => $booking['borrower_name'], 'email' => $booking['borrower_email']],
+        ['name' => $booking['borrower_name'], 'email' => $booking['borrower_email'], 'phone' => $booking['borrower_phone']],
         $booking,
         $booking['parking_spot']
     );
