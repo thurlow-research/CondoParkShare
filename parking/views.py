@@ -1,9 +1,11 @@
 """
-parking.views — Owner spot listing and availability management views.
+parking.views — Booking and owner spot-listing views.
 
-All views require @active_required (login + status='active').
+All views require @active_required (login + status='active') unless
+noted otherwise.
 """
 
+from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -12,7 +14,16 @@ from django.utils.timezone import now
 from psycopg2.extras import DateTimeTZRange
 
 from accounts.decorators import active_required
-from parking.forms import AvailabilityWindowForm, AvailabilityWindowRemoveForm
+from notifications.dispatch import notify
+from parking.booking import assign_spot, cancel_booking, confirm_booking, release_booking
+from parking.forms import (
+    AvailabilityWindowForm,
+    AvailabilityWindowRemoveForm,
+    BookingRequestForm,
+    CancellationReasonForm,
+    EarlyReleaseForm,
+)
+from parking.horizon import check_horizon_gate
 from parking.models import AvailabilityWindow, Booking, ParkingSpot
 
 
@@ -188,3 +199,227 @@ def availability_remove(request, pk, wk):
 
     context = {'spot': spot, 'window': window, 'form': form}
     return render(request, 'parking/availability_remove.html', context)
+
+
+# ---------------------------------------------------------------------------
+# Booking views
+# ---------------------------------------------------------------------------
+
+def _htmx_form_error(request, template, context, status=422):
+    """Return a partial on HTMX requests; full page otherwise."""
+    if request.headers.get('HX-Request'):
+        return render(request, template, context, status=status)
+    return render(request, template, context)
+
+
+@active_required
+def book_request(request):
+    """GET/POST — Request a parking spot.
+
+    GET: render the time-window form.
+    POST:
+      1. Validate BookingRequestForm.
+      2. Gate 1 — Horizon: requested start must be within earned horizon.
+      3. Gate 2 — One active booking: borrower must not already have one.
+      4. Gate 3 — Assign: find and tentatively hold a spot.
+      5. Store booking.pk in session, redirect to book_confirm.
+    """
+    if request.method == 'POST':
+        form = BookingRequestForm(request.POST, org=request.organization)
+        if form.is_valid():
+            start = form.cleaned_data['start']
+            end = form.cleaned_data['end']
+
+            # Gate 1 — Horizon
+            if not check_horizon_gate(request.user, start):
+                form.add_error(
+                    None,
+                    "You can't book that far ahead yet. List your spot to earn more.",
+                )
+            else:
+                # Gate 2 (one active booking) and Gate 3 (assign) are both
+                # enforced atomically inside assign_spot to prevent race
+                # conditions where two concurrent requests bypass Gate 2.
+                booking = assign_spot(
+                    request.organization, request.user, start, end
+                )
+                if booking == 'already_active':
+                    form.add_error(None, 'You already have an active booking.')
+                elif booking is None:
+                    form.add_error(
+                        None,
+                        'No spots are available for that window. Try a different time.',
+                    )
+                else:
+                    request.session['pending_booking_pk'] = booking.pk
+                    if request.headers.get('HX-Request'):
+                        return render(
+                            request,
+                            'parking/partials/book_confirm_redirect.html',
+                            {'booking': booking},
+                        )
+                    return redirect('book_confirm')
+    else:
+        form = BookingRequestForm(org=request.organization)
+
+    context = {'form': form}
+    if request.headers.get('HX-Request') and request.method == 'POST':
+        return render(request, 'parking/partials/book_request_form.html', context, status=422)
+    return render(request, 'parking/book_request.html', context)
+
+
+@active_required
+def book_confirm(request):
+    """GET/POST — Review and confirm a tentative booking.
+
+    The tentative booking pk is stored in the session (set by book_request).
+    The hold expires after 5 minutes; an expired hold is rejected.
+
+    GET: show assigned spot number, time range, and expiry notice.
+    POST: promote booking from tentative → confirmed, notify owner.
+    """
+    pk = request.session.get('pending_booking_pk')
+    if not pk:
+        return redirect('book_request')
+
+    booking = get_object_or_404(
+        Booking.scoped, pk=pk, borrower=request.user
+    )
+
+    # Validate the tentative hold is still live
+    if booking.status != 'tentative':
+        messages.error(request, 'That booking is no longer available.')
+        return redirect('book_request')
+
+    now_dt = now()
+    if booking.tentative_expires_at and booking.tentative_expires_at < now_dt:
+        booking.status = 'cancelled_admin'
+        booking.save()
+        del request.session['pending_booking_pk']
+        messages.error(request, 'Your 5-minute hold expired. Please try again.')
+        return redirect('book_request')
+
+    if request.method == 'POST':
+        try:
+            confirm_booking(booking, request.user)
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return redirect('book_request')
+
+        # Notify the spot owner
+        notify('booking_confirmed', booking)
+
+        del request.session['pending_booking_pk']
+        return redirect('booking_detail', pk=booking.pk)
+
+    context = {'booking': booking}
+    return render(request, 'parking/book_confirm.html', context)
+
+
+@active_required
+def booking_list(request):
+    """List the authenticated user's bookings (active + recent)."""
+    bookings = (
+        Booking.scoped
+        .filter(borrower=request.user)
+        .select_related('spot')
+        .order_by('-time_range')
+    )
+    return render(request, 'parking/booking_list.html', {'bookings': bookings})
+
+
+@active_required
+def booking_detail(request, pk):
+    """Show detail for a single booking.
+
+    Accessible by both the borrower and the spot owner.
+    """
+    booking = get_object_or_404(Booking.scoped, pk=pk)
+    is_borrower = booking.borrower == request.user
+    is_owner = booking.spot.owner == request.user
+    if not (is_borrower or is_owner):
+        raise PermissionDenied
+
+    context = {
+        'booking': booking,
+        'is_borrower': is_borrower,
+        'is_owner': is_owner,
+    }
+    return render(request, 'parking/booking_detail.html', context)
+
+
+@active_required
+def booking_cancel(request, pk):
+    """POST — Cancel a booking.
+
+    Only the borrower or the spot owner may cancel.  If the booking's
+    borrower has been erased (borrower=None) only the owner may cancel.
+
+    If the owner cancels they are shown an optional CancellationReasonForm;
+    the reason is stored on the booking.
+    """
+    booking = get_object_or_404(Booking.scoped, pk=pk)
+
+    is_owner = booking.spot.owner == request.user
+    is_borrower = (booking.borrower is not None) and (booking.borrower == request.user)
+
+    if not (is_owner or is_borrower):
+        raise PermissionDenied
+
+    # Refuse if booking is already in a terminal state
+    terminal = {'cancelled_borrower', 'cancelled_owner', 'cancelled_admin', 'completed'}
+    if booking.status in terminal:
+        messages.error(request, 'This booking has already been cancelled or completed.')
+        return redirect('booking_detail', pk=booking.pk)
+
+    if request.method == 'POST':
+        reason = ''
+        if is_owner:
+            form = CancellationReasonForm(request.POST)
+            if form.is_valid():
+                reason = form.cleaned_data['reason']
+        else:
+            form = CancellationReasonForm()
+
+        booking.cancel_reason = reason
+        cancel_booking(booking, request.user)
+        return redirect('booking_detail', pk=booking.pk)
+
+    # GET — show confirmation page with optional reason form (owner only)
+    form = CancellationReasonForm() if is_owner else None
+    context = {'booking': booking, 'form': form, 'is_owner': is_owner}
+    return render(request, 'parking/booking_cancel.html', context)
+
+
+@active_required
+def booking_release(request, pk):
+    """GET/POST — Early release: shorten booking end to an hour boundary.
+
+    Only the borrower may release.  The release time must be:
+    - on the hour
+    - strictly in the future
+    - strictly before the current booking end
+    """
+    booking = get_object_or_404(Booking.scoped, pk=pk)
+    if booking.borrower != request.user:
+        raise PermissionDenied
+
+    if booking.status not in ('confirmed', 'active'):
+        messages.error(request, 'This booking cannot be released in its current state.')
+        return redirect('booking_detail', pk=booking.pk)
+
+    if request.method == 'POST':
+        form = EarlyReleaseForm(request.POST)
+        if form.is_valid():
+            release_to = form.cleaned_data['release_to']
+            try:
+                release_booking(booking, request.user, release_to)
+            except (PermissionError, ValueError) as exc:
+                form.add_error(None, str(exc))
+            else:
+                return redirect('booking_detail', pk=booking.pk)
+    else:
+        form = EarlyReleaseForm()
+
+    context = {'booking': booking, 'form': form}
+    return render(request, 'parking/booking_release.html', context)
