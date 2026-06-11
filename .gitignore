@@ -26,3 +26,6 @@ Thumbs.db
 # prompts/ and AGENTS.md are always committed — never ignore them
 .ai-local/
 .claude/settings.local.json
+
+# Agent temp space — ephemeral inter-agent communication, never committed
+.claudetmp/
