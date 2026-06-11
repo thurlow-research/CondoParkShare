@@ -80,23 +80,31 @@ class CancellationReasonForm(forms.Form):
 class EarlyReleaseForm(forms.Form):
     """Form for a borrower to release hours back to inventory early.
 
-    ``release_to`` must be an hour-aligned datetime in the future and before
-    the booking's current end.  The view is responsible for additional
-    context-specific validation (must be < booking end, > now).
+    Pass ``booking=<Booking instance>`` when constructing so the form can
+    validate that ``release_to`` is strictly before the booking's end.
     """
 
     release_to = forms.DateTimeField(
         label='Release spot at',
         widget=forms.DateTimeInput(attrs={'type': 'datetime-local'}),
         input_formats=['%Y-%m-%dT%H:%M'],
+        help_text='Release the spot back from this time onwards (must be on the hour).',
     )
 
+    def __init__(self, *args, booking=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._booking = booking
+
     def clean_release_to(self):
-        value = self.cleaned_data['release_to']
+        value = self.cleaned_data.get('release_to')
+        if not value:
+            return value
         if value.minute != 0 or value.second != 0:
             raise forms.ValidationError('Release time must be on the hour.')
         if value <= now():
             raise forms.ValidationError('Release time must be in the future.')
+        if self._booking and value >= self._booking.time_range.upper:
+            raise forms.ValidationError('Release time must be before the booking end.')
         return value
 
 

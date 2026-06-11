@@ -373,17 +373,19 @@ def booking_cancel(request, pk):
         return redirect('booking_detail', pk=booking.pk)
 
     if request.method == 'POST':
-        reason = ''
         if is_owner:
             form = CancellationReasonForm(request.POST)
-            if form.is_valid():
-                reason = form.cleaned_data['reason']
+            if not form.is_valid():
+                context = {'booking': booking, 'form': form, 'is_owner': is_owner}
+                return render(request, 'parking/booking_cancel.html', context)
+            reason = form.cleaned_data['reason']
         else:
             form = CancellationReasonForm()
+            reason = ''
 
         booking.cancel_reason = reason
         cancel_booking(booking, request.user)
-        return redirect('booking_detail', pk=booking.pk)
+        return redirect('booking_list')
 
     # GET — show confirmation page with optional reason form (owner only)
     form = CancellationReasonForm() if is_owner else None
@@ -409,7 +411,7 @@ def booking_release(request, pk):
         return redirect('booking_detail', pk=booking.pk)
 
     if request.method == 'POST':
-        form = EarlyReleaseForm(request.POST)
+        form = EarlyReleaseForm(request.POST, booking=booking)
         if form.is_valid():
             release_to = form.cleaned_data['release_to']
             try:
@@ -419,7 +421,7 @@ def booking_release(request, pk):
             else:
                 return redirect('booking_detail', pk=booking.pk)
     else:
-        form = EarlyReleaseForm()
+        form = EarlyReleaseForm(booking=booking)
 
     context = {'booking': booking, 'form': form}
     return render(request, 'parking/booking_release.html', context)

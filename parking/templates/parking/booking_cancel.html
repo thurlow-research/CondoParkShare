@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cancel booking — CondoParkShare</title>
+</head>
+<body>
+  <h1>Cancel booking</h1>
+
+  <p>
+    Spot <strong>{{ booking.spot.spot_number }}</strong>
+    from <strong>{{ booking.time_range.lower }}</strong>
+    to <strong>{{ booking.time_range.upper }}</strong>
+  </p>
+
+  {% if is_owner %}
+    <div role="alert" class="warning-notice">
+      <p>
+        <strong>Warning:</strong> You are cancelling as the spot owner.
+        Cancelling an owner-initiated booking incurs a penalty of
+        {{ booking.time_range.upper|timeuntil:booking.time_range.lower }} hours
+        against your listing credit. Please only cancel if absolutely necessary.
+      </p>
+    </div>
+  {% endif %}
+
+  <form method="post">
+    {% csrf_token %}
+
+    {% if form %}
+      {% if form.non_field_errors %}
+        <div role="alert">
+          {% for error in form.non_field_errors %}
+            <p class="form-error">{{ error }}</p>
+          {% endfor %}
+        </div>
+      {% endif %}
+      {{ form.as_p }}
+    {% else %}
+      <p>Are you sure you want to cancel this booking?</p>
+    {% endif %}
+
+    <button type="submit">Confirm cancellation</button>
+    <a href="{% url 'booking_detail' booking.pk %}">Keep booking</a>
+  </form>
+</body>
+</html>

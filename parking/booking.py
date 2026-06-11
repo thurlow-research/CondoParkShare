@@ -138,6 +138,9 @@ def cancel_booking(booking, cancelled_by):
     if not (is_owner or is_borrower):
         raise PermissionError('Not authorized to cancel this booking')
 
+    if booking.status in ('completed', 'cancelled_borrower', 'cancelled_owner', 'cancelled_admin'):
+        raise ValueError('Booking already finalised')
+
     if is_owner:
         duration = int(
             (booking.time_range.upper - booking.time_range.lower).total_seconds() / 3600
