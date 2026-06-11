@@ -30,11 +30,19 @@ class RelayMessage(models.Model):
         'accounts.User',
         on_delete=models.PROTECT,
         related_name='sent_relay_messages',
+        null=True,
+        blank=True,
+        # null=True supports right-to-erasure: erase_user_pii() sets this to
+        # None after scrubbing body to '[erased]'.
     )
     to_user = models.ForeignKey(
         'accounts.User',
         on_delete=models.PROTECT,
         related_name='received_relay_messages',
+        null=True,
+        blank=True,
+        # null=True supports right-to-erasure: erase_user_pii() sets this to
+        # None after scrubbing body to '[erased]'.
     )
     booking = models.ForeignKey(
         'parking.Booking',
