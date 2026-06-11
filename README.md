@@ -1,4 +1,4 @@
-# BT ParkShare
+# BT CondoParkShare
 
 A website to facilitate residents sharing parking spots for guests at Bellevue Towers Condominium.
 
