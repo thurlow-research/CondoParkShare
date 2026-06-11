@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Spots — HOA Portal</title>
+</head>
+<body>
+  <h1>Parking spots</h1>
+  <a href="{% url 'portal_home' %}">Back to dashboard</a>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Spot number</th>
+        <th>Owner</th>
+        <th>Status</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for spot in spots %}
+      <tr>
+        <td>{{ spot.spot_number }}</td>
+        <td>{% if spot.owner %}{{ spot.owner.display_name }}{% else %}&mdash;{% endif %}</td>
+        <td>{{ spot.status }}</td>
+        <td>
+          {% if spot.status == 'pending' %}
+          <form method="post" action="{% url 'portal_spot_approve' spot.pk %}">
+            {% csrf_token %}
+            <button type="submit">Approve</button>
+          </form>
+          {% endif %}
+          {% if spot.status == 'active' %}
+          <form method="post" action="{% url 'portal_spot_deactivate' spot.pk %}">
+            {% csrf_token %}
+            <button type="submit">Deactivate</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4">No spots.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</body>
+</html>

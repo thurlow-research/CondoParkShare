@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Create invite — HOA Portal</title>
+</head>
+<body>
+  <h1>Create invite</h1>
+  <a href="{% url 'portal_invite_list' %}">Back to invites</a>
+
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Create invite</button>
+  </form>
+</body>
+</html>

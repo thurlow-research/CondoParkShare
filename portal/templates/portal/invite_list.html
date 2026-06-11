@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Invites — HOA Portal</title>
+</head>
+<body>
+  <h1>Invites</h1>
+  <a href="{% url 'portal_home' %}">Back to dashboard</a>
+  &nbsp;|&nbsp;
+  <a href="{% url 'portal_invite_create' %}">Create invite</a>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Code (first 8)</th>
+        <th>Unit</th>
+        <th>Uses</th>
+        <th>Expires</th>
+        <th>Issued by</th>
+        <th>Consumed by</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for invite in invites %}
+      <tr>
+        <td>{{ invite.code|slice:":8" }}&hellip;</td>
+        <td>{{ invite.unit_number|default:"&mdash;" }}</td>
+        <td>{{ invite.use_count }} / {{ invite.max_uses }}</td>
+        <td>{{ invite.expires_at|default:"Never" }}</td>
+        <td>{{ invite.issued_by.display_name }}</td>
+        <td>{% if invite.consumed_by %}{{ invite.consumed_by.display_name }}{% else %}&mdash;{% endif %}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6">No invites yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</body>
+</html>

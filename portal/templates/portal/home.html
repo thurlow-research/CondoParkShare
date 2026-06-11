@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HOA Portal — CondoParkShare</title>
+</head>
+<body>
+  <h1>HOA Portal</h1>
+
+  <ul>
+    <li>Pending approvals: {{ pending_approvals }}</li>
+    <li>Active bookings: {{ active_bookings }}</li>
+    <li>Pending spot approvals: {{ pending_spots }}</li>
+  </ul>
+
+  <h2>Recent activity</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>When</th>
+        <th>Actor</th>
+        <th>Action</th>
+        <th>Target</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for entry in recent_audit %}
+      <tr>
+        <td>{{ entry.created_at }}</td>
+        <td>{{ entry.actor.display_name }}</td>
+        <td>{{ entry.action }}</td>
+        <td>{{ entry.target_type }} {{ entry.target_id }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4">No activity yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <nav>
+    <a href="{% url 'portal_resident_list' %}">Residents</a>
+    <a href="{% url 'portal_spot_list' %}">Spots</a>
+    <a href="{% url 'portal_invite_list' %}">Invites</a>
+    <a href="{% url 'portal_bookings' %}">Bookings</a>
+    <a href="{% url 'portal_reports' %}">Reports</a>
+  </nav>
+</body>
+</html>

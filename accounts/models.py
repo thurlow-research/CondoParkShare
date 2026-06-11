@@ -161,3 +161,30 @@ class AdminAuditLog(models.Model):
 
     def __str__(self):
         return f'AuditLog {self.action} by {self.actor_id} at {self.created_at}'
+
+    @classmethod
+    def log(
+        cls,
+        actor,
+        action,
+        organization=None,
+        target_type='',
+        target_id=None,
+        notes='',
+        on_behalf_of=None,
+    ):
+        """
+        Convenience classmethod for creating an AdminAuditLog entry.
+
+        Falls back to ``actor.organization`` when *organization* is not supplied
+        so callers in portal views do not have to pass it explicitly.
+        """
+        return cls.objects.create(
+            actor=actor,
+            action=action,
+            organization=organization or getattr(actor, 'organization', None),
+            target_type=target_type,
+            target_id=target_id,
+            notes=notes,
+            on_behalf_of=on_behalf_of,
+        )
