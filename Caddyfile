@@ -1,0 +1,12 @@
+parkshare.kumajyo.com {
+    reverse_proxy web:8000
+
+    tls {
+        dns cloudflare {env.CF_API_TOKEN}
+    }
+}
+
+parkshare.bellevuetowers.org {
+    reverse_proxy web:8000
+    # HTTP-01 auto TLS (needs port 80 open)
+}
