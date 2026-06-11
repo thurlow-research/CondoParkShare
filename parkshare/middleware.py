@@ -85,7 +85,7 @@ class ImpersonationMiddleware:
 
                 real_operator = request.user
                 request.user = impersonated
-                request.real_operator = real_operator
+                request._real_operator = real_operator
 
                 if request.method == 'POST':
                     try:
