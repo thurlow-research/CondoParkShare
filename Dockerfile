@@ -20,9 +20,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy project
 COPY . .
 
-# Collect static files (requires env vars to be set at build time or use --no-input)
-RUN python manage.py collectstatic --no-input || true
-
 EXPOSE 8000
 
-CMD ["gunicorn", "parkshare.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "4"]
+# collectstatic is NOT run here — it requires a DB connection / env vars.
+# Run it separately on deploy: docker exec web python manage.py collectstatic --no-input
+
+CMD ["gunicorn", "parkshare.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3"]

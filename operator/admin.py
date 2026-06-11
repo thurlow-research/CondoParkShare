@@ -78,37 +78,37 @@ class OrganizationAdmin(admin.ModelAdmin):
 # Bulk actions for UserAdmin
 # ---------------------------------------------------------------------------
 
-@admin.action(description='Erase PII (right-to-erasure) for selected users')
+@admin.action(description='Erase PII (GDPR)')
 def pii_erasure(modeladmin, request, queryset):
     """
-    Admin bulk action: erase PII for each selected user.
+    Admin action: erase PII for exactly one selected user.
 
-    For every user in *queryset*:
-    1. Calls ``erase_user_pii(user)`` which scrubs email, display_name, phone,
-       recovery_codes, RelayMessage.body, RelayMessage FK references, and
-       Booking.borrower inside a single atomic transaction.
-    2. Writes an ``AdminAuditLog`` record with action='pii_erasure'.
+    Enforces single-user selection to prevent accidental bulk erasure.
+    Calls ``erase_user_pii(user, erased_by)`` which:
+      - Cancels active bookings, anonymises all bookings
+      - Scrubs RelayMessage bodies
+      - Deletes TOTP devices, push subscriptions, and email OTPs
+      - Overwrites User PII fields and sets status='blocked'
+      - Writes an AdminAuditLog entry inside the same atomic transaction
 
     The action is idempotent: running it twice on the same user is safe.
     """
+    if queryset.count() != 1:
+        modeladmin.message_user(
+            request,
+            'Select exactly one user to erase.',
+            level=messages.ERROR,
+        )
+        return
+
     from accounts.erasure import erase_user_pii
 
-    erased_count = 0
-    for user in queryset:
-        erase_user_pii(user)
-        AdminAuditLog.objects.create(
-            organization=getattr(user, 'organization', None),
-            actor=request.user,
-            action='pii_erasure',
-            target_type='user',
-            target_id=user.pk,
-            notes=f'PII erased via admin bulk action by {request.user.email}',
-        )
-        erased_count += 1
+    user = queryset.first()
+    erase_user_pii(user, erased_by=request.user)
 
     modeladmin.message_user(
         request,
-        f'PII erased for {erased_count} user(s).',
+        f'PII erased for user {user.pk}.',
         messages.SUCCESS,
     )
 
