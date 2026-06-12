@@ -71,6 +71,15 @@ For each finding:
 
 If no issues found, state: "Security review approved. No exploitable vulnerabilities found in scope."
 
+When approving after resolving one or more `critical` or `high` severity findings, create a GitHub issue for each resolved finding before writing your approval:
+```bash
+gh issue create \
+  --title "Security finding resolved: [CWE/class] in [file:function]" \
+  --body "**Severity:** [critical/high]\n**CWE:** [e.g. CWE-294]\n**Attack scenario:** [one sentence]\n**Resolution:** [what was changed and where]\n**Watch for:** [what future changes to this area should re-check]" \
+  --label "security-finding" --label "resolved-in-review"
+```
+This creates a permanent record even when findings are resolved pre-merge — used by the historical risk assessor to identify persistently risky areas.
+
 ## Iteration
 
 - Send all findings in one pass.

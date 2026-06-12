@@ -95,7 +95,14 @@ When coverage or mutant score is below target:
 
 If a surviving mutant cannot be killed because the behavior is genuinely equivalent (the mutant produces the same observable output), document it with a comment and exclude it — do not inflate coverage numbers.
 
-**Loop exit:** Track the iteration count. After 5 rounds without meeting both targets, stop and escalate to the architect with: current coverage %, current mutant score, which specific lines/mutants are not being reached, and what has been tried. Do not attempt a 6th round.
+**Loop exit:** Track the iteration count. After 5 rounds without meeting both targets, stop. Before escalating, create a GitHub issue to record the structural test resistance:
+```bash
+gh issue create \
+  --title "Test resistance: step [N] — coverage/mutant targets unmet after 5 rounds" \
+  --body "**Step:** [build step]\n**Coverage:** X% (target: 80%)\n**Mutant score:** Y% (target: 75%)\n**Uncoverable areas:** [specific lines/functions]\n**What was tried:** [approaches per round]\n**Surviving mutants not excluded:** [list if any]" \
+  --label "test-resistance"
+```
+Then escalate to the architect with: current coverage %, current mutant score, which specific lines/mutants are not being reached, and what has been tried. Do not attempt a 6th round.
 
 **Temp state:** Write loop state to `.claudetmp/tests/unit-test-{step}-{YYYYMMDDTHHMMSS}.md`. Create `.claudetmp/tests/` if it does not exist. Format:
 ```

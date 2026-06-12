@@ -1,0 +1,128 @@
+/* ==========================================================================
+   CondoCondoParkShare — Design Tokens & Base Components
+   Drop into Django static (e.g. static/css/tokens.css) and load first,
+   before any page CSS. Single source of truth for color, type, geometry.
+   Fonts: load Hanken Grotesk + Spline Sans Mono (see DESIGN.md §Fonts).
+   ========================================================================== */
+
+:root{
+  /* --- Brand greens --- */
+  --pine:#204034;        /* primary — deep, trustworthy. headers, logo */
+  --pine-700:#2c5848;    /* primary hover / elevated */
+  --eucalyptus:#5e9079;  /* secondary — community warmth, focus rings */
+  --meadow:#2e9e63;      /* SIGNAL — available + primary action */
+  --meadow-ink:#1d6b43;  /* meadow as accessible text */
+
+  /* --- Functional status --- */
+  --clay:#bc7a4e;        /* STATUS — booked / occupied (use sparingly) */
+  --clay-ink:#9a5d34;
+
+  /* --- Neutrals (warm-cool: garden meets concrete) --- */
+  --ink:#18211c;         /* primary text */
+  --slate:#586059;       /* secondary text, captions */
+  --line:#dbe3d9;        /* hairlines, borders */
+  --mist:#e9efe6;        /* subtle fills, tags */
+  --canvas:#f3f6f0;      /* page background */
+  --white:#ffffff;       /* surfaces / cards */
+
+  /* --- Semantic aliases (use these in app code) --- */
+  --bg:var(--canvas);
+  --surface:var(--white);
+  --text:var(--ink);
+  --text-muted:var(--slate);
+  --border:var(--line);
+  --available:var(--meadow);
+  --booked:var(--clay);
+
+  /* --- Type --- */
+  --font-sans:"Hanken Grotesk",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --font-mono:"Spline Sans Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+
+  /* --- Type scale --- */
+  --fs-display:clamp(34px,5vw,56px);
+  --fs-h2:30px; --fs-h3:21px; --fs-body:16px; --fs-small:13.5px; --fs-mono:15px;
+
+  /* --- Geometry --- */
+  --r-sm:6px; --r-md:10px; --r-lg:16px; --r-xl:24px;
+  --space:8px;
+  --shadow:0 1px 2px rgba(24,33,28,.04),0 8px 24px -12px rgba(24,33,28,.18);
+  --focus:3px solid var(--eucalyptus);
+}
+
+/* ---------- Base ---------- */
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--bg);color:var(--text);
+  font-family:var(--font-sans);font-size:var(--fs-body);line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,h4{line-height:1.12;letter-spacing:-.02em;margin:0 0 .4em}
+h1{font-size:var(--fs-display);font-weight:800;letter-spacing:-.025em}
+h2{font-size:var(--fs-h2);font-weight:700}
+h3{font-size:var(--fs-h3);font-weight:600}
+a{color:var(--meadow-ink)}
+:focus-visible{outline:var(--focus);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* Mono utility for spot IDs, times, credits */
+.mono,.spot-id,.data{font-family:var(--font-mono);letter-spacing:.02em}
+.eyebrow{font-family:var(--font-mono);font-size:12px;font-weight:500;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--meadow-ink)}
+
+/* ---------- Buttons ---------- */
+.btn{font-family:inherit;font-size:15px;font-weight:600;border-radius:var(--r-sm);
+  padding:11px 18px;border:1.5px solid transparent;cursor:pointer;display:inline-flex;
+  align-items:center;gap:8px;text-decoration:none;
+  transition:transform .12s ease,background .15s ease}
+.btn:focus-visible{outline:var(--focus);outline-offset:2px}
+.btn-primary{background:var(--meadow);color:#fff}
+.btn-primary:hover{background:#268a55;transform:translateY(-1px)}
+.btn-secondary{background:var(--pine);color:#fff}
+.btn-secondary:hover{background:var(--pine-700)}
+.btn-ghost{background:transparent;color:var(--pine);border-color:var(--line)}
+.btn-ghost:hover{background:var(--mist);border-color:var(--eucalyptus)}
+
+/* ---------- Status badges (green=available, clay=booked) ---------- */
+.badge{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);
+  font-size:12px;font-weight:600;letter-spacing:.04em;padding:4px 10px;border-radius:999px}
+.badge .dot{width:7px;height:7px;border-radius:50%}
+.badge-available{background:#e4f4ea;color:var(--meadow-ink)}
+.badge-available .dot{background:var(--meadow)}
+.badge-booked{background:#f6e9df;color:var(--clay-ink)}
+.badge-booked .dot{background:var(--clay)}
+
+/* ---------- Form fields ---------- */
+.field{display:block;margin-bottom:14px}
+.field label{display:block;font-size:13.5px;font-weight:600;margin-bottom:6px}
+.field input,.field select{width:100%;font-family:inherit;font-size:15px;padding:11px 13px;
+  border:1.5px solid var(--line);border-radius:var(--r-sm);background:var(--white);color:var(--ink)}
+.field input:focus,.field select:focus{outline:none;border-color:var(--meadow);box-shadow:0 0 0 3px #e4f4ea}
+
+/* ---------- Card & surfaces ---------- */
+.card,.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);
+  padding:24px;box-shadow:var(--shadow)}
+
+/* ---------- Spot card (the product's core object) ---------- */
+.spot{background:var(--white);border:1px solid var(--line);border-radius:var(--r-md);
+  padding:18px;display:flex;flex-direction:column;gap:14px}
+.spot.is-available{border-color:#bfe3cd}
+.spot .spot-id{font-weight:600;font-size:15px;color:var(--pine);display:inline-flex;align-items:center;gap:9px}
+.spot .spot-id .tag{background:var(--mist);padding:2px 8px;border-radius:4px;font-size:13px}
+.spot .when{font-size:14px;color:var(--slate)}
+.spot .row{display:flex;justify-content:space-between;align-items:center}
+
+/* ---------- Signature: parking-bay bracket ---------- */
+.bay{position:relative;display:inline-flex;align-items:center;justify-content:center}
+.bay::before,.bay::after{content:"";position:absolute;width:14px;height:14px;border:2.5px solid var(--pine)}
+.bay::before{top:-7px;left:-7px;border-right:0;border-bottom:0;border-top-left-radius:4px}
+.bay::after{bottom:-7px;right:-7px;border-left:0;border-top:0;border-bottom-right-radius:4px}
+
+/* ---------- Signature: lot availability grid ---------- */
+.lot{display:grid;grid-template-columns:repeat(8,1fr);gap:6px}
+.lot i{aspect-ratio:1/1.4;border-radius:3px;border:1.5px solid var(--line);background:var(--white)}
+.lot i.open{border-color:var(--meadow);background:#e4f4ea}
+.lot i.busy{border-color:transparent;background:var(--clay);opacity:.85}
+
+/* ---------- Layout helpers ---------- */
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+.cols{display:grid;gap:24px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}

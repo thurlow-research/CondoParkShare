@@ -1,0 +1,50 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    env_file:
+      - .env
+    networks:
+      - internal
+    # No ports binding — db is internal only. All access via web service.
+
+  web:
+    build: .
+    restart: unless-stopped
+    command: gunicorn parkshare.wsgi:application --bind 0.0.0.0:8000 --workers 4
+    env_file:
+      - .env
+    depends_on:
+      - db
+    networks:
+      - internal
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    env_file:
+      - .env
+    depends_on:
+      - web
+    networks:
+      - internal
+      - external
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
+
+networks:
+  internal:
+    internal: true
+  external:

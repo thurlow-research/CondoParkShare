@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Reports — HOA Portal</title>
+</head>
+<body>
+  <h1>Reports</h1>
+  <a href="{% url 'portal_home' %}">Back to dashboard</a>
+
+  <p>Total bookings (all time): <strong>{{ total_bookings }}</strong></p>
+
+  <h2>Bookings per spot</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Spot</th>
+        <th>Owner</th>
+        <th>Bookings</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for spot in spot_stats %}
+      <tr>
+        <td>{{ spot.spot_number }}</td>
+        <td>{% if spot.owner %}{{ spot.owner.display_name }}{% else %}&mdash;{% endif %}</td>
+        <td>{{ spot.booking_count }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="3">No spots.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</body>
+</html>

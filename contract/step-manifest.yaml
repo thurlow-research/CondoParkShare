@@ -1,0 +1,304 @@
+# step-manifest.yaml — CondoParkShare Human Oversight System configuration
+#
+# Defines all 11 build steps with their risk tiers, required sign-offs, and
+# oversight gates. The oversight-evaluator reads this to enforce compliance
+# at each step transition.
+#
+# Role keys → OVERSIGHT-CONTRACT.md §3 (HumanOversightSystem repo)
+# Sign-off examples → templates/base-agent-register-examples.md (HOS repo)
+#
+# Pipeline overview:
+#   SPEC:       spec-red-team (agy, adversarial) → spec-gap issues
+#   INNER LOOP: gates → run_validators.sh → risk-assessor → reviewers → tests
+#   TRANSITION: run_second_review.sh → oversight-evaluator → oversight-orchestrator
+#   OUTER LOOP: run_panel.sh (agy + codex + IP agent + Copilot)
+#   CHECKPOINT: run_red_team.sh (steps 3, 6, 10, 11)
+
+contract_version: "1"
+project: "CondoParkShare"
+
+# ── Role mappings ─────────────────────────────────────────────────────────────
+# Maps HOS contract role keys to CondoParkShare agent names.
+role_mappings:
+  code-review:    code-reviewer
+  security:       security-reviewer
+  privacy:        privacy-reviewer
+  test-unit:      unit-test
+  test-system:    system-test
+  process:        pm-agent
+  infra:          infra-reviewer
+  ui:             ui-reviewer
+  a11y:           a11y-reviewer
+
+# ── Build steps ───────────────────────────────────────────────────────────────
+# risk_tier:             LOW | MEDIUM | HIGH | CRITICAL
+# required_signoffs:     list of role keys that must have APPROVED register entries
+# system_test_applicable: true = pm-agent must sign off on test plan + system-test must run
+# human_gate_required:   true = human must create step{N}-human-authorization.md before
+#                        oversight-evaluator runs (CRITICAL steps only)
+# red_team_checkpoint:   true = run_red_team.sh --milestone <name> after this step
+# notes:                 guidance for agents; not machine-checked
+
+steps:
+
+  # ── Step 1: Scaffold ─────────────────────────────────────────────────────────
+  - id: 1
+    name: "Scaffold"
+    description: "Django project + Postgres + Compose (web/db/caddy), .env, named volume, tokens.css"
+    risk_tier: LOW
+    required_signoffs:
+      - code-review   # Django project structure, settings, Compose file correctness
+      - infra         # Docker Compose networking, Caddy config, named volume, .env.example
+    system_test_applicable: false   # no functional flows yet
+    human_gate_required: false
+    red_team_checkpoint: false
+    notes: >
+      Infra-reviewer checks: web/db/caddy services defined correctly; DB internal-only
+      (no external port); Caddy reverse proxy; named volume for Postgres; .env.example
+      present; .env in .gitignore. No security or privacy review needed at scaffold stage.
+
+  # ── Step 2: Organization + multi-tenant middleware ────────────────────────────
+  - id: 2
+    name: "Organization + multi-tenant middleware"
+    description: "Organization model, hostname resolution middleware, scoped ORM managers"
+    risk_tier: HIGH
+    required_signoffs:
+      - code-review   # ORM manager correctness, middleware order, hostname resolution
+      - security      # Tenant isolation: every queryset scoped; middleware cannot be bypassed;
+                      # ALLOWED_HOSTS correctly limits hostname routing
+      - test-unit     # 80% / 75% mutant; manager scoping is the core invariant to test
+    system_test_applicable: false   # no user-facing flows yet
+    human_gate_required: false
+    red_team_checkpoint: false
+    notes: >
+      HIGH because multi-tenancy is foundational — every subsequent feature inherits
+      its isolation guarantees. Security reviewer must verify: (1) Organization FK on
+      every model that requires it, (2) custom managers enforce org scope on all
+      querysets, (3) middleware correctly resolves hostname → Organization with no
+      bypass path. Spec-red-team should probe: what happens if hostname is spoofed
+      or if an org is deleted while residents have active sessions?
+
+  # ── Step 3: Auth + TOTP + recovery codes ─────────────────────────────────────
+  - id: 3
+    name: "Auth + TOTP"
+    description: "Accounts (encrypted PII), invite+approve registration, TOTP, recovery codes"
+    risk_tier: CRITICAL
+    required_signoffs:
+      - code-review   # Django auth conventions, encrypted field usage, form validation
+      - security      # TOTP replay, session fixation, invite token single-use, recovery
+                      # code atomic consumption, enumeration resistance, rate limiting
+      - privacy       # Encrypted PII: email/name/phone field-encrypted; Argon2 passwords;
+                      # TOTP secret encrypted; recovery codes hashed not stored plaintext
+      - test-unit     # 80% / 75% mutant; auth gates have invariants that mutants must kill
+      - test-system   # auth flows: login, TOTP verification, recovery code use, invite
+      - process       # pm-agent signs off on system test plan before tests written
+    system_test_applicable: true
+    human_gate_required: true   # auth is CRITICAL — human must authorize before panel
+    red_team_checkpoint: true
+    red_team_milestone: "auth"
+    notes: >
+      CRITICAL. Human creates .claudetmp/oversight/step3-human-authorization.md after
+      reviewing auth implementation before oversight-evaluator runs. Red-team checkpoint
+      runs after this step: run_red_team.sh --milestone auth. Focus areas: TOTP replay
+      under concurrent requests; recovery code exhaustion; invite token reuse; timing
+      attacks on login (enumeration). Privacy reviewer: TOTP secret encrypted per ADR,
+      never stored plaintext; recovery codes hashed (show-once to user).
+
+  # ── Step 4: Data model + migrations ──────────────────────────────────────────
+  - id: 4
+    name: "Data model + migrations"
+    description: "tstzrange GiST exclusion constraint, ParkingSpot, AvailabilityWindow, Booking models"
+    risk_tier: HIGH
+    required_signoffs:
+      - code-review   # Model field types, Meta options, GiST constraint DDL in migration
+      - security      # Exclusion constraint is the final arbiter of booking safety:
+                      # verify it is DB-enforced (in migration), not only app-layer
+      - test-unit     # 80% / 75% mutant; test GiST constraint fires on overlap (IntegrityError)
+    system_test_applicable: false   # no booking flows yet; model + migrations only
+    human_gate_required: false
+    red_team_checkpoint: false
+    notes: >
+      HIGH because the GiST exclusion constraint is the booking safety invariant —
+      everything in steps 5–6 relies on it. Security reviewer must verify: constraint
+      is in the migration file (not just asserted in the model), covers org + spot + range,
+      and unit tests attempt overlapping inserts and assert IntegrityError.
+      migration_scorer will flag this step HIGH (AlterField/AddConstraint on new column).
+
+  # ── Step 5: Owner listing + availability computation ─────────────────────────
+  - id: 5
+    name: "Owner listing + availability"
+    description: "Owner creates AvailabilityWindows; availability computation subtracts booked ranges"
+    risk_tier: HIGH
+    required_signoffs:
+      - code-review   # Availability query logic, window creation, manager scoping
+      - security      # select_for_update() present; cross-tenant availability not exposed;
+                      # N+1 query risk in availability computation
+      - test-unit     # 80% / 75% mutant; availability algorithm has complex invariants
+      - test-system   # listing flow: create window → appears in search
+      - process       # pm-agent signs off on system test plan
+    system_test_applicable: true
+    human_gate_required: false
+    red_team_checkpoint: false
+    notes: >
+      HIGH because availability computation is the gateway to booking — a bug here
+      shows wrong availability to residents. Security reviewer checks: no cross-tenant
+      availability leaks (resident from building A cannot see building B windows),
+      N+1 detector output reviewed. Unit tests must cover: window with no bookings
+      (full range), booking in middle (splits), booking at edge (clips), fully booked
+      (empty result).
+
+  # ── Step 6: Resident search + booking gates ───────────────────────────────────
+  - id: 6
+    name: "Booking gates"
+    description: "Resident search, booking creation with three gates: horizon, one-active, overlap"
+    risk_tier: CRITICAL
+    required_signoffs:
+      - code-review   # Gate logic correctness, select_for_update scope, form validation
+      - security      # Race conditions under concurrent booking; IDOR (can resident A
+                      # book resident B's spot?); gate bypass combinations
+      - privacy       # Booking history is behavioral PII; resident FK on Booking record
+      - test-unit     # 80% / 75% mutant; three distinct gates each with boundary tests
+      - test-system   # Complete booking flow + all gate rejection scenarios
+      - process       # pm-agent signs off on system test plan
+    system_test_applicable: true
+    human_gate_required: true   # core business logic — human must authorize
+    red_team_checkpoint: true
+    red_team_milestone: "booking"
+    notes: >
+      CRITICAL. Human creates .claudetmp/oversight/step6-human-authorization.md.
+      Red-team checkpoint: run_red_team.sh --milestone booking. Focus: (1) Gate 1
+      horizon — boundary condition at earned_horizon exactly; (2) Gate 2 one-active —
+      concurrent requests within same DB transaction window; (3) Gate 3 overlap —
+      GiST constraint fires, not app-layer only. Spec-red-team must probe: can a
+      resident game the horizon calculation? Can owner-cancel cycle be abused?
+
+  # ── Step 7: Horizon metric + cold-start grace ─────────────────────────────────
+  - id: 7
+    name: "Horizon metric"
+    description: "Earned-horizon calculation (elapsed listed hours), cold-start grace, leaderboard"
+    risk_tier: MEDIUM
+    required_signoffs:
+      - code-review   # Metric calculation correctness, rolling 180-day window, baseline/ratio
+      - security      # Gaming vector: can a resident manipulate listed hours to inflate horizon?
+                      # Metric must only count past hours, not future; requires freezegun tests
+      - test-unit     # 80% / 75% mutant; horizon formula has off-by-one risks
+      - test-system   # Horizon advancement with freezegun; cold-start grace period
+      - process       # pm-agent signs off on system test plan
+    system_test_applicable: true
+    human_gate_required: false
+    red_team_checkpoint: false
+    notes: >
+      MEDIUM but security reviewer required due to gaming vector. Unit tests must
+      use freezegun for time-dependent assertions. Key invariants: only elapsed
+      (past) listed hours count; future windows excluded; 180-day rolling window;
+      cold-start grace overrides formula during launch_grace_days.
+
+  # ── Step 8: Cancellation / early-release / owner-cancel ─────────────────────
+  - id: 8
+    name: "Cancellation"
+    description: "Borrower cancel, early release, owner cancel with standing penalty"
+    risk_tier: MEDIUM
+    required_signoffs:
+      - code-review   # State machine transitions, penalty logic, one-booking-slot release
+      - security      # Can a borrower cancel someone else's booking? IDOR on cancel endpoint
+      - test-unit     # 80% / 75% mutant; state transitions have many edge cases
+      - test-system   # Cancel flows: pre-start, early release, owner cancel + penalty
+      - process       # pm-agent signs off on system test plan
+    system_test_applicable: true
+    human_gate_required: false
+    red_team_checkpoint: false
+    notes: >
+      Security reviewer checks IDOR on cancel endpoint (can resident A cancel
+      resident B's booking?), owner-cancel penalty correctly applied, one-active
+      slot freed after cancellation. Spec-red-team should probe: can owner
+      repeatedly cancel-rebook to disrupt a specific resident?
+
+  # ── Step 9: Notifications ─────────────────────────────────────────────────────
+  - id: 9
+    name: "Notifications"
+    description: "Email + web push (PWA, VAPID keys, service worker)"
+    risk_tier: MEDIUM
+    required_signoffs:
+      - code-review   # Django signal wiring, notification dispatch architecture
+      - security      # VAPID keys in .env (not hardcoded); push subscription storage;
+                      # no PII in notification payloads beyond minimum necessary
+      - privacy       # Email address used for notifications is PII; push subscription
+                      # endpoint is a quasi-identifier; both require deletion on erasure
+      - test-unit     # 80% / 75% mutant
+      - process       # pm-agent signs off on system test plan
+    system_test_applicable: true
+    human_gate_required: false
+    red_team_checkpoint: false
+    notes: >
+      Security reviewer: VAPID private key loaded from environment only, never
+      committed; push subscription endpoints not logged. Privacy reviewer: push
+      subscription must be deleted as part of right-to-erasure (Step 11).
+      No a11y/ui reviewer needed (backend notifications, no template changes).
+
+  # ── Step 10: Operator console + HOA/manager portal + admin audit log ──────────
+  - id: 10
+    name: "Admin portals"
+    description: "Operator console, HOA/manager portal, Django admin extensions, admin audit log"
+    risk_tier: HIGH
+    required_signoffs:
+      - code-review   # Django admin customization, custom views, ModelAdmin scoping
+      - security      # Privilege escalation: operator unreachable by non-superusers;
+                      # HOA admin cannot access other building's data (IDOR in admin);
+                      # every privileged action writes AdminAuditLog entry
+      - privacy       # Admin PII access logging: any view rendering resident email/name/phone
+                      # must write pii_access audit log entry; bulk access also logged
+      - ui            # HOA portal template conformance to design pack
+      - a11y          # WCAG AA compliance on portal templates
+      - test-unit     # 80% / 75% mutant
+      - test-system   # HOA portal: approve/block residents, view usage; operator console;
+                      # cross-building isolation test
+      - process       # pm-agent signs off on system test plan
+    system_test_applicable: true
+    human_gate_required: false
+    red_team_checkpoint: true
+    red_team_milestone: "admin"
+    notes: >
+      HIGH. Red-team checkpoint: run_red_team.sh --milestone admin. Focus: HOA admin
+      at building A accessing building B data; resident escalating to HOA admin;
+      IDOR in admin views with different-tenant object IDs. Security reviewer:
+      get_queryset() on all ModelAdmin classes enforces org filtering; operator
+      console protected by is_superuser, not just is_staff.
+
+  # ── Step 11: Right-to-erasure + deploy config + backup ───────────────────────
+  - id: 11
+    name: "Right-to-erasure + deploy"
+    description: "GDPR erasure function, opus deploy config (Caddy/DDNS), nightly pg_dump → NAS"
+    risk_tier: HIGH
+    required_signoffs:
+      - code-review   # delete_user_pii() implementation, migration if any, deploy scripts
+      - security      # Production security headers (HSTS, X-Frame, CSP, nosniff);
+                      # DB not exposed externally; DEBUG=False; ALLOWED_HOSTS restrictive;
+                      # backup files not world-readable
+      - privacy       # Right-to-erasure: email/name/phone nulled; TOTP+recovery deleted;
+                      # Booking records anonymized (not deleted); AdminAuditLog actor retained;
+                      # push subscription deleted; erasure logged in audit log
+      - infra         # Docker Compose: all three services Up; Caddy TLS via DNS-01;
+                      # HOA alias CNAME; named volume present; pg_dump cron to NAS;
+                      # UFW rules; no external DB port
+      - test-unit     # 80% / 75% mutant; erasure function must be tested
+      - test-system   # Erasure: PII fields scrubbed; booking records remain anonymized;
+                      # TOTP/recovery deleted; erasure in audit log
+    system_test_applicable: true
+    human_gate_required: false
+    red_team_checkpoint: true
+    red_team_milestone: "deploy"
+    notes: >
+      HIGH. Red-team checkpoint: run_red_team.sh --milestone deploy. Focus: TLS
+      certificate validity (notAfter > 30 days); HTTP→HTTPS redirect; DB port not
+      reachable externally; security headers all present; backup file exists and
+      is recent (<48h). Infra-reviewer runs deploy-verify agent after deployment.
+      Privacy: erasure function is operator-initiated (not self-service in pilot);
+      callable from operator console; logged in AdminAuditLog.
+
+# ── Red-team checkpoints summary ─────────────────────────────────────────────
+# run_red_team.sh --milestone <name> after the indicated step completes
+#
+#   auth     (step 3)  — TOTP replay chains, session fixation, invite token abuse
+#   booking  (step 6)  — Horizon gaming, concurrent booking exploits, gate bypass
+#   admin    (step 10) — Privilege escalation, cross-tenant admin IDOR
+#   deploy   (step 11) — TLS, headers, DB exposure, infrastructure

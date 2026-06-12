@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Unblock resident — HOA Portal</title>
+</head>
+<body>
+  <h1>Unblock resident</h1>
+  <p>Restore access for <strong>{{ resident.display_name }}</strong> ({{ resident.email }})?</p>
+  <form method="post">
+    {% csrf_token %}
+    <button type="submit">Confirm unblock</button>
+    <a href="{% url 'portal_resident_list' %}">Cancel</a>
+  </form>
+</body>
+</html>

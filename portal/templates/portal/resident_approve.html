@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Approve resident — HOA Portal</title>
+</head>
+<body>
+  <h1>Approve resident</h1>
+  <p>Approve <strong>{{ resident.display_name }}</strong> ({{ resident.email }})?</p>
+  <form method="post">
+    {% csrf_token %}
+    <button type="submit">Confirm approval</button>
+    <a href="{% url 'portal_resident_list' %}">Cancel</a>
+  </form>
+</body>
+</html>

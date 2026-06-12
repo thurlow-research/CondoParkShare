@@ -22,6 +22,20 @@ composer.phar
 .DS_Store
 Thumbs.db
 
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+*.sqlite3
+
+# Coverage / mutation testing
+.coverage
+htmlcov/
+.mutmut-cache
+
 # AI oversight protocol
 # prompts/ and AGENTS.md are always committed — never ignore them
 .ai-local/

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Send message — CondoParkShare</title>
+</head>
+<body>
+  <h1>Send a message</h1>
+
+  <p>
+    Booking: spot <strong>{{ booking.spot.spot_number }}</strong>
+    from <strong>{{ booking.time_range.lower }}</strong>
+    to <strong>{{ booking.time_range.upper }}</strong>
+  </p>
+
+  <p>Your message will be relayed to <strong>{{ to_user_display }}</strong>.
+     Your email address will not be shared.</p>
+
+  <form method="post">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+      <div role="alert">
+        {% for error in form.non_field_errors %}
+          <p class="form-error">{{ error }}</p>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {{ form.as_p }}
+
+    <button type="submit">Send message</button>
+    <a href="{% url 'booking_detail' booking.pk %}">Cancel</a>
+  </form>
+</body>
+</html>

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Residents — HOA Portal</title>
+</head>
+<body>
+  <h1>Residents</h1>
+  <a href="{% url 'portal_home' %}">Back to dashboard</a>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Email</th>
+        <th>Name</th>
+        <th>Status</th>
+        <th>HOA admin</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for resident in residents %}
+      <tr>
+        <td>{{ resident.email }}</td>
+        <td>{{ resident.display_name }}</td>
+        <td>{{ resident.status }}</td>
+        <td>{% if resident.is_hoa_admin %}Yes{% else %}No{% endif %}</td>
+        <td>
+          {% if resident.status == 'pending_approval' %}
+          <form method="post" action="{% url 'portal_resident_approve' resident.pk %}">
+            {% csrf_token %}
+            <button type="submit">Approve</button>
+          </form>
+          {% endif %}
+          {% if resident.status != 'blocked' %}
+          <form method="post" action="{% url 'portal_resident_block' resident.pk %}">
+            {% csrf_token %}
+            <button type="submit">Block</button>
+          </form>
+          {% else %}
+          <form method="post" action="{% url 'portal_resident_unblock' resident.pk %}">
+            {% csrf_token %}
+            <button type="submit">Unblock</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5">No residents.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</body>
+</html>

@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Block resident — HOA Portal</title>
+</head>
+<body>
+  <h1>Block resident</h1>
+  <p>Block <strong>{{ resident.display_name }}</strong> ({{ resident.email }})?
+     Their account will be suspended immediately.</p>
+  <form method="post">
+    {% csrf_token %}
+    <button type="submit">Confirm block</button>
+    <a href="{% url 'portal_resident_list' %}">Cancel</a>
+  </form>
+</body>
+</html>
