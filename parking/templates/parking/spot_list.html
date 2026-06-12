@@ -14,18 +14,18 @@
   <div class="cols">
     {% for item in spot_data %}
       {% with spot=item.spot %}
-      <div class="spot {% if spot.status == 'active' %}is-available{% endif %}">
+      <div class="spot">
         <div class="row">
           <span class="spot-id">
             <span class="tag mono">{{ spot.spot_number }}</span>
             {{ spot.location_detail|default:"" }}
           </span>
           {% if spot.status == 'active' %}
-            <span class="badge badge-available"><span class="dot" aria-hidden="true"></span> Listed</span>
+            <span class="badge badge-active"><span class="dot" aria-hidden="true"></span> Listed</span>
           {% elif spot.status == 'pending' %}
-            <span class="badge badge-pending"><span class="dot" aria-hidden="true"></span> Pending review</span>
+            <span class="badge badge-pending"><span class="ring" aria-hidden="true"></span> Pending review</span>
           {% elif spot.status == 'inactive' %}
-            <span class="badge badge-neutral"><span class="dot" aria-hidden="true"></span> Inactive</span>
+            <span class="badge badge-inactive"><span class="ring" aria-hidden="true"></span> Inactive</span>
           {% endif %}
         </div>
 

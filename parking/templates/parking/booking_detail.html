@@ -14,20 +14,18 @@
     <h1>Booking details</h1>
   </div>
 
-  <div class="spot {% if booking.status == 'confirmed' or booking.status == 'active' %}is-available{% endif %}" style="margin-bottom:24px">
+  <div class="spot" style="margin-bottom:24px">
     <div class="row">
       <span class="spot-id">
         <span class="tag mono">{{ booking.spot.spot_number }}</span>
         {{ booking.spot.location_detail|default:"" }}
       </span>
-      {% if booking.status == 'confirmed' or booking.status == 'active' %}
-        <span class="badge badge-neutral"><span class="dot" aria-hidden="true"></span> Confirmed</span>
-      {% elif booking.status == 'tentative' %}
-        <span class="badge badge-pending"><span class="dot" aria-hidden="true"></span> Hold pending</span>
+      {% if booking.status == 'tentative' or booking.status == 'confirmed' or booking.status == 'active' %}
+        <span class="badge badge-active"><span class="dot" aria-hidden="true"></span> Confirmed</span>
       {% elif booking.status == 'completed' %}
-        <span class="badge badge-neutral"><span class="dot" aria-hidden="true"></span> Completed</span>
+        <span class="badge badge-complete"><span class="dot" aria-hidden="true"></span> Completed</span>
       {% else %}
-        <span class="badge badge-error"><span class="dot" aria-hidden="true"></span> Cancelled</span>
+        <span class="badge badge-danger"><span class="dot" aria-hidden="true"></span> Cancelled</span>
       {% endif %}
     </div>
 

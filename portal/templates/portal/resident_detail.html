@@ -27,7 +27,7 @@
       {% if resident.status == 'active' %}
         <form method="post" action="{% url 'portal_resident_block' resident.pk %}">
           {% csrf_token %}
-          <button type="submit" class="btn btn-ghost" style="color:var(--error-ink)">Block</button>
+          <button type="submit" class="btn btn-danger">Block</button>
         </form>
       {% elif resident.status == 'blocked' %}
         <form method="post" action="{% url 'portal_resident_unblock' resident.pk %}">
@@ -45,15 +45,15 @@
       <dt style="color:var(--text-muted);font-weight:600">Status</dt>
       <dd style="margin:0">
         {% if resident.status == 'active' %}
-          <span class="badge badge-neutral"><span class="dot" aria-hidden="true"></span> Active</span>
+          <span class="badge badge-active"><span class="dot" aria-hidden="true"></span> Active</span>
         {% elif resident.status == 'pending_approval' %}
-          <span class="badge badge-pending"><span class="dot" aria-hidden="true"></span> Pending approval</span>
+          <span class="badge badge-pending"><span class="ring" aria-hidden="true"></span> Pending approval</span>
         {% elif resident.status == 'pending_totp' %}
-          <span class="badge badge-pending"><span class="dot" aria-hidden="true"></span> Pending setup</span>
+          <span class="badge badge-pending"><span class="ring" aria-hidden="true"></span> Pending setup</span>
         {% elif resident.status == 'blocked' %}
-          <span class="badge badge-error"><span class="dot" aria-hidden="true"></span> Blocked</span>
+          <span class="badge badge-danger"><span class="dot" aria-hidden="true"></span> Blocked</span>
         {% else %}
-          <span class="badge badge-neutral">{{ resident.status }}</span>
+          <span class="badge badge-pending"><span class="ring" aria-hidden="true"></span> {{ resident.status }}</span>
         {% endif %}
       </dd>
 

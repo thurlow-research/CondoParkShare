@@ -22,15 +22,15 @@
       <dt style="color:var(--text-muted);font-size:13px;font-weight:600">Status</dt>
       <dd style="margin:0">
         {% if user.status == 'active' %}
-          <span class="badge badge-neutral"><span class="dot" aria-hidden="true"></span> Active</span>
+          <span class="badge badge-active"><span class="dot" aria-hidden="true"></span> Active</span>
         {% elif user.status == 'pending_totp' %}
-          <span class="badge badge-pending"><span class="dot" aria-hidden="true"></span> Pending setup</span>
+          <span class="badge badge-pending"><span class="ring" aria-hidden="true"></span> Pending setup</span>
         {% elif user.status == 'pending_approval' %}
-          <span class="badge badge-pending"><span class="dot" aria-hidden="true"></span> Pending approval</span>
+          <span class="badge badge-pending"><span class="ring" aria-hidden="true"></span> Pending approval</span>
         {% elif user.status == 'blocked' %}
-          <span class="badge badge-error"><span class="dot" aria-hidden="true"></span> Blocked</span>
+          <span class="badge badge-danger"><span class="dot" aria-hidden="true"></span> Blocked</span>
         {% else %}
-          <span class="badge badge-neutral">{{ user.status }}</span>
+          <span class="badge badge-pending"><span class="ring" aria-hidden="true"></span> {{ user.status }}</span>
         {% endif %}
       </dd>
 

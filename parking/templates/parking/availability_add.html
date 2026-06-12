@@ -53,7 +53,7 @@
           {% endif %}
         >
         {% if form.start.errors %}
-          <span id="start-error" style="color:var(--error-ink);font-size:13px;margin-top:4px;display:block" role="alert">
+          <span id="start-error" style="color:var(--danger-ink);font-size:13px;margin-top:4px;display:block" role="alert">
             {{ form.start.errors|join:", " }}
           </span>
         {% endif %}
@@ -75,7 +75,7 @@
           {% endif %}
         >
         {% if form.end.errors %}
-          <span id="end-error" style="color:var(--error-ink);font-size:13px;margin-top:4px;display:block" role="alert">
+          <span id="end-error" style="color:var(--danger-ink);font-size:13px;margin-top:4px;display:block" role="alert">
             {{ form.end.errors|join:", " }}
           </span>
         {% endif %}

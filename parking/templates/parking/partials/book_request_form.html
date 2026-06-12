@@ -25,7 +25,7 @@
     <label for="{{ form.start.id_for_label }}">{{ form.start.label }}</label>
     {{ form.start }}
     {% if form.start.errors %}
-      <span id="book-start-error" style="color:var(--error-ink);font-size:13px;margin-top:4px;display:block" role="alert">
+      <span id="book-start-error" style="color:var(--danger-ink);font-size:13px;margin-top:4px;display:block" role="alert">
         {{ form.start.errors|join:", " }}
       </span>
     {% endif %}
@@ -38,7 +38,7 @@
     <label for="{{ form.end.id_for_label }}">{{ form.end.label }}</label>
     {{ form.end }}
     {% if form.end.errors %}
-      <span id="book-end-error" style="color:var(--error-ink);font-size:13px;margin-top:4px;display:block" role="alert">
+      <span id="book-end-error" style="color:var(--danger-ink);font-size:13px;margin-top:4px;display:block" role="alert">
         {{ form.end.errors|join:", " }}
       </span>
     {% endif %}
