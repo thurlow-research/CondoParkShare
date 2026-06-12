@@ -135,6 +135,24 @@ Style, minor naming, non-critical improvements.
 
 Always state: *"Items in Tier 1 require human confirmation before merge."*
 
+### Workaround Escalation Rule
+
+When you encounter a workaround in existing code — a pattern that exists to route around a structural constraint rather than resolve it — treat the constraint as unreviewed risk, not accepted design.
+
+Specific triggers:
+- A docstring or comment explains *why* a normal import or pattern cannot be used
+- Code uses `importlib.util.spec_from_file_location` with a hardcoded path
+- A class or function is defined in a non-obvious module solely to avoid a naming conflict
+- A test monkey-patches or no-ops a registration mechanism to prevent double-registration
+
+When you see any of these, your review must:
+1. Name the root constraint explicitly (e.g. "this workaround exists because `X` shadows `Y`")
+2. Assess whether that constraint is itself a defect (naming collision, circular import, stdlib shadow)
+3. If the root constraint is a defect: escalate to **Tier 1** — the workaround is not a fix
+4. Do not let an elaborate workaround suppress the underlying finding
+
+The pattern `workarounds accumulate → reviewers rationalize them as intentional design` is a known pipeline failure mode. Each workaround is a signal to look harder, not evidence the problem is handled.
+
 ---
 
 ## Prompts-as-Artifact Discipline

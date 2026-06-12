@@ -108,20 +108,6 @@ class BookingFactory(factory.django.DjangoModelFactory):
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _load_operator_admin():
-    """
-    Return the operator-console admin module.
-
-    The app was renamed ``operator`` -> ``operator_console`` so it no longer
-    shadows Python's stdlib ``operator`` module, so a normal import works.
-    Django's admin autodiscover has already imported and registered it, so this
-    returns the cached module without re-running the ``@register`` decorators.
-    Callers can access ``AdminAuditLogAdmin`` and ``UserAdmin`` from it.
-    """
-    from operator_console import admin as mod
-    return mod
-
-
 def _make_hoa_request(view_func, admin_user, org, method='GET', post_data=None, path='/portal/'):
     """
     Build a fake request with request.user and request.organization set,
@@ -277,8 +263,7 @@ def test_audit_log_immutable():
     from accounts.models import AdminAuditLog
     from parkshare.admin_site import operator_admin_site
 
-    mod = _load_operator_admin()
-    AdminAuditLogAdmin = mod.AdminAuditLogAdmin
+    from operator_console.admin import AdminAuditLogAdmin
 
     # Instantiate the admin class the same way Django does
     admin_instance = AdminAuditLogAdmin(
@@ -492,8 +477,7 @@ def test_impersonation_blocked_for_superuser_target():
     from parkshare.admin_site import operator_admin_site
     from accounts.models import User
 
-    mod = _load_operator_admin()
-    UserAdmin = mod.UserAdmin
+    from operator_console.admin import UserAdmin
 
     org = OrganizationFactory()
     operator = UserFactory(

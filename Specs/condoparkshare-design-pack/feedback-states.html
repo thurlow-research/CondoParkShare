@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CondoParkShare — Feedback & System States</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,400;0,500;0,600;0,700;0,800&family=Spline+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --pine:#204034; --pine-700:#2c5848; --eucalyptus:#5e9079;
+  --meadow:#2e9e63; --meadow-ink:#1d6b43;
+  --clay:#bc7a4e; --clay-ink:#9a5d34;
+  --ink:#18211c; --slate:#586059; --line:#dbe3d9; --mist:#e9efe6;
+  --canvas:#f3f6f0; --white:#ffffff;
+
+  /* NEW — feedback & system states */
+  --danger:#c43d2f; --danger-ink:#a32f23; --danger-surface:#fbeae6; --danger-line:#f1cdc5;
+  --warning:#e0ad3a; --warning-ink:#8a5d0c; --warning-surface:#fbf0d6; --warning-line:#efddae;
+  --success:var(--meadow); --success-ink:var(--meadow-ink); --success-surface:#e4f4ea; --success-line:#bfe3cd;
+  --info:var(--pine); --info-ink:var(--pine); --info-surface:#eaeef0; --info-line:#d6dee0;
+
+  /* NEW — neutral lifecycle + recognition metals */
+  --status-live:var(--pine); --status-ink:var(--slate); --status-surface:var(--mist); --status-line:var(--line); --status-off:#8b938b;
+  --gold-hi:#f0d98a; --gold:#c9a227; --gold-lo:#9c7b16; --gold-ink:#5a4708;
+  --silver-hi:#f3f6f8; --silver:#c7ced3; --silver-lo:#98a1a8; --silver-ink:#41484d;
+  --bronze-hi:#e7bd93; --bronze:#b97f4e; --bronze-lo:#85542c;
+
+  --font-sans:"Hanken Grotesk",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  --font-mono:"Spline Sans Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --r-sm:6px; --r-md:10px; --r-lg:16px; --r-xl:24px;
+  --shadow:0 1px 2px rgba(24,33,28,.04),0 8px 24px -12px rgba(24,33,28,.18);
+  --maxw:1080px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+body{margin:0;font-family:var(--font-sans);background:var(--canvas);color:var(--ink);
+  line-height:1.55;-webkit-font-smoothing:antialiased;font-size:16px}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+section{padding:60px 0;border-top:1px solid var(--line)}
+section:first-of-type{border-top:0}
+h1,h2,h3,h4{line-height:1.12;letter-spacing:-.02em;margin:0}
+.eyebrow{font-family:var(--font-mono);font-size:12px;font-weight:500;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--meadow-ink);margin:0 0 14px}
+.lead{font-size:19px;color:var(--slate);max-width:64ch}
+.t-h2{font-size:30px;font-weight:700;letter-spacing:-.02em}
+.t-h3{font-size:21px;font-weight:600}
+.t-small{font-size:13.5px;color:var(--slate)}
+:focus-visible{outline:3px solid var(--eucalyptus);outline-offset:2px}
+
+/* masthead */
+.masthead{background:var(--pine);color:#eaf2ec;padding:18px 0}
+.masthead .wrap{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.logo{display:inline-flex;align-items:center;gap:13px;font-weight:700;font-size:20px;letter-spacing:-.02em;color:#fff}
+.logo .word b{font-weight:800}
+.logo .word .accent{color:#8fe0b3}
+.tagline{font-family:var(--font-mono);font-size:12.5px;letter-spacing:.04em;color:#a9c6b6}
+
+.hero{padding:64px 0 56px}
+.hero h1{font-size:clamp(32px,4.6vw,52px);font-weight:800;max-width:20ch;letter-spacing:-.025em}
+.hero h1 .g{color:var(--meadow-ink)}
+.hero .lead{margin-top:20px}
+
+/* principle cards */
+.principles{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));margin-top:30px}
+.principle{background:var(--white);border:1px solid var(--line);border-radius:var(--r-md);padding:18px 20px}
+.principle .k{font-family:var(--font-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--slate);margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.principle .k .sw{width:12px;height:12px;border-radius:3px;flex:0 0 auto}
+.principle p{margin:0;font-size:14px;color:var(--slate)}
+.principle strong{color:var(--ink)}
+
+/* swatches */
+.grid{display:grid;gap:16px}
+.fb-grid{grid-template-columns:repeat(auto-fit,minmax(232px,1fr))}
+.fcard{background:var(--white);border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden}
+.fcard .chip{height:84px;display:flex;align-items:flex-end;padding:10px 12px}
+.fcard .chip .ramp{display:flex;gap:0;align-items:flex-end;height:34px}
+.fcard .chip .ramp span{display:block;width:26px;height:100%;border-radius:3px 3px 0 0;border:1px solid rgba(0,0,0,.06)}
+.fcard .meta{padding:13px 15px}
+.fcard .name{font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px}
+.fcard .role{font-family:var(--font-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+  padding:2px 7px;border-radius:999px;font-weight:600}
+.fcard .vars{font-family:var(--font-mono);font-size:11.5px;color:var(--slate);margin-top:9px;line-height:1.7}
+.fcard .vars b{color:var(--ink);font-weight:600}
+
+/* panels & components */
+.cols{display:grid;gap:24px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.panel{background:var(--white);border:1px solid var(--line);border-radius:var(--r-lg);padding:24px;box-shadow:var(--shadow)}
+.panel h3{margin-bottom:6px}
+.panel .t-small{margin-bottom:18px}
+.stack{display:flex;flex-direction:column;gap:12px}
+
+.alert{display:flex;gap:12px;align-items:flex-start;padding:13px 16px;border-radius:var(--r-md);
+  border:1px solid var(--line);background:var(--white);font-size:14.5px;line-height:1.5}
+.alert .alert-icon{flex:0 0 auto;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;
+  font-family:var(--font-mono);font-size:12px;font-weight:700;color:#fff;margin-top:1px}
+.alert .alert-title{font-weight:700;margin:0 0 1px}
+.alert .alert-body{color:var(--slate)}
+.alert-danger{background:var(--danger-surface);border-color:var(--danger-line)}
+.alert-danger .alert-icon{background:var(--danger)} .alert-danger .alert-title{color:var(--danger-ink)}
+.alert-warning{background:var(--warning-surface);border-color:var(--warning-line)}
+.alert-warning .alert-icon{background:var(--warning-ink)} .alert-warning .alert-title{color:var(--warning-ink)}
+.alert-success{background:var(--success-surface);border-color:var(--success-line)}
+.alert-success .alert-icon{background:var(--success)} .alert-success .alert-title{color:var(--success-ink)}
+.alert-info{background:var(--info-surface);border-color:var(--info-line)}
+.alert-info .alert-icon{background:var(--info)} .alert-info .alert-title{color:var(--info-ink)}
+
+.badge{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);
+  font-size:12px;font-weight:600;letter-spacing:.04em;padding:4px 10px;border-radius:999px}
+.badge .dot{width:7px;height:7px;border-radius:50%}
+.badge-available{background:#e4f4ea;color:var(--meadow-ink)} .badge-available .dot{background:var(--meadow)}
+.badge-booked{background:#f6e9df;color:var(--clay-ink)} .badge-booked .dot{background:var(--clay)}
+.badge-warning{background:var(--warning-surface);color:var(--warning-ink)} .badge-warning .dot{background:var(--warning)}
+.badge-danger{background:var(--danger-surface);color:var(--danger-ink)} .badge-danger .dot{background:var(--danger)}
+.badge{white-space:nowrap}
+.badge .ring{width:8px;height:8px;border-radius:50%;border:1.5px solid currentColor;flex:0 0 auto}
+.badge .chk{font-size:11px;line-height:1;font-weight:700}
+.badge-active{background:var(--status-surface);color:var(--status-live)} .badge-active .dot{background:var(--status-live)}
+.badge-pending{background:var(--white);color:var(--status-ink);border:1px solid var(--status-line)}
+.badge-complete{background:var(--status-surface);color:var(--status-ink)} .badge-complete .dot{background:var(--status-ink)}
+.badge-inactive{background:transparent;color:var(--status-off);border:1px solid var(--status-line)}
+.medal{width:54px;height:54px;border-radius:50%;display:grid;place-items:center;font-family:var(--font-mono);
+  font-weight:600;font-size:20px;color:#fff;box-shadow:inset 0 2px 3px rgba(255,255,255,.55),
+  inset 0 -3px 5px rgba(0,0,0,.28),0 4px 10px -3px rgba(24,33,28,.4)}
+.m-gold{background:radial-gradient(circle at 35% 28%,var(--gold-hi),var(--gold) 52%,var(--gold-lo));color:var(--gold-ink)}
+.m-silver{background:radial-gradient(circle at 35% 28%,var(--silver-hi),var(--silver) 52%,var(--silver-lo));color:var(--silver-ink)}
+.m-bronze{background:radial-gradient(circle at 35% 28%,var(--bronze-hi),var(--bronze) 52%,var(--bronze-lo))}
+.medal-row{display:flex;gap:22px;align-items:center;flex-wrap:wrap}
+.medal-row figure{margin:0;text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px}
+.medal-row figcaption{font-family:var(--font-mono);font-size:11px;letter-spacing:.06em;color:var(--slate)}
+
+.btn{font-family:inherit;font-size:15px;font-weight:600;border-radius:var(--r-sm);
+  padding:11px 18px;border:1.5px solid transparent;cursor:pointer;display:inline-flex;
+  align-items:center;gap:8px;transition:transform .12s ease,background .15s ease;text-decoration:none}
+.btn:focus-visible{outline:3px solid var(--eucalyptus);outline-offset:2px}
+.btn-primary{background:var(--meadow);color:#fff}
+.btn-ghost{background:transparent;color:var(--pine);border-color:var(--line)}
+.btn-ghost:hover{background:var(--mist);border-color:var(--eucalyptus)}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-danger:hover{background:#ad3527;transform:translateY(-1px)}
+.btn-row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+
+.field{display:block;margin-bottom:0}
+.field label{display:block;font-size:13.5px;font-weight:600;margin-bottom:6px}
+.field input{width:100%;font-family:inherit;font-size:15px;padding:11px 13px;border:1.5px solid var(--line);
+  border-radius:var(--r-sm);background:var(--white);color:var(--ink)}
+.field.has-error input{border-color:var(--danger);box-shadow:0 0 0 3px var(--danger-surface)}
+.field .error-text{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--danger-ink);margin-top:6px}
+.field .error-text::before{content:"!";font-family:var(--font-mono);font-weight:700;width:15px;height:15px;border-radius:50%;
+  background:var(--danger);color:#fff;display:grid;place-items:center;font-size:11px;line-height:1}
+
+.toast{display:inline-flex;align-items:center;gap:10px;padding:11px 16px;border-radius:var(--r-sm);
+  background:var(--ink);color:#fff;font-size:14.5px;font-weight:500;box-shadow:var(--shadow)}
+.toast .toast-dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+.toast-success .toast-dot{background:var(--meadow)}
+.toast-danger .toast-dot{background:var(--danger)}
+
+/* do / don't */
+.voice{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));margin-top:24px}
+.voice .do,.voice .dont{padding:18px 20px;border-radius:var(--r-md);font-size:14.5px}
+.voice .do{background:#e4f4ea;border:1px solid #bfe3cd}
+.voice .dont{background:var(--danger-surface);border:1px solid var(--danger-line)}
+.voice .h{font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:7px}
+.voice .do .h{color:var(--meadow-ink)} .voice .dont .h{color:var(--danger-ink)}
+.voice ul{margin:0;padding-left:18px;color:var(--slate)} .voice li{margin:4px 0}
+.voice code{font-family:var(--font-mono);font-size:13px;background:rgba(0,0,0,.05);padding:1px 6px;border-radius:4px}
+
+footer{padding:40px 0;color:var(--slate);font-size:13px;border-top:1px solid var(--line)}
+footer code{font-family:var(--font-mono)}
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap">
+    <span class="logo">
+      <svg width="34" height="34" viewBox="0 0 34 34" fill="none" aria-hidden="true">
+        <path d="M3 11V5a2 2 0 0 1 2-2h6" stroke="#8fe0b3" stroke-width="2.6" stroke-linecap="round"></path>
+        <path d="M31 23v6a2 2 0 0 1-2 2h-6" stroke="#8fe0b3" stroke-width="2.6" stroke-linecap="round"></path>
+        <rect x="12" y="12" width="10" height="10" rx="2.5" fill="#2e9e63"></rect>
+      </svg>
+      <span class="word">Condo<b>Park</b><span class="accent">Share</span></span>
+    </span>
+    <span class="tagline">Brand &amp; UI Style Guide · 07</span>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="hero">
+    <p class="eyebrow">07 — Feedback &amp; system states</p>
+    <h1>Telling residents what just happened — <span class="g">without drowning out availability.</span></h1>
+    <p class="lead">The system already spends its boldness on one thing: <strong>green means available, clay means booked</strong>. Feedback colors are added carefully so they never compete with that signal. Four states, each paired with a label and icon — color is never the only cue.</p>
+
+    <div class="principles">
+      <div class="principle">
+        <div class="k"><span class="sw" style="background:var(--danger)"></span>Error · the one new hue</div>
+        <p>A warm brick <strong>red</strong> is the only color we add. Nothing in the palette read "stop" — so danger earns its own hue for failures and destructive actions.</p>
+      </div>
+      <div class="principle">
+        <div class="k"><span class="sw" style="background:var(--warning)"></span>Warning ≠ Clay</div>
+        <p>A yellow-<strong>gold</strong>, separated from Clay by <strong>lightness, not just hue</strong> — so it stays distinct for every color-vision type (incl. tritanopia) and in grayscale. Clay is status-only; amber is alert-only.</p>
+      </div>
+      <div class="principle">
+        <div class="k"><span class="sw" style="background:var(--meadow)"></span>Success = Meadow</div>
+        <p>Success reuses the <strong>Meadow</strong> family on purpose. Green already means good/go here, so "Booked." is a green moment — no new color needed.</p>
+      </div>
+      <div class="principle">
+        <div class="k"><span class="sw" style="background:var(--info-surface);border:1px solid var(--info-line)"></span>Info = neutral</div>
+        <p>Notices stay <strong>neutral</strong> (pine on cool paper). No foreign blue — keeping info quiet protects the green availability lane.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SWATCHES -->
+<section id="tokens">
+  <div class="wrap">
+    <p class="eyebrow">Tokens</p>
+    <h2 class="t-h2">Each state gets a base, an accessible ink, and a tinted surface.</h2>
+    <p class="lead" style="margin:14px 0 28px">Use the base for icons, dots, and solid actions; <strong>-ink</strong> for text on light backgrounds (all meet WCAG AA); <strong>-surface</strong> + <strong>-line</strong> for banner fills and borders.</p>
+    <div class="grid fb-grid">
+
+      <div class="fcard">
+        <div class="chip" style="background:var(--danger-surface)">
+          <div class="ramp"><span style="background:var(--danger)"></span><span style="background:var(--danger-ink)"></span><span style="background:var(--danger-line)"></span></div>
+        </div>
+        <div class="meta">
+          <div class="name">Danger <span class="role" style="background:var(--danger-surface);color:var(--danger-ink)">ERROR</span></div>
+          <div class="vars"><b>--danger</b> #c43d2f<br><b>--danger-ink</b> #a32f23<br><b>--danger-surface</b> #fbeae6<br><b>--danger-line</b> #f1cdc5</div>
+        </div>
+      </div>
+
+      <div class="fcard">
+        <div class="chip" style="background:var(--warning-surface)">
+          <div class="ramp"><span style="background:var(--warning)"></span><span style="background:var(--warning-ink)"></span><span style="background:var(--warning-line)"></span></div>
+        </div>
+        <div class="meta">
+          <div class="name">Warning <span class="role" style="background:var(--warning-surface);color:var(--warning-ink)">CAUTION</span></div>
+          <div class="vars"><b>--warning</b> #e0ad3a<br><b>--warning-ink</b> #8a5d0c<br><b>--warning-surface</b> #fbf0d6<br><b>--warning-line</b> #efddae</div>
+        </div>
+      </div>
+
+      <div class="fcard">
+        <div class="chip" style="background:var(--success-surface)">
+          <div class="ramp"><span style="background:var(--meadow)"></span><span style="background:var(--meadow-ink)"></span><span style="background:var(--success-line)"></span></div>
+        </div>
+        <div class="meta">
+          <div class="name">Success <span class="role" style="background:var(--success-surface);color:var(--meadow-ink)">POSITIVE</span></div>
+          <div class="vars"><b>--success</b> = --meadow<br><b>--success-ink</b> = --meadow-ink<br><b>--success-surface</b> #e4f4ea<br><b>--success-line</b> #bfe3cd</div>
+        </div>
+      </div>
+
+      <div class="fcard">
+        <div class="chip" style="background:var(--info-surface)">
+          <div class="ramp"><span style="background:var(--info)"></span><span style="background:var(--slate)"></span><span style="background:var(--info-line)"></span></div>
+        </div>
+        <div class="meta">
+          <div class="name">Info <span class="role" style="background:var(--info-surface);color:var(--info-ink)">NOTICE</span></div>
+          <div class="vars"><b>--info</b> = --pine<br><b>--info-ink</b> = --pine<br><b>--info-surface</b> #eaeef0<br><b>--info-line</b> #d6dee0</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- COMPONENTS -->
+<section id="components">
+  <div class="wrap">
+    <p class="eyebrow">In use</p>
+    <h2 class="t-h2">The same four states, wired into the components residents already see.</h2>
+    <div class="cols" style="margin-top:26px">
+
+      <div class="panel">
+        <h3 class="t-h3">Alert banners</h3>
+        <p class="t-small">Page-level feedback. Title + body, icon always present.</p>
+        <div class="stack">
+          <div class="alert alert-success"><span class="alert-icon">✓</span><div><p class="alert-title">Booked.</p><div class="alert-body">P2-114 is yours, Tue 9:00 AM – 12:00 PM. We'll remind you before it's up.</div></div></div>
+          <div class="alert alert-warning"><span class="alert-icon">!</span><div><p class="alert-title">Your time's almost up</p><div class="alert-body">P2-114 frees at 12:00 PM. Heading back, or need longer?</div></div></div>
+          <div class="alert alert-danger"><span class="alert-icon">!</span><div><p class="alert-title">That spot was just taken</p><div class="alert-body">A neighbor booked P1-007 first. Pick another open spot below.</div></div></div>
+          <div class="alert alert-info"><span class="alert-icon">i</span><div><p class="alert-title">Quiet hours in the garage</p><div class="alert-body">Engine-off entry is requested between 10 PM and 7 AM.</div></div></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3 class="t-h3">Inline form error</h3>
+        <p class="t-small">Field-level. Red ring + a fix-it message in the product's voice.</p>
+        <div class="stack">
+          <div class="field has-error">
+            <label for="spot">Your spot number</label>
+            <input id="spot" type="text" value="P2-1140" aria-invalid="true">
+            <div class="error-text">That spot isn't in your building. Check the level and number.</div>
+          </div>
+          <div class="field">
+            <label for="when">When do you need it?</label>
+            <input id="when" type="text" value="Tue, 9:00 AM – 12:00 PM">
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3 class="t-h3">Status badges</h3>
+        <p class="t-small">Availability stays Meadow/Clay. New states extend the same shape.</p>
+        <div class="btn-row" style="gap:10px">
+          <span class="badge badge-available"><span class="dot"></span>AVAILABLE</span>
+          <span class="badge badge-booked"><span class="dot"></span>BOOKED</span>
+          <span class="badge badge-warning"><span class="dot"></span>ENDING SOON</span>
+          <span class="badge badge-danger"><span class="dot"></span>EXPIRED</span>
+        </div>
+
+        <h3 class="t-h3" style="margin-top:26px">Toasts</h3>
+        <p class="t-small">Transient confirmation, on the warm near-black ink.</p>
+        <div class="stack">
+          <span class="toast toast-success"><span class="toast-dot"></span>Booked.</span>
+          <span class="toast toast-danger"><span class="toast-dot"></span>Couldn't release the spot. Try again.</span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3 class="t-h3">Destructive action</h3>
+        <p class="t-small">Cancelling uses the danger button — paired with a plain way out.</p>
+        <div class="alert alert-danger" style="margin-bottom:16px">
+          <span class="alert-icon">!</span>
+          <div><p class="alert-title">Cancel this booking?</p><div class="alert-body">P2-114 goes back to the building. This can't be undone.</div></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-danger">Cancel booking</button>
+          <button class="btn btn-ghost">Keep it</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- RULES -->
+<section id="rules">
+  <div class="wrap">
+    <p class="eyebrow">Guardrails</p>
+    <h2 class="t-h2">Keep the signal clean.</h2>
+    <p class="lead" style="margin:14px 0 0">The whole point of the palette is that color does real work. These rules keep the new states from muddying it.</p>
+    <div class="voice">
+      <div class="do">
+        <div class="h">✓ Do</div>
+        <ul>
+          <li>Pair every state with an icon + text label — never color alone.</li>
+          <li>Use <code>--danger</code> red only for failures and destructive actions.</li>
+          <li>Let success borrow <code>--meadow</code> — a confirmation is a green moment.</li>
+          <li>Reach for <code>-ink</code> tokens when a state appears as text (AA).</li>
+          <li>Keep info <strong>neutral</strong>; it shouldn't pull attention.</li>
+        </ul>
+      </div>
+      <div class="dont">
+        <div class="h">✕ Don't</div>
+        <ul>
+          <li>Use <strong>Clay</strong> for warnings or <strong>amber</strong> for booked — they're not interchangeable.</li>
+          <li>Color a spot card's availability with danger/warning hues.</li>
+          <li>Add a blue for info — the system has no blue on purpose.</li>
+          <li>Stack two solid feedback colors in one view; pick the one that matters.</li>
+          <li>Use red decoratively. If it's not an error, it's not red.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- LIFECYCLE STATUSES -->
+<section id="lifecycle">
+  <div class="wrap">
+    <p class="eyebrow">08 — Administrative statuses</p>
+    <h2 class="t-h2">Lifecycle states are metadata — neutral, never the availability signal.</h2>
+    <p class="lead" style="margin:14px 0 28px">Active, Pending, Completed, Inactive and Listed are built only from <strong>neutrals + Pine</strong> and told apart by <strong>weight + dot shape</strong>, not hue. <strong>Listed ≠ Available</strong>: the same spot is Listed (lifecycle) and Available (signal) at once — so neither can be green.</p>
+    <div class="cols">
+      <div class="panel">
+        <h3 class="t-h3">The neutral tier</h3>
+        <p class="t-small">Four treatments, many labels. Shape is redundant with weight — readable in grayscale.</p>
+        <div class="btn-row" style="gap:10px">
+          <span class="badge badge-active"><span class="dot"></span>ACTIVE</span>
+          <span class="badge badge-active"><span class="dot"></span>LISTED</span>
+          <span class="badge badge-pending"><span class="ring"></span>PENDING APPROVAL</span>
+          <span class="badge badge-complete"><span class="chk">✓</span>COMPLETED</span>
+          <span class="badge badge-inactive"><span class="ring"></span>INACTIVE</span>
+        </div>
+      </div>
+      <div class="panel">
+        <h3 class="t-h3">Shown with the signal</h3>
+        <p class="t-small">Lifecycle + availability coexist on one spot without competing.</p>
+        <div class="stack">
+          <div class="alert" style="justify-content:space-between"><span><strong>P2-114</strong> · Listed by a neighbor on 4</span><span class="btn-row" style="gap:8px"><span class="badge badge-active"><span class="dot"></span>LISTED</span><span class="badge badge-available"><span class="dot"></span>AVAILABLE</span></span></div>
+          <div class="alert" style="justify-content:space-between"><span><strong>P1-007</strong> · Listed by a neighbor on 1</span><span class="btn-row" style="gap:8px"><span class="badge badge-active"><span class="dot"></span>LISTED</span><span class="badge badge-booked"><span class="dot"></span>BOOKED</span></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- RECOGNITION -->
+<section id="recognition">
+  <div class="wrap">
+    <p class="eyebrow">09 — Recognition &amp; leaderboard</p>
+    <h2 class="t-h2">The one allowed flourish: metal + Pine, never the signal hues.</h2>
+    <p class="lead" style="margin:14px 0 28px">Metals are <strong>always a gradient on a medallion, never a flat fill</strong> — that finish is the firewall: bronze stays distinct from flat Clay (booked), gold from flat Warning amber. Top three only; everyone else stays neutral so the podium glows by contrast.</p>
+    <div class="panel">
+      <h3 class="t-h3">Podium medals</h3>
+      <p class="t-small">Donation data stays mono/Pine — never Meadow. The champion is framed by the bay-bracket signature.</p>
+      <div class="medal-row">
+        <figure><span class="medal m-gold">1</span><figcaption>GOLD · champion</figcaption></figure>
+        <figure><span class="medal m-silver">2</span><figcaption>SILVER · 2nd</figcaption></figure>
+        <figure><span class="medal m-bronze">3</span><figcaption>BRONZE · 3rd</figcaption></figure>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    CondoParkShare — Feedback, statuses &amp; recognition · extends <code>tokens.css</code> · the feedback, lifecycle and recognition tokens are live in the build's source of truth.
+  </div>
+</footer>
+
+</body>
+</html>

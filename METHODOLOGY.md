@@ -68,7 +68,7 @@ Roles are defined first; models are then assigned to roles (§3). Think *separat
 | **Triage** | Scores the change's risk (see §5). Deterministic rules set a floor; the author cannot lower its own risk. | rules + Claude Haiku |
 | **Reviewer(s)** | Independent critique, each with a *lens*: correctness, security, maintainability, spec-conformance. Count scales with risk. | Antigravity, Codex, Copilot |
 | **Adversary / red-team** | Actively tries to *break* the change rather than bless it. High/critical risk only. | Codex or Antigravity |
-| **IP / provenance** | Checks intellectual-property exposure — copyleft/unknown-license code or deps entering the tree, verbatim regurgitation of copyrighted source, stripped attribution. An axis *orthogonal* to the risk tier; surfaces exposure for human/legal review, does not adjudicate. Runs on every panel pass. | `ipcheck` (local built-in agent; placeholder today, grown over time — [`DECISIONS.md` D19](DECISIONS.md)) |
+| **IP / provenance** | Checks intellectual-property exposure — copyleft/unknown-license code or deps entering the tree, verbatim regurgitation of copyrighted source, stripped attribution. An axis *orthogonal* to the risk tier; surfaces exposure for human/legal review, does not adjudicate. Runs on every panel pass. | `ipcheck` → `scripts/oversight/validators/ip_check.py`. **Level 1 ✅** (dependency license gate via ScanCode Toolkit, falls back to PyPI/npm API). **Level 2 ✅** (prompt clean-room: reads captured prompt artifacts, flags attribution triggers). **Level 3 🔧** (regurgitation via LSH; planned: ai-gen-code-search/AboutCode service API — see D20). |
 | **Arbiter** | Reconciles conflicting reviews into a single verdict + rationale; dedups; loops back to author or escalates. (Synthesizes others' independent reviews — not itself the independent check.) | Claude Sonnet |
 | **Human** | Sets policy; the final gate for high/critical changes; spot-checks the rest. | You |
 
@@ -146,9 +146,15 @@ See [`AGENTS.md` → Prompts-as-Artifact Discipline](AGENTS.md) for the authorit
 | **`scripts/prompt_audit.sh`** | Queries the provenance trail: `--stats`, `--pending`, `--risk LEVEL`. | ✅ |
 | **`.claude/settings.json`** | Risk-tiered permission policy: auto-allow reads/safe writes/commits; prompt on push/config; **block** `git push --force`, `rm -rf`, `.env` writes, `sudo`, `curl \| bash`. | ✅ |
 | **`.github/CODEOWNERS` + PR template + branch protection** | Owner approval on all files; PR checklist tied to the protocol; `main` requires approval + conversation resolution. | ✅ |
-| **`scripts/run_panel.sh`** | The local multi-agent review orchestrator (§6 steps 7–10): triage (Haiku) → cross-vendor reviewers (`agy`/`codex`) → arbiter (Sonnet) → posts per-finding line threads + a summary to the PR. | 🔧 built, not yet exercised on a live PR |
+| **`install.sh`** | Platform-aware unified installer (macOS brew / Ubuntu apt / Fedora dnf / yum / pacman). Installs Python 3.10+, ScanCode Toolkit (with system deps), gh CLI, pip analysis packages, agent CLIs guidance. Scaffolds full project structure including `audit/`. | ✅ |
+| **`scripts/run_panel.sh`** | The local multi-agent review orchestrator (§6 steps 7–10): triage (Haiku) → cross-vendor reviewers (`agy`/`codex`) → arbiter (Sonnet) → posts per-finding line threads + a summary to the PR. Loads `step{N}-panel-context.md` only (structural signals, no internal findings). IP agent (`ip_check.py`) runs Level 1+2. | 🔧 built, not yet exercised on a live PR |
+| **`scripts/run_second_review.sh`** | Pre-PR cross-vendor second review. agy fires at MEDIUM+ (conditional screening); codex fires at HIGH+ (reserve adversarial). Writes machine-readable verdict header. Fail-closed when agy unavailable at MEDIUM+. | ✅ |
+| **`scripts/run_red_team.sh`** | Checkpoint system-level adversarial red-team (after steps 3, 6, 10, 11). Uses both codex (attack chains) and agy (spec vs. implementation gap). Requires "not exploitable" attestations — a clean finding list without them is not a valid report. | ✅ |
+| **`scripts/oversight/validators/ip_check.py`** | IP/provenance validator. Level 1: dependency license gate (ScanCode Toolkit, PyPI/npm API fallback). Level 2: prompt artifact clean-room verification. Level 3: regurgitation stub (references ai-gen-code-search). | Level 1+2 ✅ / Level 3 🔧 |
+| **`scripts/oversight/validators/prompt_audit_risk.py`** | Prompt ambiguity scoring (question density, hedging language, TBDs, implicit assumptions) + fidelity surface (code/prompt ratio, unmentioned functions). Reads `Prompt-Artifact:` git trailers. | ✅ |
+| **`audit/oversight-log.jsonl`** | Append-only structured event log committed to the current branch. Covers risk assessments, sign-offs, evaluator decisions, second reviews, panel runs, human authorizations, merges. Queryable with `jq`. | ✅ |
 
-**Scope rule for the bootstrap:** it installs *only* what the oversight system needs (agent CLIs, their Node runtime, `gh`). Project frameworks/libraries are out of scope — each project installs its own.
+**Scope rule for the bootstrap:** it installs *only* what the oversight system needs (agent CLIs, their Node runtime, `gh`, Python analysis packages). Project frameworks/libraries are out of scope — each project installs its own.
 
 ---
 

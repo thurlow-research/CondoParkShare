@@ -138,7 +138,7 @@ call_model() {
 #
 # Growth path (DECISIONS.md D19) — what is implemented:
 #   Level 1 ✅: dependency license gate via ip_check.py
-#              Uses ScanCode Toolkit if installed (pip install scancode-toolkit)
+#              Uses ScanCode Toolkit if installed (install into oversight venv — see below)
 #              Falls back to PyPI/npm API. Flags copyleft/unknown licenses.
 #   Level 2 ✅: prompt clean-room verification via ip_check.py
 #              Reads prompt artifacts (Prompt-Artifact: git trailers → prompts/)
@@ -146,11 +146,13 @@ call_model() {
 #   Level 3 🔧: regurgitation lens — STUB
 #              Planned: ai-gen-code-search (AboutCode, LSH snippet matching)
 #              https://github.com/aboutcode-org/ai-gen-code-search
-#              Install: pip install ai-gen-code-search
+#              Install into oversight venv: $VENV_BIN/pip install ai-gen-code-search
 #              Activate: set IP_REGURGITATION_ENABLED=1
 #
-# ScanCode install (all platforms): pip install scancode-toolkit
-# On Faberix (Ubuntu long-runner): pip install --user scancode-toolkit
+# ScanCode install (all platforms — into oversight venv):
+#   ./scripts/oversight/ensure_venv.sh   # creates venv first
+#   $VENV_BIN/pip install scancode-toolkit
+# Ubuntu 24.04+: system pip is blocked by PEP 668; the venv is the only path.
 #
 # Set IP_STUB=1 to revert to empty stub (disables all three levels).
 IP_STUB="${IP_STUB:-0}"

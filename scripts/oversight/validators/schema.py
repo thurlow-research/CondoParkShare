@@ -64,6 +64,7 @@ WEIGHTS = {
     "static_analysis":      0.15,
     "historical_density":   0.12,
     "hallucination_surface": 0.06,
+    "portability":          0.06,
     "ip_check":             0.08,
     "prompt_ambiguity":     0.07,
 }

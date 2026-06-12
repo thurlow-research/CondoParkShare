@@ -1,6 +1,6 @@
-<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="CondoCondoParkShare">
-  <rect width="64" height="64" rx="14" fill="#204034"/>
-  <path d="M16 28V20a3 3 0 0 1 3-3h8" stroke="#8fe0b3" stroke-width="3.4" stroke-linecap="round"/>
-  <path d="M48 36v8a3 3 0 0 1-3 3h-8" stroke="#8fe0b3" stroke-width="3.4" stroke-linecap="round"/>
-  <rect x="24" y="24" width="16" height="16" rx="4" fill="#2e9e63"/>
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="CondoParkShare">
+  <rect width="64" height="64" rx="14" fill="#204034"></rect>
+  <path d="M16 28V20a3 3 0 0 1 3-3h8" stroke="#8fe0b3" stroke-width="3.4" stroke-linecap="round"></path>
+  <path d="M48 36v8a3 3 0 0 1-3 3h-8" stroke="#8fe0b3" stroke-width="3.4" stroke-linecap="round"></path>
+  <rect x="24" y="24" width="16" height="16" rx="4" fill="#2e9e63"></rect>
 </svg>

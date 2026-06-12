@@ -1,7 +1,7 @@
-<svg width="280" height="44" viewBox="0 0 280 44" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="CondoCondoParkShare">
-  <path d="M3 15V7a2.4 2.4 0 0 1 2.4-2.4h7.2" stroke="#204034" stroke-width="3" stroke-linecap="round"/>
-  <path d="M37 29v8a2.4 2.4 0 0 1-2.4 2.4h-7.2" stroke="#204034" stroke-width="3" stroke-linecap="round"/>
-  <rect x="14.5" y="14.5" width="12" height="12" rx="3" fill="#2e9e63"/>
+<svg width="280" height="44" viewBox="0 0 280 44" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="CondoParkShare">
+  <path d="M3 15V7a2.4 2.4 0 0 1 2.4-2.4h7.2" stroke="#204034" stroke-width="3" stroke-linecap="round"></path>
+  <path d="M37 29v8a2.4 2.4 0 0 1-2.4 2.4h-7.2" stroke="#204034" stroke-width="3" stroke-linecap="round"></path>
+  <rect x="14.5" y="14.5" width="12" height="12" rx="3" fill="#2e9e63"></rect>
   <text x="52" y="29" font-family="Hanken Grotesk, sans-serif" font-size="25" letter-spacing="-0.5">
     <tspan fill="#204034" font-weight="500">Condo</tspan><tspan fill="#204034" font-weight="800">Park</tspan><tspan fill="#1d6b43" font-weight="800">Share</tspan>
   </text>
