@@ -21,6 +21,12 @@
   --success:var(--meadow); --success-ink:var(--meadow-ink); --success-surface:#e4f4ea; --success-line:#bfe3cd;
   --info:var(--pine); --info-ink:var(--pine); --info-surface:#eaeef0; --info-line:#d6dee0;
 
+  /* NEW — neutral lifecycle + recognition metals */
+  --status-live:var(--pine); --status-ink:var(--slate); --status-surface:var(--mist); --status-line:var(--line); --status-off:#8b938b;
+  --gold-hi:#f0d98a; --gold:#c9a227; --gold-lo:#9c7b16; --gold-ink:#5a4708;
+  --silver-hi:#f3f6f8; --silver:#c7ced3; --silver-lo:#98a1a8; --silver-ink:#41484d;
+  --bronze-hi:#e7bd93; --bronze:#b97f4e; --bronze-lo:#85542c;
+
   --font-sans:"Hanken Grotesk",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
   --font-mono:"Spline Sans Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
   --r-sm:6px; --r-md:10px; --r-lg:16px; --r-xl:24px;
@@ -109,6 +115,22 @@ h1,h2,h3,h4{line-height:1.12;letter-spacing:-.02em;margin:0}
 .badge-booked{background:#f6e9df;color:var(--clay-ink)} .badge-booked .dot{background:var(--clay)}
 .badge-warning{background:var(--warning-surface);color:var(--warning-ink)} .badge-warning .dot{background:var(--warning)}
 .badge-danger{background:var(--danger-surface);color:var(--danger-ink)} .badge-danger .dot{background:var(--danger)}
+.badge{white-space:nowrap}
+.badge .ring{width:8px;height:8px;border-radius:50%;border:1.5px solid currentColor;flex:0 0 auto}
+.badge .chk{font-size:11px;line-height:1;font-weight:700}
+.badge-active{background:var(--status-surface);color:var(--status-live)} .badge-active .dot{background:var(--status-live)}
+.badge-pending{background:var(--white);color:var(--status-ink);border:1px solid var(--status-line)}
+.badge-complete{background:var(--status-surface);color:var(--status-ink)} .badge-complete .dot{background:var(--status-ink)}
+.badge-inactive{background:transparent;color:var(--status-off);border:1px solid var(--status-line)}
+.medal{width:54px;height:54px;border-radius:50%;display:grid;place-items:center;font-family:var(--font-mono);
+  font-weight:600;font-size:20px;color:#fff;box-shadow:inset 0 2px 3px rgba(255,255,255,.55),
+  inset 0 -3px 5px rgba(0,0,0,.28),0 4px 10px -3px rgba(24,33,28,.4)}
+.m-gold{background:radial-gradient(circle at 35% 28%,var(--gold-hi),var(--gold) 52%,var(--gold-lo));color:var(--gold-ink)}
+.m-silver{background:radial-gradient(circle at 35% 28%,var(--silver-hi),var(--silver) 52%,var(--silver-lo));color:var(--silver-ink)}
+.m-bronze{background:radial-gradient(circle at 35% 28%,var(--bronze-hi),var(--bronze) 52%,var(--bronze-lo))}
+.medal-row{display:flex;gap:22px;align-items:center;flex-wrap:wrap}
+.medal-row figure{margin:0;text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px}
+.medal-row figcaption{font-family:var(--font-mono);font-size:11px;letter-spacing:.06em;color:var(--slate)}
 
 .btn{font-family:inherit;font-size:15px;font-weight:600;border-radius:var(--r-sm);
   padding:11px 18px;border:1.5px solid transparent;cursor:pointer;display:inline-flex;
@@ -345,9 +367,57 @@ footer code{font-family:var(--font-mono)}
   </div>
 </section>
 
+<!-- LIFECYCLE STATUSES -->
+<section id="lifecycle">
+  <div class="wrap">
+    <p class="eyebrow">08 — Administrative statuses</p>
+    <h2 class="t-h2">Lifecycle states are metadata — neutral, never the availability signal.</h2>
+    <p class="lead" style="margin:14px 0 28px">Active, Pending, Completed, Inactive and Listed are built only from <strong>neutrals + Pine</strong> and told apart by <strong>weight + dot shape</strong>, not hue. <strong>Listed ≠ Available</strong>: the same spot is Listed (lifecycle) and Available (signal) at once — so neither can be green.</p>
+    <div class="cols">
+      <div class="panel">
+        <h3 class="t-h3">The neutral tier</h3>
+        <p class="t-small">Four treatments, many labels. Shape is redundant with weight — readable in grayscale.</p>
+        <div class="btn-row" style="gap:10px">
+          <span class="badge badge-active"><span class="dot"></span>ACTIVE</span>
+          <span class="badge badge-active"><span class="dot"></span>LISTED</span>
+          <span class="badge badge-pending"><span class="ring"></span>PENDING APPROVAL</span>
+          <span class="badge badge-complete"><span class="chk">✓</span>COMPLETED</span>
+          <span class="badge badge-inactive"><span class="ring"></span>INACTIVE</span>
+        </div>
+      </div>
+      <div class="panel">
+        <h3 class="t-h3">Shown with the signal</h3>
+        <p class="t-small">Lifecycle + availability coexist on one spot without competing.</p>
+        <div class="stack">
+          <div class="alert" style="justify-content:space-between"><span><strong>P2-114</strong> · Listed by a neighbor on 4</span><span class="btn-row" style="gap:8px"><span class="badge badge-active"><span class="dot"></span>LISTED</span><span class="badge badge-available"><span class="dot"></span>AVAILABLE</span></span></div>
+          <div class="alert" style="justify-content:space-between"><span><strong>P1-007</strong> · Listed by a neighbor on 1</span><span class="btn-row" style="gap:8px"><span class="badge badge-active"><span class="dot"></span>LISTED</span><span class="badge badge-booked"><span class="dot"></span>BOOKED</span></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- RECOGNITION -->
+<section id="recognition">
+  <div class="wrap">
+    <p class="eyebrow">09 — Recognition &amp; leaderboard</p>
+    <h2 class="t-h2">The one allowed flourish: metal + Pine, never the signal hues.</h2>
+    <p class="lead" style="margin:14px 0 28px">Metals are <strong>always a gradient on a medallion, never a flat fill</strong> — that finish is the firewall: bronze stays distinct from flat Clay (booked), gold from flat Warning amber. Top three only; everyone else stays neutral so the podium glows by contrast.</p>
+    <div class="panel">
+      <h3 class="t-h3">Podium medals</h3>
+      <p class="t-small">Donation data stays mono/Pine — never Meadow. The champion is framed by the bay-bracket signature.</p>
+      <div class="medal-row">
+        <figure><span class="medal m-gold">1</span><figcaption>GOLD · champion</figcaption></figure>
+        <figure><span class="medal m-silver">2</span><figcaption>SILVER · 2nd</figcaption></figure>
+        <figure><span class="medal m-bronze">3</span><figcaption>BRONZE · 3rd</figcaption></figure>
+      </div>
+    </div>
+  </div>
+</section>
+
 <footer>
   <div class="wrap">
-    CondoParkShare — Feedback &amp; system states · extends <code>tokens.css</code> · the <code>--danger / --warning / --success / --info</code> tokens are live in the build's source of truth.
+    CondoParkShare — Feedback, statuses &amp; recognition · extends <code>tokens.css</code> · the feedback, lifecycle and recognition tokens are live in the build's source of truth.
   </div>
 </footer>
 

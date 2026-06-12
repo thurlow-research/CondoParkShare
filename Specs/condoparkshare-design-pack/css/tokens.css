@@ -65,6 +65,27 @@
   --info-surface:#eaeef0;
   --info-line:#d6dee0;
 
+  /* --- Administrative / lifecycle statuses --- */
+  /* NOT parking availability — must never borrow Meadow/Clay. Built only from
+     neutrals + Pine (Pine is identity/structure, never a signal). Differentiate
+     by weight + dot SHAPE (filled / ring / check / hollow), not hue, so the tier
+     survives grayscale & color blindness. Reserve amber for real cautions —
+     don't promote "Pending" to a warning color. */
+  --status-live:var(--pine);   /* live/ongoing: Active, Listed (filled pine dot) */
+  --status-ink:var(--slate);   /* default neutral status text */
+  --status-surface:var(--mist);/* neutral badge fill */
+  --status-line:var(--line);   /* neutral badge border */
+  --status-off:#8b938b;        /* dormant: Inactive (muted) */
+
+  /* --- Recognition / leaderboard metals --- */
+  /* The ONE allowed flourish. Metals are ALWAYS a gradient on a medallion,
+     NEVER a flat fill — that finish is the firewall: bronze≠Clay (flat booked
+     pill) and gold≠Warning (flat alert). Top 3 only; everyone else stays
+     neutral. Donation data stays mono/Pine — never Meadow. */
+  --gold-hi:#f0d98a;  --gold:#c9a227;  --gold-lo:#9c7b16;  --gold-ink:#5a4708;
+  --silver-hi:#f3f6f8;--silver:#c7ced3;--silver-lo:#98a1a8;--silver-ink:#41484d;
+  --bronze-hi:#e7bd93;--bronze:#b97f4e;--bronze-lo:#85542c;--bronze-ink:#4d3017;
+
   /* --- Type --- */
   --font-sans:"Hanken Grotesk",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   --font-mono:"Spline Sans Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
@@ -117,7 +138,7 @@ a{color:var(--meadow-ink)}
 
 /* ---------- Status badges (green=available, clay=booked) ---------- */
 .badge{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);
-  font-size:12px;font-weight:600;letter-spacing:.04em;padding:4px 10px;border-radius:999px}
+  font-size:12px;font-weight:600;letter-spacing:.04em;padding:4px 10px;border-radius:999px;white-space:nowrap}
 .badge .dot{width:7px;height:7px;border-radius:50%}
 .badge-available{background:#e4f4ea;color:var(--meadow-ink)}
 .badge-available .dot{background:var(--meadow)}
@@ -127,6 +148,17 @@ a{color:var(--meadow-ink)}
 .badge-warning .dot{background:var(--warning)}
 .badge-danger{background:var(--danger-surface);color:var(--danger-ink)}
 .badge-danger .dot{background:var(--danger)}
+
+/* ---------- Neutral lifecycle badges (admin status — NEVER meadow/clay) ---------- */
+/* Differentiated by weight + dot SHAPE, not hue. .ring = hollow dot; .chk = check glyph. */
+.badge .ring{width:8px;height:8px;border-radius:50%;border:1.5px solid currentColor;flex:0 0 auto}
+.badge .chk{font-size:11px;line-height:1;font-weight:700}
+.badge-active{background:var(--status-surface);color:var(--status-live)}   /* Active, Listed */
+.badge-active .dot{background:var(--status-live)}
+.badge-pending{background:var(--white);color:var(--status-ink);border-color:var(--status-line)} /* Pending approval */
+.badge-complete{background:var(--status-surface);color:var(--status-ink)} /* Completed */
+.badge-complete .dot{background:var(--status-ink)}
+.badge-inactive{background:transparent;color:var(--status-off);border-color:var(--status-line)} /* Inactive */
 
 /* ---------- Form fields ---------- */
 .field{display:block;margin-bottom:14px}
@@ -194,3 +226,20 @@ a{color:var(--meadow-ink)}
 .toast .toast-dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
 .toast-success .toast-dot{background:var(--meadow)}
 .toast-danger .toast-dot{background:var(--danger)}
+
+/* ---------- Recognition / leaderboard medals (top 3 only) ---------- */
+/* ALWAYS a metallic gradient on a disc, NEVER a flat fill — that finish keeps
+   bronze≠Clay and gold≠Warning. Everyone outside the top 3 stays neutral;
+   donation data stays mono/Pine, never Meadow. */
+.medal{width:60px;height:60px;border-radius:50%;display:grid;place-items:center;
+  font-family:var(--font-mono);font-weight:600;font-size:22px;color:#fff;
+  box-shadow:inset 0 2px 3px rgba(255,255,255,.55),inset 0 -3px 5px rgba(0,0,0,.28),
+  0 4px 10px -3px rgba(24,33,28,.4)}
+.m-gold{background:radial-gradient(circle at 35% 28%,var(--gold-hi),var(--gold) 52%,var(--gold-lo));color:var(--gold-ink)}
+.m-silver{background:radial-gradient(circle at 35% 28%,var(--silver-hi),var(--silver) 52%,var(--silver-lo));color:var(--silver-ink)}
+.m-bronze{background:radial-gradient(circle at 35% 28%,var(--bronze-hi),var(--bronze) 52%,var(--bronze-lo));color:#fff}
+/* Champion framed by the bay-bracket signature */
+.podium-first{position:relative}
+.podium-first::before,.podium-first::after{content:"";position:absolute;top:14px;width:16px;height:16px;border:2.5px solid var(--gold)}
+.podium-first::before{left:14px;border-right:0;border-bottom:0;border-top-left-radius:4px}
+.podium-first::after{right:14px;border-left:0;border-bottom:0;border-top-right-radius:4px}

@@ -69,6 +69,29 @@ Feedback colors are added so they **never compete with the availability signal**
 
 **Rules.** Clay is **status-only** (booked); amber is **alert-only** (warning) — never interchangeable. Never use red decoratively (if it's not an error, it's not red). Always pair a state with an icon + text label, never color alone. Components in `tokens.css`: `.alert` (`.alert-danger/-warning/-success/-info`), `.btn-danger`, `.badge-warning/.badge-danger`, `.field.has-error` + `.error-text`, `.toast` (`.toast-success/-danger`).
 
+## Administrative / lifecycle statuses (Active, Pending, Completed, Inactive, Listed)
+These are **metadata, not parking availability** — so they must **never borrow Meadow/Clay**. They're built only from neutrals + **Pine** (Pine is identity/structure, never a signal) and differentiated by **weight + dot shape**, not hue — so the tier reads in grayscale and under color blindness. Four treatments carry every label:
+
+| Lifecycle energy | Statuses | Class · treatment |
+|---|---|---|
+| **Live / ongoing** | Active, **Listed** | `.badge-active` — filled **pine** dot on mist |
+| **Waiting** | Pending approval | `.badge-pending` — hollow **ring** dot (`<span class="ring">`), hairline border, white fill |
+| **Done** | Completed | `.badge-complete` — a **check** glyph (`<span class="chk">✓</span>`) in slate on mist |
+| **Dormant** | Inactive | `.badge-inactive` — lowest contrast, hollow dot, no fill |
+
+**Rules.** `Listed` ≠ `Available`: *Listed* is lifecycle (neutral, `.badge-active`), *Available* is the Meadow signal — the same spot shows both at once, so neither can be green. Don't promote `Pending` to amber; reserve amber for genuine cautions. Tokens: `--status-live` (pine), `--status-ink` (slate), `--status-surface` (mist), `--status-line`, `--status-off`.
+
+## Recognition & leaderboard (gamification)
+Recognition is a **third category** and gets the system's *one* allowed flourish. The palette is **metal + Pine**, never the signal hues. The firewall is **finish, not hue**: metals are **always a gradient on a medallion disc, never a flat fill** — that's how bronze stays distinct from flat Clay (booked) and gold from flat Warning amber.
+
+| Rank | Class | Gradient (hi → mid → lo) · text |
+|---|---|---|
+| **Champion** | `.medal.m-gold` | `--gold-hi #f0d98a → --gold #c9a227 → --gold-lo #9c7b16` · `--gold-ink` |
+| **2nd** | `.medal.m-silver` | `--silver-hi → --silver #c7ced3 → --silver-lo` · `--silver-ink` |
+| **3rd** | `.medal.m-bronze` | `--bronze-hi → --bronze #b97f4e → --bronze-lo` · white |
+
+**Rules.** Top 3 only get metal; everyone below stays **neutral** (mono rank numbers, Pine stats) so the podium glows by contrast — one celebratory moment per screen, mirroring "spend boldness in one place." Donation data stays **mono/Pine, never Meadow** ("124 hrs shared"). The champion is framed with the **bay-bracket** signature (`.podium-first`) — on-brand prestige, not party graphics. Tone: frame it as *"the neighbors who shared the most"* and *hrs/spots shared*, not points or "winners" — community esteem, not competition.
+
 ## Typography
 - **Hanken Grotesk** for everything in the UI. Weights: 800 display, 700 H2, 600 H3/labels, 500 emphasis, 400 body. Headings use tight tracking (`letter-spacing:-.02em`), sentence case.
 - **Spline Sans Mono** for data the product labels: **spot IDs** (`P2-114`), **times** (`09:00–12:00`), **credits** (only if Part B is enabled), permit-like values. Apply via `.mono` / `.spot-id` / `.data`. This is the one place mono appears — it makes parking data unmistakable and evokes permits/stencilled bay numbers.
