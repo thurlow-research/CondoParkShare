@@ -1,5 +1,5 @@
 """
-operator.admin — Operator console (Django admin extensions).
+operator_console.admin — Operator console (Django admin extensions).
 
 Superuser-only.  All ModelAdmin classes use unscoped managers (.objects)
 so that cross-tenant data is accessible in the operator console.
@@ -29,7 +29,7 @@ User = get_user_model()
 # OrganizationAdmin
 # ---------------------------------------------------------------------------
 
-@operator_admin_site.register(Organization)
+@admin.register(Organization, site=operator_admin_site)
 class OrganizationAdmin(admin.ModelAdmin):
     """
     Operator console: full read-write access to all Organisation config fields.
@@ -117,7 +117,7 @@ def pii_erasure(modeladmin, request, queryset):
 # UserAdmin
 # ---------------------------------------------------------------------------
 
-@operator_admin_site.register(User)
+@admin.register(User, site=operator_admin_site)
 class UserAdmin(admin.ModelAdmin):
     list_display = [
         'email', 'display_name', 'organization', 'status',
@@ -192,7 +192,7 @@ class UserAdmin(admin.ModelAdmin):
 # AdminAuditLogAdmin (read-only)
 # ---------------------------------------------------------------------------
 
-@operator_admin_site.register(AdminAuditLog)
+@admin.register(AdminAuditLog, site=operator_admin_site)
 class AdminAuditLogAdmin(admin.ModelAdmin):
     list_display = [
         'created_at', 'actor', 'action', 'target_type', 'target_id', 'organization',
@@ -226,7 +226,7 @@ class AdminAuditLogAdmin(admin.ModelAdmin):
 # BookingAdmin
 # ---------------------------------------------------------------------------
 
-@operator_admin_site.register(Booking)
+@admin.register(Booking, site=operator_admin_site)
 class BookingAdmin(admin.ModelAdmin):
     list_display = ['pk', 'spot', 'borrower', 'status', 'time_range', 'organization']
     list_filter = ['organization', 'status']

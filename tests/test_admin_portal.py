@@ -110,41 +110,15 @@ class BookingFactory(factory.django.DjangoModelFactory):
 
 def _load_operator_admin():
     """
-    Load /operator/admin.py without triggering Django's import machinery for
-    the 'operator' package (which shadows Python's stdlib ``operator`` module).
+    Return the operator-console admin module.
 
-    Uses ``importlib.util.spec_from_file_location`` with the operator app's
-    admin_site.register temporarily replaced by a no-op so that the module-level
-    ``@operator_admin_site.register(...)`` decorators do not attempt to
-    re-register already-registered models.
-
-    Returns the loaded module object.  Callers can access
-    ``AdminAuditLogAdmin`` and ``UserAdmin`` from it.
+    The app was renamed ``operator`` -> ``operator_console`` so it no longer
+    shadows Python's stdlib ``operator`` module, so a normal import works.
+    Django's admin autodiscover has already imported and registered it, so this
+    returns the cached module without re-running the ``@register`` decorators.
+    Callers can access ``AdminAuditLogAdmin`` and ``UserAdmin`` from it.
     """
-    import importlib.util
-    from django.apps import apps
-    from parkshare.admin_site import operator_admin_site
-
-    orig_register = operator_admin_site.register
-
-    def noop_register(*args, **kwargs):
-        def decorator(cls):
-            return cls
-        if args and isinstance(args[0], type) and hasattr(args[0], '_meta'):
-            return decorator
-        return decorator
-
-    operator_admin_site.register = noop_register
-    try:
-        spec = importlib.util.spec_from_file_location(
-            '_ps_operator_admin',
-            '/Users/sthurlow/Code/CondoParkShare/operator/admin.py',
-        )
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-    finally:
-        operator_admin_site.register = orig_register
-
+    from operator_console import admin as mod
     return mod
 
 

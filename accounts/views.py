@@ -11,6 +11,7 @@ Auth flow summary
 6. totp_enroll       → generates/confirms TOTPDevice; generates recovery codes; activates user
 """
 
+import io
 import secrets
 from datetime import timedelta
 
@@ -24,6 +25,7 @@ from django.utils.timezone import now
 from django.views.decorators.http import require_POST
 
 import django_otp
+import segno
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
 from accounts.decorators import active_required
@@ -45,6 +47,15 @@ User = get_user_model()
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _qr_svg_inline(data: str) -> str:
+    """Return an inline SVG string for *data* generated locally via segno.
+    The TOTP secret must never leave the server — no third-party QR service."""
+    buf = io.BytesIO()
+    segno.make(data, error='M').save(buf, kind='svg', xmldecl=False, svgns=True,
+                                      title='', nl=False, scale=4)
+    return buf.getvalue().decode('utf-8')
+
 
 def _get_pre_auth_user(request):
     """Return the User stored in the pre-auth session key, or None."""
@@ -131,7 +142,7 @@ def totp_verify(request):
                 del request.session['_pre_auth_user_id']
                 login(request, user, backend='django.contrib.auth.backends.ModelBackend')
                 django_otp.login(request, matched_device)
-                return redirect('home')
+                return redirect('book_request')
             else:
                 form.add_error('token', 'Invalid code. Please try again.')
     else:
@@ -325,7 +336,7 @@ def totp_enroll(request):
     if request.user.status not in ('pending_totp', 'active') and not is_reset:
         return redirect('login')
     if request.user.status == 'active' and not is_reset:
-        return redirect('home')
+        return redirect('book_request')
 
     if request.method == 'POST':
         token = request.POST.get('token', '').strip()
@@ -364,6 +375,7 @@ def totp_enroll(request):
             # Wrong token — keep device, show error.
             device_url = device.config_url
             return render(request, 'accounts/totp_enroll.html', {
+                'qr_svg': _qr_svg_inline(device_url),
                 'device_url': device_url,
                 'error': 'Invalid code. Scan the QR code and try again.',
             })
@@ -379,7 +391,10 @@ def totp_enroll(request):
         )
         device_url = device.config_url
 
-        return render(request, 'accounts/totp_enroll.html', {'device_url': device_url})
+        return render(request, 'accounts/totp_enroll.html', {
+            'qr_svg': _qr_svg_inline(device_url),
+            'device_url': device_url,
+        })
 
 
 # ---------------------------------------------------------------------------

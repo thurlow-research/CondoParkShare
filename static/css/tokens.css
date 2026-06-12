@@ -12,10 +12,30 @@
   --eucalyptus:#5e9079;  /* secondary — community warmth, focus rings */
   --meadow:#2e9e63;      /* SIGNAL — available + primary action */
   --meadow-ink:#1d6b43;  /* meadow as accessible text */
+  --meadow-tint:#e4f4ea; /* light green fill — success/available backgrounds */
+  --meadow-tint-border:#bfe3cd; /* light green border — success/available outlines */
 
   /* --- Functional status --- */
   --clay:#bc7a4e;        /* STATUS — booked / occupied (use sparingly) */
-  --clay-ink:#9a5d34;
+  --clay-ink:#7a4520;    /* darkened for ≥4.5:1 contrast on badge-booked bg */
+  --clay-tint:#f6e9df;   /* light clay fill — booked badge background */
+
+  /* --- Meadow hover state --- */
+  --meadow-hover:#268a55; /* btn-primary hover, slightly darker meadow */
+
+  /* --- Warning state (amber) --- */
+  --warning-bg:#fffae6;
+  --warning-border:#e6b800;
+  --warning-ink:#7a5c00;
+
+  /* --- Error / destructive state (warm red) --- */
+  --error-bg:#fdf1ee;
+  --error-border:#e8b4a0;
+  --error-ink:#8b3a20;
+
+  /* --- Danger (destructive action background) --- */
+  --danger:#c0392b;
+  --danger-ink:#ffffff;  /* white text on danger bg */
 
   /* --- Neutrals (warm-cool: garden meets concrete) --- */
   --ink:#18211c;         /* primary text */
@@ -69,34 +89,62 @@ a{color:var(--meadow-ink)}
 .eyebrow{font-family:var(--font-mono);font-size:12px;font-weight:500;letter-spacing:.18em;
   text-transform:uppercase;color:var(--meadow-ink)}
 
+/* Visually hidden — screen-reader accessible but not visible */
+.visually-hidden{
+  position:absolute;width:1px;height:1px;padding:0;margin:-1px;
+  overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0
+}
+
 /* ---------- Buttons ---------- */
 .btn{font-family:inherit;font-size:15px;font-weight:600;border-radius:var(--r-sm);
   padding:11px 18px;border:1.5px solid transparent;cursor:pointer;display:inline-flex;
   align-items:center;gap:8px;text-decoration:none;
   transition:transform .12s ease,background .15s ease}
 .btn:focus-visible{outline:var(--focus);outline-offset:2px}
-.btn-primary{background:var(--meadow);color:#fff}
-.btn-primary:hover{background:#268a55;transform:translateY(-1px)}
-.btn-secondary{background:var(--pine);color:#fff}
+.btn-primary{background:var(--meadow);color:var(--white)}
+.btn-primary:hover{background:var(--meadow-hover);transform:translateY(-1px)}
+.btn-secondary{background:var(--pine);color:var(--white)}
 .btn-secondary:hover{background:var(--pine-700)}
 .btn-ghost{background:transparent;color:var(--pine);border-color:var(--line)}
 .btn-ghost:hover{background:var(--mist);border-color:var(--eucalyptus)}
 
 /* ---------- Status badges (green=available, clay=booked) ---------- */
+/* .badge-available and .badge-booked are PARKING signals only.
+   For account/booking lifecycle states use .badge-neutral or .badge-pending. */
 .badge{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);
   font-size:12px;font-weight:600;letter-spacing:.04em;padding:4px 10px;border-radius:999px}
 .badge .dot{width:7px;height:7px;border-radius:50%}
-.badge-available{background:#e4f4ea;color:var(--meadow-ink)}
+.badge-available{background:var(--meadow-tint);color:var(--meadow-ink)}
 .badge-available .dot{background:var(--meadow)}
-.badge-booked{background:#f6e9df;color:var(--clay-ink)}
+.badge-booked{background:var(--clay-tint);color:var(--clay-ink)}
 .badge-booked .dot{background:var(--clay)}
+
+/* Neutral badge — for non-parking states (Inactive, Completed, generic) */
+.badge-neutral{background:var(--mist);color:var(--slate)}
+.badge-neutral .dot{background:var(--slate)}
+
+/* Pending badge — for awaiting-action states (Pending approval, Pending setup, etc.) */
+.badge-pending{background:var(--warning-bg);color:var(--warning-ink)}
+.badge-pending .dot{background:var(--warning-border)}
+
+/* Error badge — for blocked / error states */
+.badge-error{background:var(--error-bg);color:var(--error-ink)}
+.badge-error .dot{background:var(--danger)}
 
 /* ---------- Form fields ---------- */
 .field{display:block;margin-bottom:14px}
 .field label{display:block;font-size:13.5px;font-weight:600;margin-bottom:6px}
 .field input,.field select{width:100%;font-family:inherit;font-size:15px;padding:11px 13px;
   border:1.5px solid var(--line);border-radius:var(--r-sm);background:var(--white);color:var(--ink)}
-.field input:focus,.field select:focus{outline:none;border-color:var(--meadow);box-shadow:0 0 0 3px #e4f4ea}
+/* :focus-visible gives keyboard users an explicit ring; :focus keeps the border/shadow
+   for pointer users who won't get :focus-visible unless the UA opts in */
+.field input:focus-visible,.field select:focus-visible{
+  outline:var(--focus);outline-offset:2px;
+  border-color:var(--meadow);box-shadow:0 0 0 3px var(--meadow-tint)
+}
+.field input:focus:not(:focus-visible),.field select:focus:not(:focus-visible){
+  outline:none;border-color:var(--meadow);box-shadow:0 0 0 3px var(--meadow-tint)
+}
 
 /* ---------- Card & surfaces ---------- */
 .card,.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);
@@ -105,7 +153,7 @@ a{color:var(--meadow-ink)}
 /* ---------- Spot card (the product's core object) ---------- */
 .spot{background:var(--white);border:1px solid var(--line);border-radius:var(--r-md);
   padding:18px;display:flex;flex-direction:column;gap:14px}
-.spot.is-available{border-color:#bfe3cd}
+.spot.is-available{border-color:var(--meadow-tint-border)}
 .spot .spot-id{font-weight:600;font-size:15px;color:var(--pine);display:inline-flex;align-items:center;gap:9px}
 .spot .spot-id .tag{background:var(--mist);padding:2px 8px;border-radius:4px;font-size:13px}
 .spot .when{font-size:14px;color:var(--slate)}
@@ -120,9 +168,17 @@ a{color:var(--meadow-ink)}
 /* ---------- Signature: lot availability grid ---------- */
 .lot{display:grid;grid-template-columns:repeat(8,1fr);gap:6px}
 .lot i{aspect-ratio:1/1.4;border-radius:3px;border:1.5px solid var(--line);background:var(--white)}
-.lot i.open{border-color:var(--meadow);background:#e4f4ea}
+.lot i.open{border-color:var(--meadow);background:var(--meadow-tint)}
 .lot i.busy{border-color:transparent;background:var(--clay);opacity:.85}
 
 /* ---------- Layout helpers ---------- */
 .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
 .cols{display:grid;gap:24px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+
+/* ---------- Touch target helpers ---------- */
+/* Auth-flow anchor links need ≥44px tap target height */
+.auth-links a{
+  display:inline-block;
+  padding-top:11px;
+  padding-bottom:11px;
+}

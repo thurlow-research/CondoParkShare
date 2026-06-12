@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Sign in — CondoParkShare{% endblock %}
+
+{% block extra_css %}
+<style>
+  .auth-shell {
+    max-width: 440px;
+    margin: 0 auto;
+  }
+  .auth-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 40px;
+    box-shadow: var(--shadow);
+  }
+  .auth-logo {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 28px;
+  }
+  .auth-logo img {
+    height: 36px;
+    width: auto;
+  }
+  .auth-title {
+    font-size: var(--fs-h3);
+    font-weight: 700;
+    color: var(--pine);
+    text-align: center;
+    margin-bottom: 4px;
+  }
+  .auth-subtitle {
+    color: var(--text-muted);
+    font-size: 14px;
+    text-align: center;
+    margin-bottom: 28px;
+  }
+  .auth-links {
+    margin-top: 20px;
+    font-size: 14px;
+    color: var(--text-muted);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    text-align: center;
+  }
+  .auth-links a {
+    color: var(--meadow-ink);
+    text-decoration: none;
+    font-weight: 500;
+  }
+  .auth-links a:hover {
+    text-decoration: underline;
+  }
+  .field-error {
+    color: var(--error-ink);
+    font-size: 13px;
+    margin-top: 4px;
+    display: block;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="auth-shell">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <img src="{% static 'img/logo/logo-full.svg' %}" alt="CondoParkShare">
+    </div>
+
+    <h1 class="auth-title">Welcome back</h1>
+    <p class="auth-subtitle">Sign in to manage your parking</p>
+
+    {% if form.non_field_errors %}
+      <div class="alert alert-error" role="alert">
+        {% for error in form.non_field_errors %}
+          <span>{{ error }}</span>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      <div class="field">
+        <label for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>
+        {% if form.email.errors %}
+          {{ form.email }}
+          <span id="email-error" class="field-error" role="alert">
+            {{ form.email.errors|join:", " }}
+          </span>
+        {% else %}
+          {{ form.email }}
+        {% endif %}
+      </div>
+
+      <div class="field">
+        <label for="{{ form.password.id_for_label }}">{{ form.password.label }}</label>
+        {% if form.password.errors %}
+          {{ form.password }}
+          <span id="password-error" class="field-error" role="alert">
+            {{ form.password.errors|join:", " }}
+          </span>
+        {% else %}
+          {{ form.password }}
+        {% endif %}
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:8px">
+        Sign in
+      </button>
+    </form>
+
+    <nav class="auth-links" aria-label="Other sign-in options">
+      <a href="{% url 'recovery_code' %}">Use a recovery code instead</a>
+      <a href="{% url 'lost_authenticator' %}">Lost your authenticator?</a>
+    </nav>
+  </div>
+</div>
+{% endblock %}

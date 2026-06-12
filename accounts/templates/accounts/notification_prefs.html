@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Notification settings — CondoParkShare{% endblock %}
+
+{% block content %}
+<div style="max-width:520px">
+  <div class="page-header">
+    <h1>Notification settings</h1>
+    <p>Choose how CondoParkShare reaches you</p>
+  </div>
+
+  <div class="card">
+    {% if form.non_field_errors %}
+      <div class="alert alert-error" role="alert">
+        {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+      </div>
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      <fieldset style="border:none;padding:0;margin:0">
+        <legend style="font-size:15px;font-weight:700;color:var(--pine);margin-bottom:16px">
+          How you hear from us
+        </legend>
+
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <label style="display:flex;align-items:flex-start;gap:12px;cursor:pointer">
+            <input
+              type="checkbox"
+              name="{{ form.push.html_name }}"
+              id="{{ form.push.id_for_label }}"
+              style="width:18px;height:18px;margin-top:2px;flex-shrink:0;accent-color:var(--meadow)"
+              {% if form.push.value %}checked{% endif %}
+            >
+            <span>
+              <span style="display:block;font-weight:600;font-size:15px;color:var(--ink)">
+                {{ form.push.label }}
+              </span>
+              <span style="display:block;font-size:13px;color:var(--text-muted);margin-top:2px">
+                Receive browser push notifications for booking updates
+              </span>
+            </span>
+          </label>
+
+          <label style="display:flex;align-items:flex-start;gap:12px;cursor:pointer">
+            <input
+              type="checkbox"
+              name="{{ form.marketing_email_opted_in.html_name }}"
+              id="{{ form.marketing_email_opted_in.id_for_label }}"
+              style="width:18px;height:18px;margin-top:2px;flex-shrink:0;accent-color:var(--meadow)"
+              {% if form.marketing_email_opted_in.value %}checked{% endif %}
+            >
+            <span>
+              <span style="display:block;font-weight:600;font-size:15px;color:var(--ink)">
+                {{ form.marketing_email_opted_in.label }}
+              </span>
+              <span style="display:block;font-size:13px;color:var(--text-muted);margin-top:2px">
+                News, tips, and updates about CondoParkShare
+              </span>
+            </span>
+          </label>
+        </div>
+      </fieldset>
+
+      <div style="margin-top:28px;padding-top:20px;border-top:1px solid var(--line)">
+        <button type="submit" class="btn btn-primary">Save preferences</button>
+        <a href="{% url 'profile' %}" class="btn btn-ghost" style="margin-left:8px">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

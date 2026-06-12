@@ -1,0 +1,327 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <title>{% block title %}CondoParkShare{% endblock %}</title>
+
+  <link rel="icon" href="{% static 'img/logo/favicon.svg' %}" type="image/svg+xml">
+
+  <!-- Fonts: Hanken Grotesk (UI) + Spline Sans Mono (data labels) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=Spline+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <!-- Design tokens — must load before any page CSS -->
+  <link rel="stylesheet" href="{% static 'css/tokens.css' %}">
+
+  {% block extra_css %}{% endblock %}
+
+  <style>
+    /* ---------------------------------------------------------------------------
+       Layout shell — builds on tokens, not a replacement
+    --------------------------------------------------------------------------- */
+    .skip-link {
+      position: absolute;
+      left: -9999px;
+      top: auto;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+    }
+    .skip-link:focus {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      width: auto;
+      height: auto;
+      padding: 10px 18px;
+      background: var(--pine);
+      color: var(--white);
+      border-radius: var(--r-sm);
+      font-weight: 600;
+      font-size: 15px;
+      z-index: 9999;
+      outline: var(--focus);
+      outline-offset: 2px;
+    }
+
+    /* --- Site header --- */
+    .site-header {
+      background: var(--pine);
+      color: var(--white);
+      border-bottom: 1px solid var(--pine-700);
+    }
+    .site-header .wrap {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 14px;
+      padding-bottom: 14px;
+      gap: 16px;
+    }
+    .site-header .logo-link {
+      display: inline-flex;
+      align-items: center;
+      text-decoration: none;
+      flex-shrink: 0;
+    }
+    .site-header .logo-link img {
+      height: 32px;
+      width: auto;
+    }
+
+    /* --- Primary nav --- */
+    .site-nav {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+    .site-nav a {
+      color: rgba(255,255,255,.82);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      padding: 7px 12px;
+      border-radius: var(--r-sm);
+      transition: background .12s ease, color .12s ease;
+    }
+    .site-nav a:hover,
+    .site-nav a:focus-visible {
+      background: var(--pine-700);
+      color: var(--white);
+    }
+    .site-nav a:focus-visible {
+      outline: var(--focus);
+      outline-offset: 2px;
+    }
+    .site-nav .nav-active {
+      color: var(--white);
+      background: var(--pine-700);
+    }
+
+    /* Logout button styled to match nav links */
+    .site-nav .btn-nav-logout {
+      appearance: none;
+      background: transparent;
+      border: none;
+      color: rgba(255,255,255,.82);
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 500;
+      padding: 7px 12px;
+      border-radius: var(--r-sm);
+      cursor: pointer;
+      transition: background .12s ease, color .12s ease;
+    }
+    .site-nav .btn-nav-logout:hover,
+    .site-nav .btn-nav-logout:focus-visible {
+      background: var(--pine-700);
+      color: var(--white);
+    }
+    .site-nav .btn-nav-logout:focus-visible {
+      outline: var(--focus);
+      outline-offset: 2px;
+    }
+
+    /* --- Main content area --- */
+    #main {
+      outline: none; /* receives focus from skip-link; outline unnecessary */
+      min-height: calc(100vh - 220px);
+      padding: 40px 0 64px;
+    }
+
+    /* --- Page header block (title + subtitle within pages) --- */
+    .page-header {
+      margin-bottom: 32px;
+    }
+    .page-header h1 {
+      font-size: var(--fs-h2);
+      font-weight: 700;
+      color: var(--pine);
+      margin-bottom: 4px;
+    }
+    .page-header p {
+      color: var(--text-muted);
+      margin: 0;
+    }
+
+    /* --- Alert/message strip --- */
+    .alert {
+      padding: 12px 16px;
+      border-radius: var(--r-sm);
+      margin-bottom: 20px;
+      font-size: 14px;
+      font-weight: 500;
+      border: 1.5px solid transparent;
+    }
+    .alert-error {
+      background: var(--error-bg);
+      border-color: var(--error-border);
+      color: var(--error-ink);
+    }
+    .alert-success {
+      background: var(--meadow-tint);
+      border-color: var(--meadow-tint-border);
+      color: var(--meadow-ink);
+    }
+    .alert-info {
+      background: var(--mist);
+      border-color: var(--line);
+      color: var(--slate);
+    }
+
+    /* --- Non-field form errors --- */
+    .form-errors {
+      margin-bottom: 16px;
+    }
+    .form-errors ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    /* --- Footer --- */
+    .site-footer {
+      border-top: 1px solid var(--line);
+      padding: 24px 0;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+    .site-footer .wrap {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .site-footer a {
+      color: var(--text-muted);
+    }
+    .site-footer a:hover {
+      color: var(--pine);
+    }
+
+    /* --- Responsive --- */
+    @media (max-width: 600px) {
+      .site-header .wrap {
+        flex-direction: column;
+        align-items: flex-start;
+        padding-top: 12px;
+        padding-bottom: 12px;
+      }
+      .site-nav {
+        width: 100%;
+      }
+      #main {
+        padding: 24px 0 48px;
+      }
+    }
+
+    /* Impersonation banner */
+    .impersonation-banner {
+      background: var(--warning-bg);
+      border-bottom: 2px solid var(--warning-border);
+      padding: 8px 24px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--warning-ink);
+      text-align: center;
+    }
+    .impersonation-banner form {
+      display: inline;
+    }
+    .impersonation-banner button {
+      background: none;
+      border: none;
+      color: var(--meadow-ink);
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: underline;
+      font-size: 13px;
+      padding: 0;
+      margin-left: 8px;
+    }
+    .impersonation-banner button:focus-visible {
+      outline: var(--focus);
+      outline-offset: 2px;
+    }
+
+    /* Footer nav touch targets */
+    .site-footer nav a {
+      display: inline-block;
+      padding-top: 11px;
+      padding-bottom: 11px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Skip navigation link (visible on focus, required for keyboard/a11y) -->
+  <a href="#main" class="skip-link">Skip to main content</a>
+
+  {% if request.session.impersonating %}
+  <div class="impersonation-banner" role="alert" aria-live="polite">
+    You are viewing as another resident.
+    <form method="post" action="{% url 'impersonation_end' %}">
+      {% csrf_token %}
+      <button type="submit">End session</button>
+    </form>
+  </div>
+  {% endif %}
+
+  <header class="site-header" role="banner">
+    <div class="wrap">
+      <a href="{% url 'book_request' %}" class="logo-link" aria-label="CondoParkShare home">
+        <img src="{% static 'img/logo/logo-mark-reversed.svg' %}" alt="">
+      </a>
+
+      <nav class="site-nav" aria-label="Main navigation">
+        {% if user.is_authenticated %}
+          <a href="{% url 'book_request' %}">Book a spot</a>
+          <a href="{% url 'booking_list' %}">My bookings</a>
+          <a href="{% url 'spot_list' %}">My spots</a>
+          <a href="{% url 'profile' %}">Profile</a>
+          {% if user.is_hoa_admin %}
+            <a href="{% url 'portal_home' %}">HOA portal</a>
+          {% endif %}
+          <form method="post" action="{% url 'logout' %}">
+            {% csrf_token %}
+            <button type="submit" class="btn-nav-logout">Sign out</button>
+          </form>
+        {% else %}
+          <a href="{% url 'login' %}">Sign in</a>
+        {% endif %}
+      </nav>
+    </div>
+  </header>
+
+  <main id="main" tabindex="-1">
+    <div class="wrap">
+      {% if messages %}
+        {% for message in messages %}
+          <div class="alert {% if message.tags == 'error' %}alert-error{% elif message.tags == 'success' %}alert-success{% else %}alert-info{% endif %}" role="alert">
+            {{ message }}
+          </div>
+        {% endfor %}
+      {% endif %}
+
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+
+  <footer class="site-footer" role="contentinfo">
+    <div class="wrap">
+      <span>&copy; {% now "Y" %} CondoParkShare</span>
+      <nav aria-label="Footer navigation">
+        <a href="{% url 'profile' %}">Account</a>
+        &middot;
+        <a href="{% url 'notification_prefs' %}">Notifications</a>
+      </nav>
+    </div>
+  </footer>
+
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

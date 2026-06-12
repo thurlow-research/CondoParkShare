@@ -1,0 +1,16 @@
+# docker-compose.dev.yml — LOCAL DEV overlay (NOT auto-loaded).
+# Runs web under dev settings (plain HTTP, relaxed cookies). Base already
+# publishes web on :8001 and wires the networks.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d db web
+#
+# Backends (opus prod / faberix ppe) use the base file ONLY, so they run the
+# Dockerfile's default production settings.
+services:
+  web:
+    environment:
+      DJANGO_SETTINGS_MODULE: parkshare.settings.dev
+    # Live-mount the working tree so template/code edits appear without rebuilds.
+    volumes:
+      - .:/app
+    command: gunicorn parkshare.wsgi:application --bind 0.0.0.0:8000 --workers 2 --reload

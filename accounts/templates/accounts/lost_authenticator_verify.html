@@ -1,11 +1,84 @@
-<!DOCTYPE html>
-<html>
-<head><title>Verify Code</title></head>
-<body>
-<form method="post">
-{% csrf_token %}
-{{ form.as_p }}
-<button type="submit">Verify</button>
-</form>
-</body>
-</html>
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Enter your one-time code — CondoParkShare{% endblock %}
+
+{% block extra_css %}
+<style>
+  .auth-shell { max-width: 440px; margin: 0 auto; }
+  .auth-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 40px;
+    box-shadow: var(--shadow);
+  }
+  .auth-logo { display: flex; justify-content: center; margin-bottom: 28px; }
+  .auth-logo img { height: 36px; width: auto; }
+  .auth-title { font-size: var(--fs-h3); font-weight: 700; color: var(--pine); text-align: center; margin-bottom: 4px; }
+  .auth-subtitle { color: var(--text-muted); font-size: 14px; text-align: center; margin-bottom: 24px; }
+  .auth-links { margin-top: 20px; font-size: 14px; display: flex; flex-direction: column; gap: 8px; text-align: center; }
+  .auth-links a { color: var(--meadow-ink); text-decoration: none; font-weight: 500; }
+  .auth-links a:hover { text-decoration: underline; }
+  .token-input { font-family: var(--font-mono); font-size: 22px; text-align: center; letter-spacing: .2em; }
+  .field-error { color: var(--error-ink); font-size: 13px; margin-top: 4px; display: block; text-align: center; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="auth-shell">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <img src="{% static 'img/logo/logo-full.svg' %}" alt="CondoParkShare">
+    </div>
+
+    <h1 class="auth-title">Enter your one-time code</h1>
+    <p class="auth-subtitle">Check your email for the 6-digit code we sent you</p>
+
+    {% if form.non_field_errors %}
+      <div class="alert alert-error" role="alert">
+        {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+      </div>
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      <div class="field">
+        <label for="{{ form.code.id_for_label }}" class="visually-hidden">{{ form.code.label }}</label>
+        <input
+          type="text"
+          name="{{ form.code.html_name }}"
+          id="{{ form.code.id_for_label }}"
+          class="token-input"
+          autocomplete="one-time-code"
+          inputmode="numeric"
+          pattern="[0-9]{6}"
+          maxlength="6"
+          autofocus
+          aria-label="6-digit one-time code"
+          aria-describedby="otp-hint{% if form.code.errors %} otp-error{% endif %}"
+          {% if form.code.errors %}aria-invalid="true"{% endif %}
+        >
+        <div id="otp-hint" style="font-size:13px;color:var(--text-muted);text-align:center;margin-top:6px">
+          The code expires in 15 minutes
+        </div>
+        {% if form.code.errors %}
+          <span id="otp-error" class="field-error" role="alert">
+            {{ form.code.errors|join:", " }}
+          </span>
+        {% endif %}
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:8px">
+        Verify code
+      </button>
+    </form>
+
+    <nav class="auth-links" aria-label="Alternative sign-in options">
+      <a href="{% url 'lost_authenticator' %}">Resend code</a>
+      <a href="{% url 'totp_verify' %}">Back to sign in</a>
+    </nav>
+  </div>
+</div>
+{% endblock %}

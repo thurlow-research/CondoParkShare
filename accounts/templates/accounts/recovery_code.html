@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Use a recovery code — CondoParkShare{% endblock %}
+
+{% block extra_css %}
+<style>
+  .auth-shell { max-width: 440px; margin: 0 auto; }
+  .auth-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 40px;
+    box-shadow: var(--shadow);
+  }
+  .auth-logo { display: flex; justify-content: center; margin-bottom: 28px; }
+  .auth-logo img { height: 36px; width: auto; }
+  .auth-title { font-size: var(--fs-h3); font-weight: 700; color: var(--pine); text-align: center; margin-bottom: 4px; }
+  .auth-subtitle { color: var(--text-muted); font-size: 14px; text-align: center; margin-bottom: 28px; }
+  .auth-links { margin-top: 20px; font-size: 14px; display: flex; flex-direction: column; gap: 8px; text-align: center; }
+  .auth-links a { color: var(--meadow-ink); text-decoration: none; font-weight: 500; }
+  .auth-links a:hover { text-decoration: underline; }
+  .recovery-notice {
+    background: var(--mist);
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    padding: 14px 16px;
+    font-size: 13px;
+    color: var(--slate);
+    margin-bottom: 24px;
+  }
+  .field-error { color: var(--error-ink); font-size: 13px; margin-top: 4px; display: block; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="auth-shell">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <img src="{% static 'img/logo/logo-full.svg' %}" alt="CondoParkShare">
+    </div>
+
+    <h1 class="auth-title">Use a recovery code</h1>
+    <p class="auth-subtitle">Enter one of your saved recovery codes to access your account</p>
+
+    <div class="recovery-notice" role="note">
+      Recovery codes are single-use. After signing in, you'll set up a new authenticator.
+    </div>
+
+    {% if form.non_field_errors %}
+      <div class="alert alert-error" role="alert">
+        {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+      </div>
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      <div class="field">
+        <label for="{{ form.code.id_for_label }}">{{ form.code.label }}</label>
+        <input
+          type="text"
+          name="{{ form.code.html_name }}"
+          id="{{ form.code.id_for_label }}"
+          autocomplete="off"
+          spellcheck="false"
+          style="font-family:var(--font-mono)"
+          {% if form.code.errors %}
+          aria-describedby="code-error"
+          aria-invalid="true"
+          {% endif %}
+        >
+        {% if form.code.errors %}
+          <span id="code-error" class="field-error" role="alert">
+            {{ form.code.errors|join:", " }}
+          </span>
+        {% endif %}
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:8px">
+        Use this code
+      </button>
+    </form>
+
+    <nav class="auth-links" aria-label="Alternative sign-in options">
+      <a href="{% url 'totp_verify' %}">Back to authenticator code</a>
+      <a href="{% url 'lost_authenticator' %}">Lost your authenticator?</a>
+    </nav>
+  </div>
+</div>
+{% endblock %}
