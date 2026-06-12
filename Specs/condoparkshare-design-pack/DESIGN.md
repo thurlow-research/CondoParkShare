@@ -127,3 +127,7 @@ Recognition is a **third category** and gets the system's *one* allowed flourish
 
 ## Restraint
 Spend boldness in one place: the green availability signal and the bay-bracket signature are the memorable elements. Keep everything else quiet — generous whitespace, hairline borders, few shadows. If a screen feels busy, remove an accent before adding one.
+
+## Change log
+<!-- ux-designer appends one line per additive/clarifying change: YYYY-MM-DD | what was added | requested by -->
+<!-- Structural changes require human approval and are recorded here after approval. -->

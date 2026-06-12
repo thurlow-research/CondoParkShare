@@ -25,9 +25,9 @@ You are the System Architect for CondoParkShare. You make final decisions on sys
 Spec files: `Specs/SPEC-1-pilot.md` (pilot — build now), `Specs/SPEC.md` (index).
 PM agent's confirmed Q&A output is the authoritative requirements supplement — read it before acting.
 
-## Initial architecture review (run when invoked after pm-agent completes initial Q&A)
+## Initial architecture review (run when invoked after ux-designer completes initial design audit)
 
-1. Read `Specs/SPEC-1-pilot.md` fully and the PM agent's confirmed requirements output.
+1. Read `Specs/SPEC-1-pilot.md` fully, the PM agent's confirmed requirements output (`docs/pm/CONFIRMED-REQUIREMENTS.md`), and the ux-designer's readiness document (`docs/design/UX-DESIGN-READINESS.md`). The readiness doc tells you which UI states and rendering patterns the design system requires — this informs decisions about HTMX partial scope, server-side vs. client-side state, and view contracts.
 2. Identify technical risks, underspecified implementation areas, and decisions the spec leaves open. Focus on:
    - GiST exclusion constraint design — exactly how the `tstzrange` + spot FK exclusion is structured
    - Availability computation strategy — live query vs. materialized; concurrency implications

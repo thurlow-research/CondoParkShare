@@ -22,6 +22,45 @@ bash scripts/oversight/run_validators.sh parking/admin.py 2>/dev/null \
 
 ---
 
+## Project Start Sequence
+
+Run this once before the first build step begins. These agents produce the documents that every subsequent agent reads.
+
+```
+1. pm-agent      → docs/pm/CONFIRMED-REQUIREMENTS.md
+2. ux-designer   → docs/design/UX-DESIGN-READINESS.md
+3. architect     → docs/architecture/ADR-001-pilot.md
+4. technical-design (iterated with architect) → docs/design/TECHNICAL-DESIGN.md
+```
+
+**Invoke in order:**
+
+```bash
+# 1. PM agent — spec review and human Q&A
+# "Invoke pm-agent for initial spec review"
+# Wait for pm-agent to complete its Q&A with you and write CONFIRMED-REQUIREMENTS.md
+
+# 2. UX designer — design pack audit against full spec
+# "Invoke ux-designer for initial design audit"
+# ux-designer reads the spec + confirmed requirements, fills all design pack gaps,
+# and writes UX-DESIGN-READINESS.md.
+# Answer any structural brand questions it surfaces before proceeding.
+
+# 3. Architect — technical architecture
+# "Invoke architect for initial architecture review"
+# architect reads confirmed requirements + UX-DESIGN-READINESS.md,
+# asks any technical questions, and writes ADR-001-pilot.md
+
+# 4. Technical design — detailed spec
+# "Invoke technical-design to produce the technical design"
+# technical-design reads all three documents above, iterates with architect,
+# and writes TECHNICAL-DESIGN.md
+```
+
+**Gate:** Do not start build step 1 until TECHNICAL-DESIGN.md is architect-approved.
+
+---
+
 ## Per-Step Pipeline
 
 Run this sequence for each build step (N = step number, e.g. 3).
@@ -149,6 +188,10 @@ Invoke: ui-reviewer        ← step 10 (templates)
 Invoke: a11y-reviewer      ← step 10 (templates)
 Invoke: infra-reviewer     ← steps 1, 11 (infrastructure)
 ```
+
+> **Note — `ux-designer` has two modes:**
+> - **Project start (proactive):** invoked after `pm-agent` completes Q&A, before `architect`. Audits the design pack against the full spec, fills all gaps, and writes `docs/design/UX-DESIGN-READINESS.md`. The architect and technical-design agent read this document before starting their own work.
+> - **During the build (reactive):** when `ui-reviewer` or `a11y-reviewer` finds a design pack gap (missing token, undocumented component, contrast failure), they invoke `ux-designer` rather than escalating to human. `ux-designer` extends the design pack and notifies both reviewers. This happens within the existing review iteration — it does not add a new pipeline phase.
 
 **Unit tests (iterate with coder until 80%/75%):**
 ```
@@ -461,6 +504,44 @@ head -10 .claudetmp/second-review/stepN-*.md
 jq 'select(.event=="risk-assessment") | {step, tier, score}' \
   audit/oversight-log.jsonl
 ```
+
+---
+
+## Post-Change Sweep
+
+Run before committing any batch of changes. The sweep agent categorizes your diff and drives all relevant reviews automatically.
+
+```bash
+# Step 1 — see routing plan (no AI, instant)
+bash scripts/framework/run_post_change_sweep.sh
+
+# Step 2 — invoke the sweep agent in Claude Code
+# "Run post-change sweep"
+# The agent reads the routing plan and invokes all listed agents in order.
+```
+
+**Framework-only changes** (agent files, docs, framework scripts):
+```bash
+# Fast path — static + AI review of framework files only
+bash scripts/framework/run_framework_validation.sh
+
+# Or static-only (no AI, for quick pre-commit check):
+bash scripts/framework/run_framework_validation.sh --static-only
+```
+
+**What the sweep agent drives, by domain:**
+
+| Domain changed | Agents invoked |
+|---|---|
+| `.claude/agents/`, `docs/AGENTS.md`, `scripts/framework/` | `framework-validator` |
+| `*.py` app code | `code-reviewer` → (parallel) `security-reviewer`, `privacy-reviewer` |
+| `templates/*.html` | `ui-reviewer`, `a11y-reviewer` (after `code-reviewer` approves) |
+| `docker-compose.yml`, `Caddyfile` | `infra-reviewer` |
+| `tests/**` | `unit-test` |
+| `Specs/*design*/**` | `ux-designer` → `ui-reviewer` |
+| `Specs/*.md` | `pm-agent` |
+
+> **Note on `ux-designer`:** Has two modes. **At project start** it is invoked proactively (after `pm-agent`, before `architect`) to audit the design pack against the full spec and write `docs/design/UX-DESIGN-READINESS.md` — see the Project Start Sequence above. **During the per-step pipeline** it is reactive: when `ui-reviewer` or `a11y-reviewer` finds a design pack gap, they invoke `ux-designer` rather than escalating to human. `ux-designer` extends the design pack and notifies both reviewers within the existing review iteration, without adding a new phase.
 
 ---
 

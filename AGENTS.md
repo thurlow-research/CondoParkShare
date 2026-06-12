@@ -192,6 +192,43 @@ prompts/auth/middleware.v2.md   ← current
 
 The `prompts/` directory must be committed to git. It is not ephemeral.
 
+### Pull Request Attribution
+
+When any AI — a named agent or Claude Code directly — opens a pull request using `gh pr create`, the PR **must** be unambiguously identified as AI-submitted. A human reviewer looking at the PR list should never have to guess whether a human or an AI opened it.
+
+**Title format — three cases:**
+
+| Who opens the PR | Title prefix |
+|---|---|
+| A named agent (e.g. `oversight-orchestrator`) | `[AI: oversight-orchestrator]` |
+| Claude Code directly (no sub-agent, human asked Claude to open the PR) | `[AI: claude]` |
+| A human | *(no prefix)* |
+
+Examples:
+- `[AI: oversight-orchestrator] Step 6: Booking gates`
+- `[AI: claude] Add ux-designer agent and update docs`
+
+**Body — required section at the very top, before all other content:**
+```markdown
+## 🤖 AI-Submitted Pull Request
+
+This PR was **created and submitted by AI**. A human did not manually
+write or submit this PR.
+
+| | |
+|---|---|
+| **Submitted by** | `{agent-name}` (or `claude` when no sub-agent) |
+| **Model** | `{model-id}` |
+| **Submitted** | {YYYY-MM-DD} |
+| **Human review required** | {yes — and why, e.g. "oversight-evaluator approved; panel review pending"} |
+
+Human approval is required before merge — see branch protection rules.
+```
+
+This section must appear before any other content in the PR body. It must never be omitted, abbreviated, or moved to a footnote. The purpose is transparency: anyone triaging the PR queue immediately sees this PR requires a different review posture than a human-authored one.
+
+When there is no sub-agent context (Claude Code is acting directly), use `claude` as the agent name and describe the session context in one sentence in the "Human review required" field.
+
 ### Git Commit Trailer Convention
 
 For every commit containing AI-generated code, append trailers:

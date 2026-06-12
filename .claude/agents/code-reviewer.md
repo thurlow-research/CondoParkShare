@@ -22,7 +22,7 @@ Review the code against these documents. The technical design is the standard; t
 ## What you check
 
 **Correctness:**
-- Does the implementation match `TECHNICAL-DESIGN.md` exactly? Name any deviation.
+- Does the implementation match `docs/design/TECHNICAL-DESIGN.md` exactly? Name any deviation.
 - Is the GiST exclusion constraint present in the migration — not just asserted in the model?
 - Does the availability computation correctly subtract booked ranges from availability windows?
 - Is the earned-horizon metric calculating only elapsed (past) listed hours, not future ones?

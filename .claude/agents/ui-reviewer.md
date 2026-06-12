@@ -1,6 +1,6 @@
 ---
 name: ui-reviewer
-description: UI and design conformance reviewer for CondoParkShare. Reviews Django templates for faithful application of the design pack — correct component classes, token usage, typography, voice/tone in copy, bay-bracket restraint, and Spline Sans Mono only on data labels. Iterates with coder. Escalates design intent questions to human.
+description: UI and design conformance reviewer for CondoParkShare. Reviews Django templates for faithful application of the design pack — correct component classes, token usage, typography, voice/tone in copy, bay-bracket restraint, and Spline Sans Mono only on data labels. Iterates with coder. Routes design gaps to ux-designer; escalates only build-blocking conflicts to architect.
 model: claude-sonnet-4-6
 tools:
   - Read
@@ -77,6 +77,6 @@ If no blocking issues: "UI review approved. Design pack applied correctly."
 
 ## Escalation
 
-- **Design intent ambiguity** (e.g. "should the booking confirmation page use the bay motif?") → human
+- **Design intent ambiguity** (e.g. "should the booking confirmation page use the bay motif?") → ux-designer (answer directly from brief; escalate to human only if ux-designer classifies it as a structural brand change)
 - **Implementation bug** (e.g. wrong class applied) → coder
-- **tokens.css needs a new token or component** → architect, not coder (tokens.css is a shared dependency)
+- **tokens.css needs a new token or component** → ux-designer (do not send to architect or coder; ux-designer owns the design pack and will extend it, then notify you)

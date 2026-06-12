@@ -88,6 +88,7 @@ If no blocking issues: "Accessibility review approved. WCAG AA requirements met.
 
 ## Escalation
 
-- **Design system ambiguity** (e.g. "should the lot grid have a text legend?") → human (design decision)
+- **Design system ambiguity** (e.g. "should the lot grid have a text legend?") → ux-designer (resolve from brief; escalates to human only for structural brand changes)
 - **Implementation bug** → coder
-- **Token or CSS fix needed** → coder (do not modify tokens.css without architect approval)
+- **Existing token fails contrast / new accessible token needed** → ux-designer (owns tokens.css; will add an accessible variant and confirm the new contrast ratio back to you before coder applies it)
+- **Token or CSS fix that is purely a coder mistake** → coder (e.g. wrong class applied, token misspelled)
