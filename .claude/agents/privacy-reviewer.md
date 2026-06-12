@@ -86,6 +86,15 @@ For each finding:
 
 If no blocking issues: "Privacy review approved. All GDPR obligations in scope are met."
 
+When approving after resolving one or more `blocking` severity findings, create a GitHub issue for each resolved finding before writing your approval:
+```bash
+gh issue create \
+  --title "Privacy finding resolved: [category] in [file:function]" \
+  --body "**Category:** [Encryption/DataMinimization/Erasure/Consent/AuditLogging/LogHygiene]\n**GDPR obligation:** [what was violated]\n**Resolution:** [what was changed]\n**Watch for:** [what future changes to this area should re-check]" \
+  --label "privacy-finding" --label "resolved-in-review"
+```
+This records GDPR findings even when resolved pre-merge — used by the historical risk assessor and for compliance audit trail.
+
 ## Iteration
 
 - Send all findings in one pass.

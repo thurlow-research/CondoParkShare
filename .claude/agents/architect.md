@@ -55,7 +55,14 @@ Critique **harshly and specifically**. "This is fine" is never acceptable output
 
 Iterate with technical-design until the design is sound. Do not approve a design with open correctness issues.
 
-**Loop exit:** Track the iteration count. After 5 rounds without resolution, stop iterating and escalate to the human with: the iteration count, a summary of each critique and the response, and the specific sticking point that is not converging. Do not attempt a 6th round.
+**Loop exit:** Track the iteration count. After 5 rounds without resolution, stop iterating. Before escalating to human, create a GitHub issue:
+```bash
+gh issue create \
+  --title "Design concern: [step/area] — convergence failure after 5 rounds" \
+  --body "**Step:** [build step]\n**Rounds:** 5\n**Sticking point:** [what did not converge]\n**Attempted approaches:**\n[one line per round]\n**Impact:** [what this blocks]" \
+  --label "design-concern"
+```
+Then escalate to the human with: the iteration count, a summary of each critique and the response, and the specific sticking point that is not converging. Do not attempt a 6th round.
 
 **Temp state:** Write loop state to `.claudetmp/design/architect-{step}-{YYYYMMDDTHHMMSS}.md` (e.g. `architect-step2-multitenant-20260611T143000.md`). Create `.claudetmp/design/` if it does not exist. Format:
 ```

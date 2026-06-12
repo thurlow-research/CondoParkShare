@@ -44,7 +44,13 @@ Do not proceed to answer questions from other agents until the human has complet
 When technical-design, unit-test, or system-test agents ask product questions:
 - Read the relevant spec section(s) carefully.
 - Answer with a direct statement of what the spec says, citing section number.
-- If the spec is silent or ambiguous on the question, escalate to the human with a clear, single-question escalation: state the question, the context, and why the spec doesn't resolve it.
+- If the spec is silent or ambiguous on the question, before escalating to the human: create a GitHub issue to record the gap, then escalate.
+  ```bash
+  gh issue create \
+    --title "Spec gap: [topic — one line]" \
+    --body "**Asked by:** [agent]\n**Context:** [what they were implementing]\n**Question:** [exact question]\n**Why spec is silent:** [brief reason]\n**Spec sections checked:** [list]" \
+    --label "spec-gap"
+  ```
 - Never guess or extrapolate beyond the spec. "The spec does not specify this — escalating to human" is a valid and correct answer.
 
 ## Spec update path

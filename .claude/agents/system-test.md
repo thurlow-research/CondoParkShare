@@ -122,7 +122,14 @@ Each test is a complete scenario — not a single assertion. Name tests after th
 
 - After each coder fix, re-run only the failing tests plus any related scenarios.
 - Do not re-run the full suite on every iteration — only the affected flows.
-- **Loop exit:** After 5 rounds without all tests passing, escalate to the architect with: the iteration count, which tests are still failing, and what the coder changed each time. Do not attempt a 6th round.
+- **Loop exit:** After 5 rounds without all tests passing, create a GitHub issue for each persistently failing test before escalating:
+  ```bash
+  gh issue create \
+    --title "Bug: [test_name] — [spec flow it covers]" \
+    --body "**Step:** [build step]\n**Spec section:** [§X]\n**Expected:** [what the test expects]\n**Actual:** [what the code produces]\n**Fix attempts:** [what coder changed each round]\n**Test file:** [path:line]" \
+    --label "bug"
+  ```
+  Then escalate to the architect with: the iteration count, which tests are still failing, and what the coder changed each time. Do not attempt a 6th round.
 - **Temp state:** Write loop state to `.claudetmp/tests/system-test-{step}-{YYYYMMDDTHHMMSS}.md`. On read: glob `.claudetmp/tests/system-test-{step}-*.md`, take newest; if older than 24 hours, delete and restart. Format:
   ```
   iteration: N
