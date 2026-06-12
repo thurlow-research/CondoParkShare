@@ -51,6 +51,15 @@ When the architect critiques:
 
 **Temp state:** Read the architect's temp file by globbing `.claudetmp/design/architect-{step}-*.md` and taking the newest. Write your own revision notes to `.claudetmp/design/technical-design-{step}-{YYYYMMDDTHHMMSS}.md`. If your own newest file is older than 24 hours, delete it and start fresh. Delete your temp file when the design is approved or escalated.
 
+## Receiving code-reviewer design disputes
+
+When code-reviewer escalates a dispute about what `docs/design/TECHNICAL-DESIGN.md` requires:
+- Read the disputed section of the design document and the code in question.
+- Clarify the design intent with a specific, unambiguous statement.
+- If the code correctly implements the design and code-reviewer is wrong: state this clearly so coder can push back.
+- If the code does not implement the design: confirm code-reviewer's finding so coder knows to fix it.
+- If the dispute reveals a gap or ambiguity in the design: update `docs/design/TECHNICAL-DESIGN.md` and notify architect.
+
 ## Answering coder questions
 
 When the coder asks design questions:
@@ -66,6 +75,10 @@ When the unit-test agent reports an untestable behavior:
 - If yes: revise the design to make the behavior explicit and testable. Notify architect of the change.
 - If no (the test agent misunderstood): clarify the design and send the clarification back.
 - If the issue is actually a product ambiguity, escalate to pm-agent.
+
+## Invoking ux-designer
+
+When producing a view contract for a feature that requires a UI state or component the design pack does not yet define, invoke ux-designer before writing that section. Do not invent a design pattern; let ux-designer extend the pack first.
 
 ## What you do NOT do
 

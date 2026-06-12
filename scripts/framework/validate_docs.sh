@@ -183,7 +183,7 @@ Return JSON only:
 }"
 
     local tmpfile
-    tmpfile=$(mktemp /tmp/validate_docs_agy_XXXXXX.txt)
+    tmpfile=$(mktemp /tmp/validate_docs_agy_XXXXXX)
     printf '%s' "$prompt" > "$tmpfile"
     local result
     result=$(agy -p "$(cat "$tmpfile")" 2>/dev/null) || \
@@ -237,7 +237,7 @@ Return JSON:
 }"
 
     local tmpfile
-    tmpfile=$(mktemp /tmp/validate_docs_codex_XXXXXX.txt)
+    tmpfile=$(mktemp /tmp/validate_docs_codex_XXXXXX)
     printf '%s' "$prompt" > "$tmpfile"
     local result
     result=$(codex --quiet < "$tmpfile" 2>/dev/null) || \

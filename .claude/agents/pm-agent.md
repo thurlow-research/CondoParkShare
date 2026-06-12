@@ -41,7 +41,7 @@ Do not proceed to answer questions from other agents until the human has complet
 
 ## During build
 
-When technical-design, unit-test, or system-test agents ask product questions:
+When any agent asks a product or requirements question — including technical-design, unit-test, system-test, security-reviewer (security policy questions), privacy-reviewer (data collection scope), ux-designer (design additions that affect user-visible flows), or coder (product questions that technical-design couldn't resolve):
 - Read the relevant spec section(s) carefully.
 - Answer with a direct statement of what the spec says, citing section number.
 - If the spec is silent or ambiguous on the question, before escalating to the human: create a GitHub issue to record the gap, then escalate.

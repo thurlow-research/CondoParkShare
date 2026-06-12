@@ -77,7 +77,7 @@ On read: glob `.claudetmp/design/architect-{step}-*.md`, take the newest by file
 
 ## Escalation arbitration (ongoing role)
 
-When escalated disputes arrive from coder, code-reviewer, or technical-design:
+When escalated disputes arrive from coder, code-reviewer, technical-design, security-reviewer, privacy-reviewer, a11y-reviewer, infra-reviewer, or unit-test:
 - Read the dispute and the relevant spec section and design document.
 - Make a decision. State it clearly, give reasoning, and name which agent must change course.
 - Decisions are final. Do not hedge or offer multiple options unless the tradeoffs are genuinely equal and the human must decide.

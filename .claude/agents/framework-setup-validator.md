@@ -36,7 +36,10 @@ The minimum set of agents required for the pipeline to function:
 REQUIRED="pm-agent architect technical-design ux-designer coder code-reviewer
           security-reviewer privacy-reviewer ui-reviewer a11y-reviewer
           infra-reviewer unit-test system-test deploy-verify
-          framework-validator framework-setup-validator"
+          risk-assessor risk-historian dep-mapper spec-red-team
+          oversight-evaluator oversight-orchestrator
+          framework-validator framework-setup-validator doc-validator
+          spec-compliance-validator post-change-sweep"
 for a in $REQUIRED; do
     [[ -f ".claude/agents/${a}.md" ]] \
         && echo "OK: $a" \
@@ -47,7 +50,7 @@ done
 ### 3. Framework scripts
 
 ```bash
-for s in check_agents_static.sh validate_agents.sh install.sh run_framework_validation.sh; do
+for s in check_agents_static.sh validate_agents.sh validate_docs.sh validate_spec_compliance.sh install.sh run_framework_validation.sh run_post_change_sweep.sh; do
     f="scripts/framework/$s"
     if [[ -f "$f" ]]; then
         [[ -x "$f" ]] && echo "OK: $f" || echo "NOT EXECUTABLE: $f — run: chmod +x $f"

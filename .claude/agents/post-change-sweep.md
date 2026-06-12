@@ -38,7 +38,7 @@ Map each changed file to one or more domains using these rules:
 
 | Domain | File patterns |
 |---|---|
-| **framework** | `.claude/agents/*.md`, `docs/AGENTS.md`, `docs/OVERSIGHT-RUNBOOK.md`, `scripts/framework/**` |
+| **framework** | `.claude/agents/*.md`, `docs/AGENTS.md`, `docs/OVERSIGHT-RUNBOOK.md`, `docs/SETUP.md`, `docs/CUSTOMIZATION.md`, `scripts/framework/**` |
 | **application-code** | `**/*.py` (excluding `tests/`, `**/migrations/`) |
 | **migrations** | `**/migrations/*.py` |
 | **templates** | `**/templates/**/*.html` |
@@ -82,7 +82,7 @@ Invoke `code-reviewer` with the list of changed `.py` files. Wait for approval.
 **Stage 2b — parallel reviewers** (only after code-reviewer approves):
 Invoke simultaneously, each with only its relevant files:
 - `security-reviewer` — all changed `.py` files + any template files
-- `privacy-reviewer` — if any of the changed files touch the domains: `accounts`, `bookings`, PII fields, or erasure logic (check file paths)
+- `privacy-reviewer` — if any of the changed files touch the domains: `accounts`, `parking`, PII fields, or erasure logic (check file paths)
 - `ui-reviewer` — if `templates` domain has changes: the changed template files only
 - `a11y-reviewer` — if `templates` domain has changes: the changed template files only
 - `infra-reviewer` — if `infrastructure` domain has changes: the changed infra files only

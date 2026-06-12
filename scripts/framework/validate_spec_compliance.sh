@@ -157,12 +157,12 @@ Check: Do relevant agent files (oversight-evaluator, oversight-orchestrator) spe
 
 **Constraint REQ-004: Model tier assignments match roles**
 METHODOLOGY.md states: Author = Opus; Arbiter = Sonnet; Independent = agy/codex.
-Docs/AGENTS.md states: architect and technical-design use Opus; all reviewer/test agents use Sonnet.
+docs/AGENTS.md states: architect and technical-design use Opus; all reviewer/test agents use Sonnet.
 Check: Do agent files use the correct model tier for their role? Is any reviewer using Haiku (insufficient for judgment calls)?
 
 **Constraint REQ-005: Loop exit conditions on all iterative agents**
 METHODOLOGY.md and agent design require every iteration loop to have a defined exit.
-Docs/AGENTS.md says the pattern is: 5 rounds without approval → escalate to architect/human.
+docs/AGENTS.md says the pattern is: 5 rounds without approval → escalate to architect/human.
 Check: Does every agent that iterates (coder↔reviewers, technical-design↔architect) have an explicit loop exit condition?
 
 **Constraint REQ-006: Self-flagging mandatory behaviors**
@@ -205,7 +205,7 @@ Return JSON only:
 }"
 
     local tmpfile
-    tmpfile=$(mktemp /tmp/validate_compliance_agy_XXXXXX.txt)
+    tmpfile=$(mktemp .claudetmp/validate_compliance_agy.XXXXXX)
     printf '%s' "$prompt" > "$tmpfile"
     local result
     result=$(agy -p "$(cat "$tmpfile")" 2>/dev/null) || \
@@ -278,7 +278,7 @@ Return JSON:
 }"
 
     local tmpfile
-    tmpfile=$(mktemp /tmp/validate_compliance_codex_XXXXXX.txt)
+    tmpfile=$(mktemp .claudetmp/validate_compliance_codex.XXXXXX)
     printf '%s' "$prompt" > "$tmpfile"
     local result
     result=$(codex --quiet < "$tmpfile" 2>/dev/null) || \

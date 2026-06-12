@@ -34,7 +34,7 @@ If this fails: read the findings, categorize each one as:
 
 Do not proceed to Step 2 until Step 1 passes.
 
-### Step 2 — AI review (agy + codex)
+### Step 2 — Agent semantic review (agy + codex)
 
 ```bash
 bash scripts/framework/validate_agents.sh
@@ -42,7 +42,23 @@ bash scripts/framework/validate_agents.sh
 
 Output is written to `.claudetmp/framework/validation-YYYYMMDDTHHMMSS.md`. Read it after the script completes.
 
-### Step 3 — Synthesize and act
+### Step 3 — Documentation coverage review (agy + codex)
+
+```bash
+bash scripts/framework/validate_docs.sh
+```
+
+Output is written to `.claudetmp/framework/doc-validation-YYYYMMDDTHHMMSS.md`. This checks that docs accurately and completely describe agent behavior — catching omissions like "agent file says two modes, doc says only one." Read findings and apply doc fixes directly (you have Write access to docs/ files).
+
+### Step 4 — Spec compliance check (agy + codex)
+
+```bash
+bash scripts/framework/validate_spec_compliance.sh
+```
+
+Output is written to `.claudetmp/framework/spec-compliance-YYYYMMDDTHHMMSS.md`. This checks that the pipeline satisfies governance requirements (METHODOLOGY.md, AGENTS.md root protocol, decisions.md). Invoke `spec-compliance-validator` agent to triage any failures.
+
+### Step 5 — Synthesize and act
 
 Read the output file. For each finding:
 
@@ -54,7 +70,7 @@ Read the output file. For each finding:
 | Findings reported by both reviewers | High-confidence — treat as MUST_FIX unless you can prove it's a false positive. |
 | Findings reported by only one reviewer | Investigate before acting. |
 
-### Step 4 — Report
+### Step 6 — Report
 
 Output a structured summary:
 

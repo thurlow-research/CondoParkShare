@@ -164,7 +164,7 @@ Return JSON only — no prose outside the JSON block:
 }"
 
     local tmpfile
-    tmpfile=$(mktemp /tmp/validate_agents_agy_XXXXXX.txt)
+    tmpfile=$(mktemp /tmp/validate_agents_agy_XXXXXX)
     echo "$prompt" > "$tmpfile"
     local result
     result=$(agy -p "$(cat "$tmpfile")" 2>/dev/null) || \
@@ -211,7 +211,7 @@ Return JSON only:
 }"
 
     local tmpfile
-    tmpfile=$(mktemp /tmp/validate_agents_codex_XXXXXX.txt)
+    tmpfile=$(mktemp /tmp/validate_agents_codex_XXXXXX)
     echo "$prompt" > "$tmpfile"
     local result
     result=$(codex --quiet < "$tmpfile" 2>/dev/null) || \

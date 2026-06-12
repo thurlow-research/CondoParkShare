@@ -614,7 +614,7 @@ deploy-verify
 
 ### Quick reference — what gets copied
 
-All files from `.claude/agents/` are copied verbatim. Current agent list (17 agents):
+All files from `.claude/agents/` are copied verbatim. Current agent list (25 agents):
 
 **Pipeline agents** (core build pipeline):
 `pm-agent`, `architect`, `technical-design`, `ux-designer`, `coder`, `code-reviewer`, `security-reviewer`, `privacy-reviewer`, `ui-reviewer`, `a11y-reviewer`, `infra-reviewer`, `unit-test`, `system-test`, `deploy-verify`
@@ -623,7 +623,7 @@ All files from `.claude/agents/` are copied verbatim. Current agent list (17 age
 `risk-assessor`, `risk-historian`, `dep-mapper`, `spec-red-team`, `oversight-evaluator`, `oversight-orchestrator`
 
 **Framework agents** (pipeline self-validation):
-`framework-validator`, `framework-setup-validator`, `post-change-sweep`
+`framework-validator`, `framework-setup-validator`, `doc-validator`, `spec-compliance-validator`, `post-change-sweep`
 
 All agent files are copied — including the framework agents. Any project using this pipeline will customize agents, and the framework agents validate those customizations.
 
