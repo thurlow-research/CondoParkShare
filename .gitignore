@@ -43,3 +43,4 @@ htmlcov/
 
 # Agent temp space — ephemeral inter-agent communication, never committed
 .claudetmp/
+*.salt
