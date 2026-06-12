@@ -158,7 +158,7 @@ a{color:var(--meadow-ink)}
 .badge-pending{background:var(--white);color:var(--status-ink);border-color:var(--status-line)} /* Pending approval */
 .badge-complete{background:var(--status-surface);color:var(--status-ink)} /* Completed */
 .badge-complete .dot{background:var(--status-ink)}
-.badge-inactive{background:transparent;color:var(--status-off);border-color:var(--status-line)} /* Inactive */
+.badge-inactive{background:transparent;color:var(--status-ink);border-color:var(--status-line)} /* Inactive */
 
 /* ---------- Form fields ---------- */
 .field{display:block;margin-bottom:14px}

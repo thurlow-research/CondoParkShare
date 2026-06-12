@@ -157,7 +157,7 @@
       font-weight: 500;
       border: 1.5px solid transparent;
     }
-    .alert-error {
+    .alert-danger {
       background: var(--danger-surface);
       border-color: var(--danger-line);
       color: var(--danger-ink);
@@ -301,7 +301,7 @@
     <div class="wrap">
       {% if messages %}
         {% for message in messages %}
-          <div class="alert {% if message.tags == 'error' %}alert-error{% elif message.tags == 'success' %}alert-success{% else %}alert-info{% endif %}" role="alert">
+          <div class="alert {% if message.tags == 'error' %}alert-danger{% elif message.tags == 'success' %}alert-success{% else %}alert-info{% endif %}" role="alert">
             {{ message }}
           </div>
         {% endfor %}

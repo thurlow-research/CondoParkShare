@@ -39,13 +39,13 @@
     {% endif %}
   </div>
 
-  <div class="spot is-available" style="margin-bottom:24px">
+  <div class="spot" style="margin-bottom:24px">
     <div class="row">
       <span class="spot-id">
         <span class="tag mono">{{ booking.spot.spot_number }}</span>
         {{ booking.spot.location_detail|default:"" }}
       </span>
-      <span class="badge badge-available"><span class="dot" aria-hidden="true"></span> Available</span>
+      <span class="badge badge-active"><span class="dot" aria-hidden="true"></span> Confirmed</span>
     </div>
 
     <dl style="display:grid;grid-template-columns:max-content 1fr;gap:8px 20px;margin:0;font-size:14px">

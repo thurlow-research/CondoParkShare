@@ -22,7 +22,7 @@
           {% if booking.status == 'tentative' or booking.status == 'confirmed' or booking.status == 'active' %}
             <span class="badge badge-active"><span class="dot" aria-hidden="true"></span> Confirmed</span>
           {% elif booking.status == 'completed' %}
-            <span class="badge badge-complete"><span class="dot" aria-hidden="true"></span> Completed</span>
+            <span class="badge badge-complete"><span class="chk" aria-hidden="true">✓</span> Completed</span>
           {% else %}
             <span class="badge badge-danger"><span class="dot" aria-hidden="true"></span> Cancelled</span>
           {% endif %}

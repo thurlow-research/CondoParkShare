@@ -3,7 +3,7 @@
 <h2 id="book-request-form-heading" tabindex="-1" class="visually-hidden">Booking request form</h2>
 
 {% if form.non_field_errors %}
-  <div class="alert alert-error" role="alert">
+  <div class="alert alert-danger" role="alert">
     {% for error in form.non_field_errors %}
       <div>{{ error }}</div>
     {% endfor %}
@@ -23,7 +23,13 @@
 
   <div class="field">
     <label for="{{ form.start.id_for_label }}">{{ form.start.label }}</label>
-    {{ form.start }}
+    <input
+      type="datetime-local"
+      name="{{ form.start.html_name }}"
+      id="{{ form.start.id_for_label }}"
+      {% if form.start.value %}value="{{ form.start.value }}"{% endif %}
+      {% if form.start.errors %}aria-describedby="book-start-error" aria-invalid="true"{% endif %}
+    >
     {% if form.start.errors %}
       <span id="book-start-error" style="color:var(--danger-ink);font-size:13px;margin-top:4px;display:block" role="alert">
         {{ form.start.errors|join:", " }}
@@ -36,7 +42,13 @@
 
   <div class="field">
     <label for="{{ form.end.id_for_label }}">{{ form.end.label }}</label>
-    {{ form.end }}
+    <input
+      type="datetime-local"
+      name="{{ form.end.html_name }}"
+      id="{{ form.end.id_for_label }}"
+      {% if form.end.value %}value="{{ form.end.value }}"{% endif %}
+      {% if form.end.errors %}aria-describedby="book-end-error" aria-invalid="true"{% endif %}
+    >
     {% if form.end.errors %}
       <span id="book-end-error" style="color:var(--danger-ink);font-size:13px;margin-top:4px;display:block" role="alert">
         {{ form.end.errors|join:", " }}

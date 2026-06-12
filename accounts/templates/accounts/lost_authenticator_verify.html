@@ -36,7 +36,7 @@
     <p class="auth-subtitle">Check your email for the 6-digit code we sent you</p>
 
     {% if form.non_field_errors %}
-      <div class="alert alert-error" role="alert">
+      <div class="alert alert-danger" role="alert">
         {% for error in form.non_field_errors %}{{ error }}{% endfor %}
       </div>
     {% endif %}
