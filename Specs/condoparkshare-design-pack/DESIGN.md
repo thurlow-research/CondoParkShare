@@ -1,12 +1,13 @@
-# CondoCondoParkShare — Design Instructions for Claude Code
+# CondoParkShare — Design Instructions for Claude Code
 
-This pack is the **visual/UX source of truth** for the CondoCondoParkShare build. Pair it with `SPEC.md` (functional spec). When building any UI, follow this document; do not invent a separate visual language.
+This pack is the **visual/UX source of truth** for the CondoParkShare build. Pair it with `SPEC.md` (functional spec). When building any UI, follow this document; do not invent a separate visual language.
 
 ## What's in this pack
 ```
-condoCondoParkShare-design-pack/
+condoparkshare-design-pack/
 ├── DESIGN.md            ← you are here (how to apply the system)
 ├── style-guide.html     ← rendered visual reference (open in a browser)
+├── feedback-states.html ← rendered reference for error / warning / success / info
 ├── css/
 │   └── tokens.css       ← design tokens + base component classes (load first)
 └── logo/
@@ -55,6 +56,18 @@ Use `logo/favicon.svg` for the browser tab and the PWA/home-screen icon.
 | `--white` | #ffffff | Cards / surfaces. |
 
 Semantic aliases also exist: `--bg, --surface, --text, --text-muted, --border, --available, --booked`. Prefer these in app code.
+
+## Feedback & system states (error / warning / success / info)
+Feedback colors are added so they **never compete with the availability signal**. See `feedback-states.html` for the rendered reference. Each state has a base, an accessible `-ink` (text/AA), and a `-surface` + `-line` (banner fill/border).
+
+| State | Tokens | Notes |
+|---|---|---|
+| **Error / danger** | `--danger #c43d2f`, `--danger-ink`, `--danger-surface`, `--danger-line` | The one **new hue** — a warm brick red for failures + destructive actions. Nothing else in the palette reads "stop". |
+| **Warning** | `--warning #e0ad3a`, `--warning-ink #8a5d0c`, `--warning-surface`, `--warning-line` | A light gold, separated from **Clay by lightness, not just hue** (L\* gap ~16) so it stays distinct under every color-vision type incl. tritanopia, and in grayscale. White on the light base fails contrast → the warning icon-chip sits on `--warning-ink`. |
+| **Success** | `--success` = `--meadow`, `--success-ink` = `--meadow-ink`, `--success-surface #e4f4ea`, `--success-line` | Reuses the **Meadow** family on purpose — green already means good/go, so "Booked." is a green moment. |
+| **Info** | `--info` = `--pine`, `--info-ink` = `--pine`, `--info-surface #eaeef0`, `--info-line` | Stays **neutral** (no foreign blue) so the green availability lane never competes. |
+
+**Rules.** Clay is **status-only** (booked); amber is **alert-only** (warning) — never interchangeable. Never use red decoratively (if it's not an error, it's not red). Always pair a state with an icon + text label, never color alone. Components in `tokens.css`: `.alert` (`.alert-danger/-warning/-success/-info`), `.btn-danger`, `.badge-warning/.badge-danger`, `.field.has-error` + `.error-text`, `.toast` (`.toast-success/-danger`).
 
 ## Typography
 - **Hanken Grotesk** for everything in the UI. Weights: 800 display, 700 H2, 600 H3/labels, 500 emphasis, 400 body. Headings use tight tracking (`letter-spacing:-.02em`), sentence case.
