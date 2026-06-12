@@ -70,7 +70,7 @@ INSTALLED_APPS = [
     'parking',
     'notifications',
     'portal',
-    'operator',
+    'operator_console',
 ]
 
 # ---------------------------------------------------------------------------
