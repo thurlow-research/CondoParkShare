@@ -1,10 +1,8 @@
 """
 parkshare.admin_site — Custom AdminSite that restricts access to superusers.
 
-Defined here (rather than in operator/admin.py) because the Django app named
-'operator' shadows Python's stdlib ``operator`` module, making direct imports
-of ``operator.admin`` impossible from outside that package.  Both
-``operator/admin.py`` and ``parkshare/urls.py`` import from this module.
+Defined here so that operator_console/admin.py and parkshare/urls.py share
+a single AdminSite instance without circular imports.
 """
 
 from django.contrib import admin
@@ -31,5 +29,5 @@ class SuperuserAdminSite(admin.AdminSite):
         )
 
 
-# Singleton instance used by operator/admin.py and parkshare/urls.py.
+# Singleton instance used by operator_console/admin.py and parkshare/urls.py.
 operator_admin_site = SuperuserAdminSite(name='operator_admin')
