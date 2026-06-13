@@ -50,28 +50,25 @@ def spot_list(request):
     Shows spot_number, status, count of upcoming availability windows,
     and count of active bookings per spot.
     """
-    spots = ParkingSpot.objects.filter(
-        owner=request.user, organization=request.organization
-    ).order_by("spot_number")
+    from django.db.models import Count, Q
 
     now_dt = now()
-    spot_data = []
-    for spot in spots:
-        upcoming_windows = spot.availability_windows.filter(
-            time_range__endswith__gt=now_dt
-        ).count()
-        active_bookings = spot.bookings.filter(
-            status__in=["tentative", "confirmed", "active"]
-        ).count()
-        spot_data.append(
-            {
-                "spot": spot,
-                "upcoming_windows": upcoming_windows,
-                "active_bookings": active_bookings,
-            }
+    spots = (
+        ParkingSpot.scoped.filter(owner=request.user)
+        .annotate(
+            upcoming_windows=Count(
+                "availability_windows",
+                filter=Q(availability_windows__time_range__endswith__gt=now_dt),
+            ),
+            active_bookings=Count(
+                "bookings",
+                filter=Q(bookings__status__in=["tentative", "confirmed", "active"]),
+            ),
         )
+        .order_by("spot_number")
+    )
 
-    return render(request, "parking/spot_list.html", {"spot_data": spot_data})
+    return render(request, "parking/spot_list.html", {"spots": spots})
 
 
 @active_required

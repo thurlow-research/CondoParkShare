@@ -568,7 +568,7 @@ def test_totp_enroll_reset_preserves_pending_approval_status(rf):
 
     org = OrganizationFactory()
     user = UserFactory(organization=org, status="pending_approval")
-    device = _make_totp_device(user, confirmed=False)
+    _make_totp_device(user, confirmed=False)
 
     with patch(
         "django_otp.plugins.otp_totp.models.TOTPDevice.verify_token", return_value=True
@@ -582,9 +582,9 @@ def test_totp_enroll_reset_preserves_pending_approval_status(rf):
         totp_enroll(request)
 
     user.refresh_from_db()
-    assert user.status == "pending_approval", (
-        "totp_enroll must not elevate pending_approval to active"
-    )
+    assert (
+        user.status == "pending_approval"
+    ), "totp_enroll must not elevate pending_approval to active"
 
 
 # ---------------------------------------------------------------------------

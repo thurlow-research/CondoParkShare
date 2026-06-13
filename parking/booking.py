@@ -199,6 +199,11 @@ def release_booking(booking, borrower, release_up_to):
     if release_up_to >= booking.time_range.upper:
         raise ValueError("Release time must be before booking end")
 
+    from datetime import timedelta
+
+    if release_up_to < booking.time_range.lower + timedelta(hours=1):
+        raise ValueError("At least 1 hour must remain after release")
+
     booking.time_range = DateTimeTZRange(booking.time_range.lower, release_up_to)
     booking.save()
     notify("early_release_confirmed", booking)

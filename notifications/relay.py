@@ -64,7 +64,7 @@ def send_relay_message(from_user, to_user, booking, body, reply_to=None):
             f"— Reply to this message: {reply_url}\n"
             f"(This link is valid until the booking ends.)"
         ),
-        from_email=f"noreply@{booking.organization.hostname}",
+        from_email=None,  # uses DEFAULT_FROM_EMAIL from settings
         recipient_list=[to_user.email],
         fail_silently=True,
     )

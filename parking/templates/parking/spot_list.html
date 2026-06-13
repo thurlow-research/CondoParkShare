@@ -10,10 +10,9 @@
   </div>
 </div>
 
-{% if spot_data %}
+{% if spots %}
   <div class="cols">
-    {% for item in spot_data %}
-      {% with spot=item.spot %}
+    {% for spot in spots %}
       <div class="spot">
         <div class="row">
           <span class="spot-id">
@@ -31,12 +30,12 @@
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;color:var(--text-muted)">
           <div>
-            <span style="font-weight:600;color:var(--ink);display:block">{{ item.upcoming_windows }}</span>
-            upcoming window{{ item.upcoming_windows|pluralize }}
+            <span style="font-weight:600;color:var(--ink);display:block">{{ spot.upcoming_windows }}</span>
+            upcoming window{{ spot.upcoming_windows|pluralize }}
           </div>
           <div>
-            <span style="font-weight:600;color:var(--ink);display:block">{{ item.active_bookings }}</span>
-            active booking{{ item.active_bookings|pluralize }}
+            <span style="font-weight:600;color:var(--ink);display:block">{{ spot.active_bookings }}</span>
+            active booking{{ spot.active_bookings|pluralize }}
           </div>
         </div>
 
@@ -49,7 +48,6 @@
           </a>
         </div>
       </div>
-      {% endwith %}
     {% endfor %}
   </div>
 {% else %}

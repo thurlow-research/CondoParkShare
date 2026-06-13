@@ -2,6 +2,8 @@
 parking.forms — Forms for the parking app.
 """
 
+from datetime import timedelta
+
 from django import forms
 from django.utils.timezone import now
 
@@ -104,6 +106,12 @@ class EarlyReleaseForm(forms.Form):
             raise forms.ValidationError("Release time must be in the future.")
         if self._booking and value >= self._booking.time_range.upper:
             raise forms.ValidationError("Release time must be before the booking end.")
+        if self._booking and value < self._booking.time_range.lower + timedelta(
+            hours=1
+        ):
+            raise forms.ValidationError(
+                "At least 1 hour must remain after the release time."
+            )
         return value
 
 
@@ -131,7 +139,7 @@ class AvailabilityWindowForm(forms.Form):
     def __init__(self, *args, owner=None, **kwargs):
         super().__init__(*args, **kwargs)
         if owner is not None:
-            self.fields["spot"].queryset = ParkingSpot.objects.filter(
+            self.fields["spot"].queryset = ParkingSpot.scoped.filter(
                 owner=owner, status="active"
             )
 

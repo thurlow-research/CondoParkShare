@@ -570,7 +570,7 @@ def test_relay_token_expires_at_booking_end():
 @pytest.mark.django_db
 @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
 def test_relay_email_hides_real_addresses():
-    """Relay email FROM is noreply@hostname; body does not contain real email addresses."""
+    """Relay email FROM is DEFAULT_FROM_EMAIL; body does not contain real email addresses."""
     from django.core import mail
 
     from notifications.relay import send_relay_message
@@ -597,8 +597,11 @@ def test_relay_email_hides_real_addresses():
     assert mail.outbox, "Expected relay email in outbox"
     relay_email = mail.outbox[-1]
 
-    # FROM must be noreply@hostname
-    expected_from = f"noreply@{org.hostname}"
+    # FROM must be Django's DEFAULT_FROM_EMAIL (not the org hostname),
+    # so the configurable email sender is used consistently across all mail.
+    from django.conf import settings
+
+    expected_from = settings.DEFAULT_FROM_EMAIL
     assert (
         relay_email.from_email == expected_from
     ), f"Expected from_email={expected_from!r}, got {relay_email.from_email!r}"
