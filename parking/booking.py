@@ -47,16 +47,16 @@ def assign_spot(organization, borrower, requested_start, requested_end):
 
     # Subquery: does this spot have any conflicting active booking?
     conflict = Booking.objects.filter(
-        spot=OuterRef('pk'),
+        spot=OuterRef("pk"),
         time_range__overlap=buffered,
-        status__in=['tentative', 'confirmed', 'active'],
+        status__in=["tentative", "confirmed", "active"],
     )
 
     # Subquery: does this spot have an availability window that covers the
     # full requested range?  Using Exists avoids the JOIN fan-out that would
     # require DISTINCT, which is incompatible with SELECT FOR UPDATE.
     covers = AvailabilityWindow.objects.filter(
-        spot=OuterRef('pk'),
+        spot=OuterRef("pk"),
         time_range__contains=req_range,
     )
 
@@ -65,24 +65,27 @@ def assign_spot(organization, borrower, requested_start, requested_end):
         # transaction so it is atomic with Booking.objects.create, preventing
         # a race condition where two concurrent requests for the same user
         # both pass this check before either creates a tentative booking).
-        already_active = Booking.objects.filter(
-            borrower=borrower,
-            status__in=['tentative', 'confirmed', 'active'],
-        ).select_for_update().exists()
+        already_active = (
+            Booking.objects.filter(
+                borrower=borrower,
+                status__in=["tentative", "confirmed", "active"],
+            )
+            .select_for_update()
+            .exists()
+        )
         if already_active:
-            return 'already_active'
+            return "already_active"
 
         candidates = (
-            ParkingSpot.objects
-            .select_for_update(skip_locked=True, of=('self',))
+            ParkingSpot.objects.select_for_update(skip_locked=True, of=("self",))
             .filter(
                 organization=organization,
-                status='active',
+                status="active",
             )
             .filter(Exists(covers))
             .exclude(Exists(conflict))
-            .select_related('owner')
-            .order_by(F('owner__last_booking_at').asc(nulls_first=True))
+            .select_related("owner")
+            .order_by(F("owner__last_booking_at").asc(nulls_first=True))
         )
 
         spot = candidates.first()
@@ -94,7 +97,7 @@ def assign_spot(organization, borrower, requested_start, requested_end):
             spot=spot,
             borrower=borrower,
             time_range=req_range,
-            status='tentative',
+            status="tentative",
             tentative_expires_at=now() + timedelta(minutes=5),
         )
 
@@ -108,15 +111,15 @@ def confirm_booking(booking, borrower):
     """
     from django.utils.timezone import now
 
-    if booking.status != 'tentative':
-        raise ValueError('Booking is not tentative')
+    if booking.status != "tentative":
+        raise ValueError("Booking is not tentative")
 
     if booking.tentative_expires_at and booking.tentative_expires_at < now():
-        booking.status = 'cancelled_admin'
+        booking.status = "cancelled_admin"
         booking.save()
-        raise ValueError('Tentative hold expired')
+        raise ValueError("Tentative hold expired")
 
-    booking.status = 'confirmed'
+    booking.status = "confirmed"
     booking.save()
     return booking
 
@@ -136,22 +139,29 @@ def cancel_booking(booking, cancelled_by):
     is_borrower = cancelled_by == booking.borrower
 
     if not (is_owner or is_borrower):
-        raise PermissionError('Not authorized to cancel this booking')
+        raise PermissionError("Not authorized to cancel this booking")
 
-    if booking.status in ('completed', 'cancelled_borrower', 'cancelled_owner', 'cancelled_admin'):
-        raise ValueError('Booking already finalised')
+    if booking.status in (
+        "completed",
+        "cancelled_borrower",
+        "cancelled_owner",
+        "cancelled_admin",
+    ):
+        raise ValueError("Booking already finalised")
 
     if is_owner:
         duration = int(
             (booking.time_range.upper - booking.time_range.lower).total_seconds() / 3600
         )
-        booking.status = 'cancelled_owner'
+        booking.status = "cancelled_owner"
         booking.penalty_hours = duration
     else:
-        booking.status = 'cancelled_borrower'
+        booking.status = "cancelled_borrower"
 
     booking.save()
-    event = 'booking_cancelled_by_owner' if is_owner else 'booking_cancelled_by_borrower'
+    event = (
+        "booking_cancelled_by_owner" if is_owner else "booking_cancelled_by_borrower"
+    )
     notify(event, booking)
     return booking
 
@@ -175,21 +185,21 @@ def release_booking(booking, borrower, release_up_to):
     from notifications.dispatch import notify
 
     if booking.borrower != borrower:
-        raise PermissionError('Not your booking')
+        raise PermissionError("Not your booking")
 
-    if booking.status not in ('confirmed', 'active'):
-        raise ValueError('Cannot release a booking in this state')
+    if booking.status not in ("confirmed", "active"):
+        raise ValueError("Cannot release a booking in this state")
 
     now_dt = now()
 
     if release_up_to.minute != 0 or release_up_to.second != 0:
-        raise ValueError('Release time must be on the hour')
+        raise ValueError("Release time must be on the hour")
     if release_up_to <= now_dt:
-        raise ValueError('Release time must be in the future')
+        raise ValueError("Release time must be in the future")
     if release_up_to >= booking.time_range.upper:
-        raise ValueError('Release time must be before booking end')
+        raise ValueError("Release time must be before booking end")
 
     booking.time_range = DateTimeTZRange(booking.time_range.lower, release_up_to)
     booking.save()
-    notify('early_release_confirmed', booking)
+    notify("early_release_confirmed", booking)
     return booking

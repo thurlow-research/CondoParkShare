@@ -23,19 +23,22 @@ def status_required(status):
     The decorator also enforces login — unauthenticated users are redirected
     to 'login' before the status check runs.
     """
+
     def decorator(view_func):
         @wraps(view_func)
-        @login_required(login_url='login')
+        @login_required(login_url="login")
         def wrapper(request, *args, **kwargs):
-            if not hasattr(request.user, 'status') or request.user.status != status:
-                return redirect('login')
+            if not hasattr(request.user, "status") or request.user.status != status:
+                return redirect("login")
             return view_func(request, *args, **kwargs)
+
         return wrapper
+
     return decorator
 
 
 # Convenience alias — used by the majority of resident-facing views.
-active_required = status_required('active')
+active_required = status_required("active")
 
 
 def hoa_admin_required(view_func):
@@ -55,6 +58,7 @@ def hoa_admin_required(view_func):
         @hoa_admin_required
         def portal_home(request): ...
     """
+
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):
         if (
@@ -64,4 +68,5 @@ def hoa_admin_required(view_func):
         ):
             raise PermissionDenied
         return view_func(request, *args, **kwargs)
+
     return wrapper

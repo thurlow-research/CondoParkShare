@@ -6,19 +6,25 @@ Phone is field-encrypted via django-encrypted-model-fields.
 AUTH_USER_MODEL = 'accounts.User' is set in settings.
 """
 
+from django.contrib.auth.models import (
+    AbstractBaseUser,
+    BaseUserManager,
+    PermissionsMixin,
+)
 from django.db import models
-from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from encrypted_model_fields.fields import EncryptedCharField
 
 
 def default_notification_prefs():
-    return {'push': False}
+    return {"push": False}
 
 
 class UserManager(BaseUserManager):
-    def create_user(self, email, organization, display_name, password=None, **extra_fields):
+    def create_user(
+        self, email, organization, display_name, password=None, **extra_fields
+    ):
         if not email:
-            raise ValueError('Email required')
+            raise ValueError("Email required")
         user = self.model(
             email=email,
             organization=organization,
@@ -29,16 +35,20 @@ class UserManager(BaseUserManager):
         user.save(using=self._db)
         return user
 
-    def create_superuser(self, email, organization, display_name, password, **extra_fields):
-        extra_fields.setdefault('is_staff', True)
-        extra_fields.setdefault('is_superuser', True)
-        extra_fields.setdefault('status', 'active')
-        return self.create_user(email, organization, display_name, password, **extra_fields)
+    def create_superuser(
+        self, email, organization, display_name, password, **extra_fields
+    ):
+        extra_fields.setdefault("is_staff", True)
+        extra_fields.setdefault("is_superuser", True)
+        extra_fields.setdefault("status", "active")
+        return self.create_user(
+            email, organization, display_name, password, **extra_fields
+        )
 
 
 class User(AbstractBaseUser, PermissionsMixin):
     organization = models.ForeignKey(
-        'parking.Organization', on_delete=models.PROTECT, related_name='users'
+        "parking.Organization", on_delete=models.PROTECT, related_name="users"
     )
 
     # PII — volume encryption only (LUKS). Not field-encrypted (breaks login lookup).
@@ -55,15 +65,17 @@ class User(AbstractBaseUser, PermissionsMixin):
     recovery_codes = models.JSONField(default=list)
 
     STATUS_CHOICES = [
-        ('pending_totp', 'Pending TOTP Enrollment'),
-        ('pending_approval', 'Pending HOA Approval'),
-        ('active', 'Active'),
-        ('blocked', 'Blocked'),
+        ("pending_totp", "Pending TOTP Enrollment"),
+        ("pending_approval", "Pending HOA Approval"),
+        ("active", "Active"),
+        ("blocked", "Blocked"),
     ]
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending_totp')
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default="pending_totp"
+    )
 
     is_hoa_admin = models.BooleanField(default=False)
-    is_staff = models.BooleanField(default=False)    # Django admin access
+    is_staff = models.BooleanField(default=False)  # Django admin access
     is_active = models.BooleanField(default=True)
 
     # Schema: {'push': False}
@@ -77,25 +89,27 @@ class User(AbstractBaseUser, PermissionsMixin):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['display_name', 'organization_id']
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = ["display_name", "organization_id"]
 
     objects = UserManager()
 
     class Meta:
-        unique_together = [('organization', 'email')]
+        unique_together = [("organization", "email")]
 
     def __str__(self):
-        return f'{self.display_name} <{self.email}>'
+        return f"{self.display_name} <{self.email}>"
 
 
 class Invite(models.Model):
-    organization = models.ForeignKey('parking.Organization', on_delete=models.CASCADE)
+    organization = models.ForeignKey("parking.Organization", on_delete=models.CASCADE)
     issued_by = models.ForeignKey(
-        User, on_delete=models.PROTECT, related_name='issued_invites'
+        User, on_delete=models.PROTECT, related_name="issued_invites"
     )
     code = models.CharField(max_length=64, unique=True)  # secrets.token_urlsafe(32)
-    unit_number = models.CharField(max_length=50, blank=True)  # pre-tag: pre-fills registration form
+    unit_number = models.CharField(
+        max_length=50, blank=True
+    )  # pre-tag: pre-fills registration form
     max_uses = models.PositiveIntegerField(default=1)
     use_count = models.PositiveIntegerField(default=0)
     expires_at = models.DateTimeField(null=True, blank=True)
@@ -104,13 +118,14 @@ class Invite(models.Model):
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
-        related_name='consumed_invite',
+        related_name="consumed_invite",
     )
     consumed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def is_valid(self):
         from django.utils.timezone import now
+
         if self.use_count >= self.max_uses:
             return False
         if self.expires_at and self.expires_at < now():
@@ -118,49 +133,53 @@ class Invite(models.Model):
         return True
 
     def __str__(self):
-        return f'Invite {self.code[:8]}… ({self.organization})'
+        return f"Invite {self.code[:8]}… ({self.organization})"
 
 
 class EmailOTP(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='email_otps')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="email_otps")
     code_hash = models.CharField(max_length=256)  # Argon2 hash of the 6-digit code
-    expires_at = models.DateTimeField()             # now() + 15 minutes
+    expires_at = models.DateTimeField()  # now() + 15 minutes
     consumed = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f'EmailOTP user={self.user_id} consumed={self.consumed}'
+        return f"EmailOTP user={self.user_id} consumed={self.consumed}"
 
 
 class AdminAuditLog(models.Model):
     organization = models.ForeignKey(
-        'parking.Organization',
+        "parking.Organization",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
     )
-    actor = models.ForeignKey(User, on_delete=models.PROTECT, related_name='audit_actions')
+    actor = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name="audit_actions"
+    )
     on_behalf_of = models.ForeignKey(
         User,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
-        related_name='audit_impersonations',
+        related_name="audit_impersonations",
     )  # impersonation sessions
     action = models.CharField(max_length=100)
     # Actions: pii_access, pii_erasure, admin_cancel, block, unblock, approve_user,
     #          approve_spot, impersonate_start, impersonate_end, admin_adjustment,
     #          impersonate_action
-    target_type = models.CharField(max_length=50, blank=True)  # 'user', 'booking', 'spot'
+    target_type = models.CharField(
+        max_length=50, blank=True
+    )  # 'user', 'booking', 'spot'
     target_id = models.PositiveIntegerField(null=True, blank=True)
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        indexes = [models.Index(fields=['organization', 'created_at'])]
+        indexes = [models.Index(fields=["organization", "created_at"])]
 
     def __str__(self):
-        return f'AuditLog {self.action} by {self.actor_id} at {self.created_at}'
+        return f"AuditLog {self.action} by {self.actor_id} at {self.created_at}"
 
     @classmethod
     def log(
@@ -168,9 +187,9 @@ class AdminAuditLog(models.Model):
         actor,
         action,
         organization=None,
-        target_type='',
+        target_type="",
         target_id=None,
-        notes='',
+        notes="",
         on_behalf_of=None,
     ):
         """
@@ -182,7 +201,7 @@ class AdminAuditLog(models.Model):
         return cls.objects.create(
             actor=actor,
             action=action,
-            organization=organization or getattr(actor, 'organization', None),
+            organization=organization or getattr(actor, "organization", None),
             target_type=target_type,
             target_id=target_id,
             notes=notes,

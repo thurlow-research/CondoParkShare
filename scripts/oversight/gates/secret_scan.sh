@@ -24,7 +24,7 @@ for arg in "$@"; do
 done
 
 if $CHECK_STAGED; then
-    mapfile -t FILES < <(git diff --cached --name-only --diff-filter=ACM 2>/dev/null | \
+    while IFS= read -r line; do FILES+=("$line"); done < <(git diff --cached --name-only --diff-filter=ACM 2>/dev/null | \
         grep -E '\.(py|txt|yaml|yml|json|env|cfg|ini|sh)$' || true)
 fi
 

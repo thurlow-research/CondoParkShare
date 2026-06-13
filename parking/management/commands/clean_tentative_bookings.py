@@ -17,17 +17,17 @@ from parking.models import Booking
 
 
 class Command(BaseCommand):
-    help = 'Cancel tentative bookings whose 5-minute hold has expired.'
+    help = "Cancel tentative bookings whose 5-minute hold has expired."
 
     def handle(self, *args, **options):
         updated = Booking.objects.filter(
-            status='tentative',
+            status="tentative",
             tentative_expires_at__lt=now(),
-        ).update(status='cancelled_admin')
+        ).update(status="cancelled_admin")
 
-        if options['verbosity'] >= 1:
+        if options["verbosity"] >= 1:
             self.stdout.write(
                 self.style.SUCCESS(
-                    f'clean_tentative_bookings: {updated} expired hold(s) cancelled.'
+                    f"clean_tentative_bookings: {updated} expired hold(s) cancelled."
                 )
             )

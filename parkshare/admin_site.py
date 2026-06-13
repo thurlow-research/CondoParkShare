@@ -20,16 +20,13 @@ class SuperuserAdminSite(admin.AdminSite):
     operator console to be superuser-only.
     """
 
-    site_header = 'CondoParkShare Operator Console'
-    site_title = 'CondoParkShare Operator'
-    index_title = 'Operator Console'
+    site_header = "CondoParkShare Operator Console"
+    site_title = "CondoParkShare Operator"
+    index_title = "Operator Console"
 
     def has_permission(self, request):
-        return (
-            super().has_permission(request)
-            and request.user.is_superuser
-        )
+        return super().has_permission(request) and request.user.is_superuser
 
 
 # Singleton instance used by operator_console/admin.py and parkshare/urls.py.
-operator_admin_site = SuperuserAdminSite(name='operator_admin')
+operator_admin_site = SuperuserAdminSite(name="operator_admin")

@@ -5,8 +5,8 @@ import django.contrib.postgres.fields.ranges
 import django.contrib.postgres.indexes
 import django.db.models.deletion
 from django.conf import settings
-from django.db import migrations, models
 from django.contrib.postgres.operations import BtreeGistExtension
+from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
@@ -20,78 +20,229 @@ class Migration(migrations.Migration):
     operations = [
         BtreeGistExtension(),
         migrations.CreateModel(
-            name='Organization',
+            name="Organization",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.CharField(max_length=255)),
-                ('hostname', models.CharField(max_length=255, unique=True)),
-                ('timezone', models.CharField(default='America/Los_Angeles', max_length=64)),
-                ('registration_mode', models.CharField(choices=[('invite_only', 'Invite Only'), ('approve', 'Approve'), ('both', 'Both')], default='invite_only', max_length=20)),
-                ('unit_count', models.PositiveIntegerField(blank=True, null=True)),
-                ('payer_model', models.CharField(default='free_forever', max_length=20)),
-                ('support_email', models.EmailField(max_length=254)),
-                ('launched_at', models.DateTimeField(blank=True, null=True)),
-                ('booking_buffer_hours', models.PositiveIntegerField(default=1)),
-                ('max_concurrent_bookings', models.PositiveIntegerField(default=1)),
-                ('max_booking_hours', models.PositiveIntegerField(default=168)),
-                ('booking_horizon_baseline_days', models.PositiveIntegerField(default=3)),
-                ('booking_horizon_max_days', models.PositiveIntegerField(default=30)),
-                ('listing_to_horizon_ratio', models.PositiveIntegerField(default=10)),
-                ('tier_metric_window_days', models.PositiveIntegerField(default=180)),
-                ('launch_grace_days', models.PositiveIntegerField(default=14)),
-                ('launch_grace_horizon_days', models.PositiveIntegerField(default=14)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("name", models.CharField(max_length=255)),
+                ("hostname", models.CharField(max_length=255, unique=True)),
+                (
+                    "timezone",
+                    models.CharField(default="America/Los_Angeles", max_length=64),
+                ),
+                (
+                    "registration_mode",
+                    models.CharField(
+                        choices=[
+                            ("invite_only", "Invite Only"),
+                            ("approve", "Approve"),
+                            ("both", "Both"),
+                        ],
+                        default="invite_only",
+                        max_length=20,
+                    ),
+                ),
+                ("unit_count", models.PositiveIntegerField(blank=True, null=True)),
+                (
+                    "payer_model",
+                    models.CharField(default="free_forever", max_length=20),
+                ),
+                ("support_email", models.EmailField(max_length=254)),
+                ("launched_at", models.DateTimeField(blank=True, null=True)),
+                ("booking_buffer_hours", models.PositiveIntegerField(default=1)),
+                ("max_concurrent_bookings", models.PositiveIntegerField(default=1)),
+                ("max_booking_hours", models.PositiveIntegerField(default=168)),
+                (
+                    "booking_horizon_baseline_days",
+                    models.PositiveIntegerField(default=3),
+                ),
+                ("booking_horizon_max_days", models.PositiveIntegerField(default=30)),
+                ("listing_to_horizon_ratio", models.PositiveIntegerField(default=10)),
+                ("tier_metric_window_days", models.PositiveIntegerField(default=180)),
+                ("launch_grace_days", models.PositiveIntegerField(default=14)),
+                ("launch_grace_horizon_days", models.PositiveIntegerField(default=14)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
             ],
         ),
         migrations.CreateModel(
-            name='ParkingSpot',
+            name="ParkingSpot",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('spot_number', models.CharField(max_length=50)),
-                ('notes', models.TextField(blank=True)),
-                ('status', models.CharField(choices=[('pending', 'Pending'), ('active', 'Active'), ('inactive', 'Inactive')], default='pending', max_length=20)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('organization', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='spots', to='parking.organization')),
-                ('owner', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='owned_spots', to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("spot_number", models.CharField(max_length=50)),
+                ("notes", models.TextField(blank=True)),
+                (
+                    "status",
+                    models.CharField(
+                        choices=[
+                            ("pending", "Pending"),
+                            ("active", "Active"),
+                            ("inactive", "Inactive"),
+                        ],
+                        default="pending",
+                        max_length=20,
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "organization",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="spots",
+                        to="parking.organization",
+                    ),
+                ),
+                (
+                    "owner",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="owned_spots",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
             options={
-                'unique_together': {('organization', 'spot_number')},
+                "unique_together": {("organization", "spot_number")},
             },
         ),
         migrations.CreateModel(
-            name='Booking',
+            name="Booking",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('time_range', django.contrib.postgres.fields.ranges.DateTimeRangeField()),
-                ('status', models.CharField(choices=[('tentative', 'Tentative'), ('confirmed', 'Confirmed'), ('active', 'Active'), ('completed', 'Completed'), ('cancelled_borrower', 'Cancelled by Borrower'), ('cancelled_owner', 'Cancelled by Owner'), ('cancelled_admin', 'Cancelled by Admin')], default='tentative', max_length=20)),
-                ('tentative_expires_at', models.DateTimeField(blank=True, null=True)),
-                ('cancel_reason', models.TextField(blank=True)),
-                ('penalty_hours', models.PositiveIntegerField(default=0)),
-                ('is_anonymized', models.BooleanField(default=False)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('borrower', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='bookings', to=settings.AUTH_USER_MODEL)),
-                ('organization', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, to='parking.organization')),
-                ('spot', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='bookings', to='parking.parkingspot')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "time_range",
+                    django.contrib.postgres.fields.ranges.DateTimeRangeField(),
+                ),
+                (
+                    "status",
+                    models.CharField(
+                        choices=[
+                            ("tentative", "Tentative"),
+                            ("confirmed", "Confirmed"),
+                            ("active", "Active"),
+                            ("completed", "Completed"),
+                            ("cancelled_borrower", "Cancelled by Borrower"),
+                            ("cancelled_owner", "Cancelled by Owner"),
+                            ("cancelled_admin", "Cancelled by Admin"),
+                        ],
+                        default="tentative",
+                        max_length=20,
+                    ),
+                ),
+                ("tentative_expires_at", models.DateTimeField(blank=True, null=True)),
+                ("cancel_reason", models.TextField(blank=True)),
+                ("penalty_hours", models.PositiveIntegerField(default=0)),
+                ("is_anonymized", models.BooleanField(default=False)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "borrower",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="bookings",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+                (
+                    "organization",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        to="parking.organization",
+                    ),
+                ),
+                (
+                    "spot",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="bookings",
+                        to="parking.parkingspot",
+                    ),
+                ),
             ],
             options={
-                'indexes': [django.contrib.postgres.indexes.GistIndex(fields=['time_range'], name='parking_boo_time_ra_4e181c_gist')],
-                'constraints': [django.contrib.postgres.constraints.ExclusionConstraint(condition=models.Q(('status__in', ['tentative', 'confirmed', 'active'])), expressions=[('spot', '='), ('time_range', '&&')], name='booking_no_overlap')],
+                "indexes": [
+                    django.contrib.postgres.indexes.GistIndex(
+                        fields=["time_range"], name="parking_boo_time_ra_4e181c_gist"
+                    )
+                ],
+                "constraints": [
+                    django.contrib.postgres.constraints.ExclusionConstraint(
+                        condition=models.Q(
+                            ("status__in", ["tentative", "confirmed", "active"])
+                        ),
+                        expressions=[("spot", "="), ("time_range", "&&")],
+                        name="booking_no_overlap",
+                    )
+                ],
             },
         ),
         migrations.CreateModel(
-            name='AvailabilityWindow',
+            name="AvailabilityWindow",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('time_range', django.contrib.postgres.fields.ranges.DateTimeRangeField()),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('organization', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, to='parking.organization')),
-                ('spot', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='availability_windows', to='parking.parkingspot')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "time_range",
+                    django.contrib.postgres.fields.ranges.DateTimeRangeField(),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "organization",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        to="parking.organization",
+                    ),
+                ),
+                (
+                    "spot",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="availability_windows",
+                        to="parking.parkingspot",
+                    ),
+                ),
             ],
             options={
-                'indexes': [django.contrib.postgres.indexes.GistIndex(fields=['time_range'], name='parking_ava_time_ra_74b463_gist')],
+                "indexes": [
+                    django.contrib.postgres.indexes.GistIndex(
+                        fields=["time_range"], name="parking_ava_time_ra_74b463_gist"
+                    )
+                ],
             },
         ),
     ]

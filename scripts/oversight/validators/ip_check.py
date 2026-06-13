@@ -102,9 +102,15 @@ def _npm_license(package: str) -> str | None:
         return None
 
 
-_SCANCODE_AVAILABLE = subprocess.run(
-    ["scancode", "--version"], capture_output=True
-).returncode == 0 if True else False
+def _check_scancode_available() -> bool:
+    try:
+        return subprocess.run(
+            ["scancode", "--version"], capture_output=True
+        ).returncode == 0
+    except FileNotFoundError:
+        return False
+
+_SCANCODE_AVAILABLE = _check_scancode_available()
 
 
 def check_dependency_licenses(file_paths: list[str]) -> list[dict]:

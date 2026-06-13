@@ -29,13 +29,15 @@ def send_relay_message(from_user, to_user, booking, body, reply_to=None):
     ``reply_to`` is an optional RelayMessage that this message is responding to;
     it is accepted for context but not stored (no in-app thread per design).
     """
-    from notifications.models import RelayMessage
-    from django.core.mail import send_mail
-    from django.urls import reverse
     import uuid
 
+    from django.core.mail import send_mail
+    from django.urls import reverse
+
+    from notifications.models import RelayMessage
+
     if not can_send_relay(from_user, booking):
-        raise ValueError('Message limit reached for this booking')
+        raise ValueError("Message limit reached for this booking")
 
     token = uuid.uuid4()
     expires_at = booking.time_range.upper
@@ -56,13 +58,13 @@ def send_relay_message(from_user, to_user, booking, body, reply_to=None):
     )
 
     send_mail(
-        subject=f'Message about spot {booking.spot.spot_number}',
+        subject=f"Message about spot {booking.spot.spot_number}",
         message=(
-            f'{body}\n\n'
-            f'— Reply to this message: {reply_url}\n'
-            f'(This link is valid until the booking ends.)'
+            f"{body}\n\n"
+            f"— Reply to this message: {reply_url}\n"
+            f"(This link is valid until the booking ends.)"
         ),
-        from_email=f'noreply@{booking.organization.hostname}',
+        from_email=f"noreply@{booking.organization.hostname}",
         recipient_list=[to_user.email],
         fail_silently=True,
     )

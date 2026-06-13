@@ -34,7 +34,7 @@ def is_spot_available(spot, requested_start, requested_end):
 
     # Check 2: no active booking overlaps the buffered range
     conflicts = spot.bookings.filter(
-        Q(status__in=['tentative', 'confirmed', 'active']),
+        Q(status__in=["tentative", "confirmed", "active"]),
         time_range__overlap=buffered,
     ).exists()
     return not conflicts
@@ -52,16 +52,15 @@ def get_available_slots(organization, requested_start, requested_end):
     req_range = DateTimeTZRange(requested_start, requested_end)
 
     conflict = Booking.objects.filter(
-        spot=OuterRef('pk'),
+        spot=OuterRef("pk"),
         time_range__overlap=buffered,
-        status__in=['tentative', 'confirmed', 'active'],
+        status__in=["tentative", "confirmed", "active"],
     )
 
     return (
-        ParkingSpot.objects
-        .filter(
+        ParkingSpot.objects.filter(
             organization=organization,
-            status='active',
+            status="active",
             availability_windows__time_range__contains=req_range,
         )
         .exclude(Exists(conflict))

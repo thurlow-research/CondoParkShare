@@ -43,8 +43,9 @@ if [[ ! -f "manage.py" ]]; then
 fi
 
 if $CHECK_ALL || [[ ${#FILES[@]} -eq 0 ]]; then
-    mapfile -t FILES < <(find . -name "*.py" \
-        -not -path "./.venv/*" -not -path "./.git/*" -not -path "./node_modules/*")
+    while IFS= read -r line; do FILES+=("$line"); done < <(find . -name "*.py" \
+        -not -path "./.venv/*" -not -path "./scripts/*" \
+        -not -path "./.git/*" -not -path "./node_modules/*")
 fi
 
 if [[ ${#FILES[@]} -eq 0 ]]; then

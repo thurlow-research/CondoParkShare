@@ -5,26 +5,25 @@ notify(event, booking) routes events to the correct recipients via email
 and (optionally) web push.  See TECHNICAL-DESIGN.md §10.
 """
 
-
 OWNER_EVENTS = {
-    'booking_confirmed',
-    'booking_completed',
-    'warning_30',
-    'warning_15',
-    'booking_cancelled_by_borrower',
-    'booking_cancelled_by_owner',
-    'early_release_confirmed',
+    "booking_confirmed",
+    "booking_completed",
+    "warning_30",
+    "warning_15",
+    "booking_cancelled_by_borrower",
+    "booking_cancelled_by_owner",
+    "early_release_confirmed",
 }
 
 BORROWER_EVENTS = {
-    'booking_confirmed',
-    'booking_starts',
-    'booking_completed',
-    'warning_30',
-    'warning_15',
-    'booking_cancelled_by_borrower',
-    'booking_cancelled_by_owner',
-    'early_release_confirmed',
+    "booking_confirmed",
+    "booking_starts",
+    "booking_completed",
+    "warning_30",
+    "warning_15",
+    "booking_cancelled_by_borrower",
+    "booking_cancelled_by_owner",
+    "early_release_confirmed",
 }
 
 
@@ -42,7 +41,7 @@ def notify(event, booking, **kwargs):
 def _send(user, event, booking, **kwargs):
     """Route a notification to email and optionally push for a single user."""
     _send_email(user, event, booking, **kwargs)
-    if user.notification_prefs.get('push') and user.push_subscriptions.exists():
+    if user.notification_prefs.get("push") and user.push_subscriptions.exists():
         _send_push(user, event, booking)
 
 
@@ -63,21 +62,22 @@ def _send_email(user, event, booking, **kwargs):
 def _send_push(user, event, booking):
     """Send a web push notification via pywebpush (no-op if pywebpush not installed)."""
     try:
-        from pywebpush import webpush, WebPushException
-        from django.conf import settings
         import json
 
-        payload = json.dumps({'event': event, 'booking_id': booking.pk})
+        from django.conf import settings
+        from pywebpush import WebPushException, webpush
+
+        payload = json.dumps({"event": event, "booking_id": booking.pk})
         for sub in user.push_subscriptions.all():
             try:
                 webpush(
                     subscription_info={
-                        'endpoint': sub.endpoint,
-                        'keys': {'p256dh': sub.p256dh, 'auth': sub.auth},
+                        "endpoint": sub.endpoint,
+                        "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
                     },
                     data=payload,
                     vapid_private_key=settings.VAPID_PRIVATE_KEY,
-                    vapid_claims={'sub': f'mailto:{settings.VAPID_ADMIN_EMAIL}'},
+                    vapid_claims={"sub": f"mailto:{settings.VAPID_ADMIN_EMAIL}"},
                 )
             except WebPushException:
                 pass  # individual push failure does not abort
@@ -90,7 +90,6 @@ def _render_notification(event, booking, recipient, **kwargs):
     org = booking.organization
     spot = booking.spot
 
-    from django.utils import timezone
     import zoneinfo
 
     tz = zoneinfo.ZoneInfo(org.timezone)
@@ -102,36 +101,32 @@ def _render_notification(event, booking, recipient, **kwargs):
     )
 
     subjects = {
-        'booking_confirmed':             f'Booking confirmed — {spot.spot_number}',
-        'booking_starts':                f'Your booking at {spot.spot_number} has started',
-        'booking_completed':             f'Booking at {spot.spot_number} complete',
-        'warning_30':                    f'30 minutes left — {spot.spot_number}',
-        'warning_15':                    f'15 minutes left — {spot.spot_number}',
-        'booking_cancelled_by_borrower': f'Booking cancelled — {spot.spot_number}',
-        'booking_cancelled_by_owner':    f'Your booking was cancelled — {spot.spot_number}',
-        'early_release_confirmed':       f'Spot released early — {spot.spot_number}',
+        "booking_confirmed": f"Booking confirmed — {spot.spot_number}",
+        "booking_starts": f"Your booking at {spot.spot_number} has started",
+        "booking_completed": f"Booking at {spot.spot_number} complete",
+        "warning_30": f"30 minutes left — {spot.spot_number}",
+        "warning_15": f"15 minutes left — {spot.spot_number}",
+        "booking_cancelled_by_borrower": f"Booking cancelled — {spot.spot_number}",
+        "booking_cancelled_by_owner": f"Your booking was cancelled — {spot.spot_number}",
+        "early_release_confirmed": f"Spot released early — {spot.spot_number}",
     }
     bodies = {
-        'booking_confirmed':
-            f'{spot.spot_number} is booked for {time_str}.',
-        'booking_starts':
-            f'Your booking at {spot.spot_number} starts now. {time_str}.',
-        'booking_completed':
-            f'Booking at {spot.spot_number} is complete. {time_str}.',
-        'warning_30':
-            f'30 minutes remaining on {spot.spot_number}. End: {local_end.strftime("%I:%M %p %Z")}.',
-        'warning_15':
-            f'15 minutes remaining on {spot.spot_number}. End: {local_end.strftime("%I:%M %p %Z")}.',
-        'booking_cancelled_by_borrower':
-            f'Booking at {spot.spot_number} ({time_str}) was cancelled by the resident.',
-        'booking_cancelled_by_owner': (
-            f'Your booking at {spot.spot_number} ({time_str}) was cancelled by the owner.'
-            + (f' Reason: {booking.cancel_reason}' if booking.cancel_reason else '')
+        "booking_confirmed": f"{spot.spot_number} is booked for {time_str}.",
+        "booking_starts": f"Your booking at {spot.spot_number} starts now. {time_str}.",
+        "booking_completed": f"Booking at {spot.spot_number} is complete. {time_str}.",
+        "warning_30": f'30 minutes remaining on {spot.spot_number}. End: {local_end.strftime("%I:%M %p %Z")}.',
+        "warning_15": f'15 minutes remaining on {spot.spot_number}. End: {local_end.strftime("%I:%M %p %Z")}.',
+        "booking_cancelled_by_borrower": f"Booking at {spot.spot_number} ({time_str}) was cancelled by the resident.",
+        "booking_cancelled_by_owner": (
+            f"Your booking at {spot.spot_number} ({time_str}) was cancelled by the owner."
+            + (f" Reason: {booking.cancel_reason}" if booking.cancel_reason else "")
         ),
-        'early_release_confirmed':
-            f'Spot {spot.spot_number} released early. Updated end: {local_end.strftime("%I:%M %p %Z")}.',
+        "early_release_confirmed": (
+            f"Spot {spot.spot_number} released early. "
+            f'Updated end: {local_end.strftime("%I:%M %p %Z")}.'
+        ),
     }
 
-    subject = subjects.get(event, 'CondoParkShare notification')
-    body = bodies.get(event, '')
+    subject = subjects.get(event, "CondoParkShare notification")
+    body = bodies.get(event, "")
     return subject, body
