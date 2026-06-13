@@ -47,3 +47,7 @@ htmlcov/
 
 # transient MCP browser artifacts
 .playwright-mcp/
+
+# mutmut mutation testing output
+mutants/
+.mutmut-cache
