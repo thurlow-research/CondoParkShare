@@ -48,6 +48,10 @@ AUTH_USER_MODEL = "accounts.User"
 # correct for single-process dev/test.  Production deployments must configure Redis via
 # CACHES and remove this suppression.
 SILENCED_SYSTEM_CHECKS = ["auth.E003", "django_ratelimit.E003", "django_ratelimit.W001"]
+# auth.E003 — email USERNAME_FIELD uniqueness is enforced via unique_together, not column UNIQUE.
+# django_ratelimit.E003/W001 — locmem cache is not shared across workers; acceptable for
+# dev/test (single-process). production.py overrides this list to restore these checks
+# and requires a shared cache (Redis) via CACHE_URL.
 
 # ---------------------------------------------------------------------------
 # Applications
@@ -93,7 +97,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django_otp.middleware.OTPMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
-    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    # XFrameOptionsMiddleware removed — frame-ancestors in CSP is the authoritative control.
     "parkshare.middleware.ImpersonationMiddleware",
 ]
 
@@ -239,14 +243,13 @@ SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 SECURE_HSTS_SECONDS = 31536000
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-X_FRAME_OPTIONS = "DENY"
-
 # ---------------------------------------------------------------------------
 # Content Security Policy (django-csp 4.x)
 # ---------------------------------------------------------------------------
 # Google Fonts requires fonts.googleapis.com for stylesheets and
 # fonts.gstatic.com for font files.  HTMX is self-hosted; no external scripts.
-# frame-ancestors replaces X_FRAME_OPTIONS at the CSP layer.
+# frame-ancestors: 'none' is the authoritative clickjacking control (CSP Level 3).
+# XFrameOptionsMiddleware and X_FRAME_OPTIONS are omitted — redundant with frame-ancestors.
 
 CONTENT_SECURITY_POLICY = {
     "DIRECTIVES": {
