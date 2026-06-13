@@ -259,27 +259,8 @@ class AdminAuditLogAdmin(admin.ModelAdmin):
     ]
     list_filter = ["action", "organization"]
     search_fields = ["actor__email", "notes"]
-    readonly_fields = [
-        f.name
-        for f in AdminAuditLog._meta.get_fields()
-        if hasattr(f, "column")
-        or f.__class__.__name__
-        in (
-            "AutoField",
-            "BigAutoField",
-            "ForeignKey",
-            "DateTimeField",
-            "CharField",
-            "TextField",
-            "PositiveIntegerField",
-        )
-    ]
-
     def get_readonly_fields(self, request, obj=None):
-        """Make every field on the model read-only."""
-        return [
-            f.name for f in self._meta.model._meta.get_fields() if hasattr(f, "name")
-        ]
+        return [f.name for f in AdminAuditLog._meta.concrete_fields]
 
     def has_add_permission(self, request):
         return False
