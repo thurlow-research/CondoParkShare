@@ -1,6 +1,6 @@
 role: test-system
 agent: system-test
 status: NOT_APPLICABLE
-signed_at: 2026-06-13T04:00:59Z          # informational — the gate uses the git commit time
-head_at_signing: 4c7ae32
-note: Docs-only session handoff summary; no code in this role's scope. Interim per HOS#22.
+signed_at: 2026-06-13T13:30:00Z          # informational — the gate uses the git commit time
+head_at_signing: e897c38
+note: No system-level flow changed.
