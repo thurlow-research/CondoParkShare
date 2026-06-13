@@ -49,6 +49,10 @@ except ImportError:  # pragma: no cover - surfaced as an env error
     sys.exit(2)
 
 SIGNOFFS_DIR = "signoffs"
+# NOTE: NOT_APPLICABLE/NA is a project extension, NOT part of the HOS taxonomy
+# (APPROVED/CONDITIONAL/ESCALATED). It is interim until HumanOversightSystem#22
+# (a human-approved gate override) lands; on the next HOS drop, drop NA and
+# re-add ESCALATED. See signoffs/README.md.
 VALID_STATUSES = {"APPROVED", "CONDITIONAL", "NOT_APPLICABLE", "NA"}
 STAMP_SUFFIX = ".stamp"
 
