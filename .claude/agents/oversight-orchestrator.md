@@ -64,8 +64,24 @@ sections of docs/design/TECHNICAL-DESIGN.md. Include verbatim spec constraints
 ```
 
 **Full handoff** → `.claudetmp/oversight/step{N}-handoff.md`
-(Used as the PR body. Contains everything including internal review summary — for the human only.)
+(Used as the PR body. The AI attribution notice must be the first section — see below.)
 ```markdown
+## 🤖 AI-Submitted Pull Request
+
+This PR was **created and submitted by an AI agent**. A human did not manually
+write or submit this PR. All supporting review artifacts are automated.
+
+| | |
+|---|---|
+| **Agent** | `oversight-orchestrator` |
+| **Model** | `claude-sonnet-4-6` |
+| **Submitted** | {YYYY-MM-DD} |
+| **Oversight** | Internal review chain approved (code/security/privacy/ui/a11y); second review complete; panel review required before merge. |
+
+Human approval is required before merge — branch protection enforces this.
+
+---
+
 # Handoff — Step {N}
 Validated tier: {tier}  |  Composite score: {score}
 
@@ -85,7 +101,7 @@ Validated tier: {tier}  |  Composite score: {score}
 **2. Open the PR using the full handoff:**
 ```bash
 gh pr create \
-  --title "Step {N}: {step name}" \
+  --title "[AI: oversight-orchestrator] Step {N}: {step name}" \
   --body "$(cat .claudetmp/oversight/step{N}-handoff.md)"
 ```
 
@@ -103,7 +119,7 @@ The step has items the human must verify before merge, but is otherwise ready.
 
 **1. Write the handoff document** (same as PROCEED).
 
-**2. Open the PR** with the handoff document as body PLUS a "Human Review Required Before Merge" section appended:
+**2. Open the PR** with the AI attribution notice first (same format as PROCEED), the handoff document, and a "Human Review Required Before Merge" section appended last:
 
 ```markdown
 ## ⚠ Human Review Required Before Merge
@@ -117,7 +133,14 @@ a resolved finding or confidence gap that automated review cannot fully clear.
 *These are in addition to panel findings, which will be posted as review threads.*
 ```
 
-**3. Print the panel command** (same as PROCEED).
+**3. Title and open the PR:**
+```bash
+gh pr create \
+  --title "[AI: oversight-orchestrator] Step {N}: {step name}" \
+  --body "$(cat .claudetmp/oversight/step{N}-handoff.md)"
+```
+
+**4. Print the panel command** (same as PROCEED).
 
 ---
 

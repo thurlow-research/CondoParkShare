@@ -192,6 +192,36 @@ prompts/auth/middleware.v2.md   ← current
 
 The `prompts/` directory must be committed to git. It is not ephemeral.
 
+### Pull Request Attribution
+
+When any AI — a named agent or Claude Code directly — opens a pull request using `gh pr create`, the PR **must** be unambiguously identified as AI-submitted.
+
+**Title format — three cases:**
+
+| Who opens the PR | Title prefix |
+|---|---|
+| A named agent (e.g. `oversight-orchestrator`) | `[AI: oversight-orchestrator]` |
+| Claude Code directly (no sub-agent) | `[AI: claude]` |
+| A human | *(no prefix)* |
+
+**Body — required section at the very top:**
+```markdown
+## 🤖 AI-Submitted Pull Request
+
+This PR was **created and submitted by AI**. A human did not manually write or submit this PR.
+
+| | |
+|---|---|
+| **Submitted by** | `{agent-name}` (or `claude` when no sub-agent) |
+| **Model** | `{model-id}` |
+| **Submitted** | {YYYY-MM-DD} |
+| **Human review required** | {yes — and why} |
+
+Human approval is required before merge — see branch protection rules.
+```
+
+This section must appear before all other content. Never omit or abbreviate it.
+
 ### Git Commit Trailer Convention
 
 For every commit containing AI-generated code, append trailers:
