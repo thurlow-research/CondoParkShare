@@ -1,6 +1,6 @@
 role: a11y
 agent: a11y-reviewer
-status: APPROVED
-signed_at: 2026-06-13T14:00:00Z          # informational — the gate uses the git commit time
-head_at_signing: 927aa8f
-note: WCAG AA issues reviewed and fixed in Phase 3d overnight sweep.
+status: NOT_APPLICABLE
+signed_at: 2026-06-13T14:10:00Z          # informational
+head_at_signing: 42bf248
+note: No a11y-scope changes.
