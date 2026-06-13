@@ -95,32 +95,83 @@ This is the research hypothesis in action: **risk-stratified flagging** routes 1
 
 ## 6. The Pipeline (Steps)
 
-How a change flows from prompt to merge. Deterministic, cheap checks run first (fail fast); expensive AI/human review is spent only where risk warrants.
+The pipeline has two tiers with different cadences: an **inner development loop** that repeats with every incremental prompt, and an **outer merge pipeline** that runs once per logical feature or fix. Conflating them is the most common source of accumulated technical debt in AI-assisted development.
+
+### Inner development loop (repeats N times per feature)
+
+Each prompt-to-verify cycle must leave the codebase in a working state before the next prompt is issued. **Never prompt for the next change on a broken working tree.** Without this invariant, each change builds on unverified output from the previous one — a "house of cards" structure that becomes increasingly difficult to debug as the stack grows.
 
 ```
-1. PROMPT            Author is prompted. The prompt is a first-class artifact (§7).
-2. AUTHOR + SELF-FLAG  Opus generates code, classifies risk, flags review items,
-                       states confidence, warns on hallucination surface.          [Layer 1 ✅]
-3. CAPTURE           For MEDIUM+: ./scripts/capture_prompt.sh records the prompt
-                       artifact in prompts/ (mirrors the source path).             [✅]
-4. COMMIT            Commit with provenance trailers: Prompt-Artifact / AI-Model /
-                       AI-Risk. Provenance is queryable via prompt_audit.sh.        [✅]
-5. PR                Open a PR. main is protected: ≥1 approval + all review threads
-                       must be resolved before merge.                               [✅]
-6. CHEAP GATES       (CI) lint, types, build, unit tests, secret scan, npm audit.
-                       Fail fast before spending review tokens.                      [🔧 per-project]
-7. TRIAGE            Determine final risk level (§5).                                [🔧 run_panel.sh]
-8. EXPENSIVE GATES   Gated by risk: e2e/system tests, coverage, mutation testing.    [🔧]
-9. AI PANEL          Independent reviewers (by risk) run LOCALLY via subscription
-                       CLIs, each with a lens; adversary at HIGH/CRITICAL. Findings
-                       posted to the PR as line-level threads.                        [🔧 run_panel.sh]
-10. ARBITER          Synthesizes reviews → verdict; requests changes or escalates.   [🔧 run_panel.sh]
-11. HUMAN GATE       Mandatory at HIGH/CRITICAL; PR conversation-resolution forces
-                       each finding to be addressed before merge.                    [✅ gate / 🔧 panel]
-12. MERGE → ARCHIVE  Raw review/turn logs archived; summaries regenerable (§7).      [🔧]
+┌─────────────────────────────────────────────────────────────┐
+│  INNER LOOP  (repeat until feature is complete)             │
+│                                                             │
+│  1. PROMPT          Issue one focused, scoped prompt.       │
+│                     The prompt is a first-class artifact    │
+│                     (§7). Scope it to one logical change.   │
+│                                                             │
+│  2. AUTHOR + SELF-FLAG  Agent generates code, classifies    │
+│                     risk, flags review items, states        │
+│                     confidence, warns on hallucination.     │
+│                     [Layer 1 ✅]                            │
+│                                                             │
+│  3. VERIFY          Run cheap gates LOCALLY before          │
+│                     accepting the change:                   │
+│                     lint · type-check · unit tests in scope │
+│                     secret scan                             │
+│                     If any gate fails: fix before           │
+│                     issuing the next prompt. Do not         │
+│                     accumulate failures across prompts.     │
+│                     [per-project, run by developer or CI]  │
+│                                                             │
+│  4. CAPTURE         For MEDIUM+: capture_prompt.sh records  │
+│                     the prompt artifact. [✅]               │
+│                                                             │
+│  └──────── back to 1 for next incremental change ──────────┘
+```
+
+> **Why the inner loop matters:** AI agents have no memory of the codebase state from one prompt to the next beyond what is in the current context. An agent asked to "add X" on a tree where Y is already broken will produce code that looks correct but depends on a broken foundation. By the time CI runs (after the PR opens), the failure stack may span five prompts and require significant archaeology to untangle. Local verification after each prompt is the only reliable way to keep the codebase in a known-good state throughout development.
+
+### Outer merge pipeline (runs once per logical change set)
+
+Once the inner loop produces a complete, verified working state, the change moves through the outer pipeline:
+
+```
+5. COMMIT            Commit the verified working state with provenance
+                     trailers: Prompt-Artifact / AI-Model / AI-Risk.
+                     Provenance is queryable via prompt_audit.sh.        [✅]
+
+6. PR                Open a PR. main is protected: ≥1 approval + all
+                     review threads must be resolved before merge.        [✅]
+
+7. CHEAP GATES       (CI) lint, types, build, unit tests, secret scan,
+                     npm audit. These are a safety net — if the inner
+                     loop ran correctly, CI should be green. A CI
+                     failure here is a signal the inner loop was skipped. [🔧 per-project]
+
+8. TRIAGE            Determine final risk level (§5).                     [🔧 run_panel.sh]
+
+9. EXPENSIVE GATES   Gated by risk: e2e/system tests, coverage,
+                     mutation testing.                                     [🔧]
+
+10. AI PANEL         Independent reviewers (by risk) run LOCALLY via
+                     subscription CLIs, each with a lens; adversary at
+                     HIGH/CRITICAL. Findings posted to the PR as
+                     line-level threads.                                   [🔧 run_panel.sh]
+
+11. ARBITER          Synthesizes reviews → verdict; requests changes
+                     or escalates.                                         [🔧 run_panel.sh]
+
+12. HUMAN GATE       Mandatory at HIGH/CRITICAL; PR conversation-
+                     resolution forces each finding to be addressed
+                     before merge.                                         [✅ gate / 🔧 panel]
+
+13. MERGE → ARCHIVE  Raw review/turn logs archived; summaries
+                     regenerable (§7).                                     [🔧]
 ```
 
 **Why the panel runs locally, not in CI:** the subscription CLIs authenticate interactively (browser OAuth that lives on your machine); CI runners can't hold that session. So CI handles the deterministic gates + Copilot's native PR review, while the cross-vendor AI panel runs from a local command and **posts its findings to the PR**. The PR stays the auditable record.
+
+**CI cheap gates as a diagnostic signal:** if CI fails on a gate that the inner loop should have caught (lint, type errors, unit tests), that is evidence the inner loop was skipped or the verify step was incomplete. Track CI-caught-but-inner-loop-missed failures as a process health metric — a rising rate indicates the verify step is being skipped under time pressure.
 
 ---
 
@@ -153,6 +204,14 @@ See [`AGENTS.md` → Prompts-as-Artifact Discipline](AGENTS.md) for the authorit
 | **`scripts/oversight/validators/ip_check.py`** | IP/provenance validator. Level 1: dependency license gate (ScanCode Toolkit, PyPI/npm API fallback). Level 2: prompt artifact clean-room verification. Level 3: regurgitation stub (references ai-gen-code-search). | Level 1+2 ✅ / Level 3 🔧 |
 | **`scripts/oversight/validators/prompt_audit_risk.py`** | Prompt ambiguity scoring (question density, hedging language, TBDs, implicit assumptions) + fidelity surface (code/prompt ratio, unmentioned functions). Reads `Prompt-Artifact:` git trailers. | ✅ |
 | **`audit/oversight-log.jsonl`** | Append-only structured event log committed to the current branch. Covers risk assessments, sign-offs, evaluator decisions, second reviews, panel runs, human authorizations, merges. Queryable with `jq`. | ✅ |
+| **`scripts/framework/install.sh`** | Installs or updates the agent pipeline framework in a consumer project repo. Interactive: creates dirs, copies agent files, collects project-specific config values, writes `config.sh`, runs static check. Idempotent — re-running preserves existing config. | ✅ |
+| **`scripts/framework/check_agents_static.sh`** | Fast structural consistency checker for the agent pipeline (no AI). Checks: agent files exist for every name referenced in docs, file paths in agent prompts are valid, escalation targets resolve, project-start output doc paths are consistent. Suitable for pre-commit and CI. | ✅ |
+| **`scripts/framework/validate_agents.sh`** | AI-powered semantic review of agent definitions and docs. agy lens: consistency and completeness (loops, dead ends, cross-file mismatches). codex lens: adversarial gap-finding (scope-creep vectors, human-gate bypasses, missing exit conditions). Project-agnostic via `config.sh`. | ✅ |
+| **`scripts/framework/validate_docs.sh`** | AI-powered documentation coverage validator. Catches the omission class of doc bug: agent file says X and Y, doc says only X. Reads `doc-patterns.md` (known bug patterns) and `decisions.md` (verification criteria). | ✅ |
+| **`scripts/framework/validate_spec_compliance.sh`** | Governance requirements compliance checker. Verifies the pipeline satisfies METHODOLOGY.md and AGENTS.md: cross-vendor independence, risk-tiered thresholds, human gates, model tier assignments, loop exit conditions, mandatory self-flagging behaviors. Also checks `decisions.md` verification criteria. | ✅ |
+| **`scripts/framework/run_framework_validation.sh`** | Top-level runner for all 4 framework validation phases. The single command to run before committing any framework change. | ✅ |
+| **`scripts/framework/decisions.md`** | Durable record of architectural decisions made during development sessions. Each entry has a verification criterion checked by `validate_spec_compliance.sh`. Replaces chat history as session-to-session memory. | ✅ |
+| **`scripts/framework/doc-patterns.md`** | Known documentation omission patterns discovered during sessions. Read by `validate_docs.sh` so previously-discovered bug classes are actively checked for recurrence. | ✅ |
 
 **Scope rule for the bootstrap:** it installs *only* what the oversight system needs (agent CLIs, their Node runtime, `gh`, Python analysis packages). Project frameworks/libraries are out of scope — each project installs its own.
 
