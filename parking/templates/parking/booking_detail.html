@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}Booking #{{ booking.pk }} — CondoParkShare{% endblock %}
+
+{% block content %}
+<div style="max-width:600px">
+  <nav aria-label="Breadcrumb" style="font-size:13px;color:var(--text-muted);margin-bottom:12px">
+    <a href="{% url 'booking_list' %}" style="color:var(--meadow-ink);text-decoration:none">My bookings</a>
+    <span aria-hidden="true"> / </span>
+    <span aria-current="page">Booking #{{ booking.pk }}</span>
+  </nav>
+
+  <div class="page-header">
+    <h1>Booking details</h1>
+  </div>
+
+  <div class="spot" style="margin-bottom:24px">
+    <div class="row">
+      <span class="spot-id">
+        <span class="tag mono">{{ booking.spot.spot_number }}</span>
+        {{ booking.spot.location_detail|default:"" }}
+      </span>
+      {% if booking.status == 'tentative' or booking.status == 'confirmed' or booking.status == 'active' %}
+        <span class="badge badge-active"><span class="dot" aria-hidden="true"></span> Confirmed</span>
+      {% elif booking.status == 'completed' %}
+        <span class="badge badge-complete"><span class="chk" aria-hidden="true">✓</span> Completed</span>
+      {% else %}
+        <span class="badge badge-danger"><span class="dot" aria-hidden="true"></span> Cancelled</span>
+      {% endif %}
+    </div>
+
+    <dl style="display:grid;grid-template-columns:max-content 1fr;gap:10px 24px;margin:0;font-size:14px">
+      <dt style="color:var(--text-muted);font-weight:600">From</dt>
+      <dd style="margin:0" class="mono">
+        {{ booking.time_range.lower|date:"l, d F Y" }} at {{ booking.time_range.lower|time:"H:i" }}
+      </dd>
+
+      <dt style="color:var(--text-muted);font-weight:600">Until</dt>
+      <dd style="margin:0" class="mono">
+        {{ booking.time_range.upper|date:"l, d F Y" }} at {{ booking.time_range.upper|time:"H:i" }}
+      </dd>
+
+      {% if is_owner %}
+        <dt style="color:var(--text-muted);font-weight:600">Borrower</dt>
+        <dd style="margin:0">
+          {% if booking.borrower %}
+            {{ booking.borrower.display_name }}
+          {% else %}
+            <span style="color:var(--text-muted)">Account removed</span>
+          {% endif %}
+        </dd>
+      {% endif %}
+
+      {% if is_borrower %}
+        <dt style="color:var(--text-muted);font-weight:600">Spot owner</dt>
+        <dd style="margin:0">{{ booking.spot.owner.display_name }}</dd>
+      {% endif %}
+
+      {% if booking.cancel_reason %}
+        <dt style="color:var(--text-muted);font-weight:600">Cancellation reason</dt>
+        <dd style="margin:0;color:var(--clay-ink)">{{ booking.cancel_reason }}</dd>
+      {% endif %}
+    </dl>
+  </div>
+
+  {% if booking.status == 'confirmed' or booking.status == 'active' %}
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      {% if is_borrower %}
+        <a href="{% url 'booking_release' booking.pk %}" class="btn btn-ghost">Release early</a>
+        <a href="{% url 'booking_cancel' booking.pk %}" class="btn btn-ghost" style="color:var(--clay-ink);border-color:var(--line)">
+          Cancel booking
+        </a>
+      {% elif is_owner %}
+        <a href="{% url 'booking_cancel' booking.pk %}" class="btn btn-ghost" style="color:var(--clay-ink);border-color:var(--line)">
+          Cancel booking
+        </a>
+      {% endif %}
+    </div>
+  {% else %}
+    <a href="{% url 'booking_list' %}" class="btn btn-ghost">Back to bookings</a>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}Spot {{ spot.spot_number }} availability — CondoParkShare{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+  <div>
+    <nav aria-label="Breadcrumb" style="font-size:13px;color:var(--text-muted);margin-bottom:8px">
+      <a href="{% url 'spot_list' %}" style="color:var(--meadow-ink);text-decoration:none">My spots</a>
+      <span aria-hidden="true"> / </span>
+      <span aria-current="page" class="mono">{{ spot.spot_number }}</span>
+    </nav>
+    <h1 style="font-size:var(--fs-h2)">
+      Spot <span class="mono" style="color:var(--pine)">{{ spot.spot_number }}</span>
+    </h1>
+    <p>{{ spot.location_detail|default:"Manage availability and see upcoming bookings" }}</p>
+  </div>
+  <a href="{% url 'availability_add' spot.pk %}" class="btn btn-primary">
+    Add availability
+  </a>
+</div>
+
+<div style="display:grid;gap:32px;grid-template-columns:1fr 1fr" class="availability-grid">
+
+  <section aria-labelledby="windows-heading">
+    <h2 id="windows-heading" style="font-size:16px;font-weight:700;color:var(--pine);margin-bottom:16px">
+      Upcoming availability
+    </h2>
+    {% if future_windows %}
+      <ul style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px">
+        {% for window in future_windows %}
+          <li class="card" style="padding:16px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+              <div>
+                <div class="mono" style="font-size:14px;color:var(--ink);font-weight:500">
+                  {{ window.time_range.lower|date:"D, d M" }}
+                  {{ window.time_range.lower|time:"H:i" }}
+                  &ndash;
+                  {{ window.time_range.upper|date:"D, d M" }}
+                  {{ window.time_range.upper|time:"H:i" }}
+                </div>
+              </div>
+              <form method="post" action="{% url 'availability_remove' spot.pk window.pk %}">
+                {% csrf_token %}
+                <button
+                  type="submit"
+                  class="btn btn-ghost"
+                  style="font-size:13px;padding:6px 12px;color:var(--slate)"
+                  aria-label="Remove this availability window"
+                  onclick="return confirm('Remove this availability window?')"
+                >
+                  Remove
+                </button>
+              </form>
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <div class="card" style="text-align:center;padding:32px;color:var(--text-muted)">
+        <p style="margin:0;font-size:14px">No upcoming availability windows.</p>
+        <a href="{% url 'availability_add' spot.pk %}" style="color:var(--meadow-ink);font-size:14px;margin-top:8px;display:block">
+          Add your first window
+        </a>
+      </div>
+    {% endif %}
+  </section>
+
+  <section aria-labelledby="bookings-heading">
+    <h2 id="bookings-heading" style="font-size:16px;font-weight:700;color:var(--pine);margin-bottom:16px">
+      Upcoming bookings
+    </h2>
+    {% if upcoming_bookings %}
+      <ul style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px">
+        {% for booking in upcoming_bookings %}
+          <li class="spot">
+            <div class="row">
+              <span style="font-size:14px;font-weight:600;color:var(--ink)">
+                {{ booking.borrower.display_name }}
+              </span>
+              <span class="badge badge-booked"><span class="dot" aria-hidden="true"></span> Booked</span>
+            </div>
+            <div class="mono when" style="font-size:13px">
+              {{ booking.time_range.lower|date:"D, d M" }}
+              {{ booking.time_range.lower|time:"H:i" }}
+              &ndash;
+              {{ booking.time_range.upper|date:"D, d M" }}
+              {{ booking.time_range.upper|time:"H:i" }}
+            </div>
+            <a href="{% url 'booking_detail' booking.pk %}" style="font-size:13px;color:var(--meadow-ink)">View booking</a>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <div class="card" style="text-align:center;padding:32px;color:var(--text-muted)">
+        <p style="margin:0;font-size:14px">No upcoming bookings for this spot.</p>
+      </div>
+    {% endif %}
+  </section>
+
+</div>
+
+<style>
+  @media (max-width:640px) {
+    .availability-grid { grid-template-columns: 1fr; }
+  }
+</style>
+{% endblock %}

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}Your profile — CondoParkShare{% endblock %}
+
+{% block content %}
+<div style="max-width:640px">
+  <div class="page-header">
+    <h1>Your profile</h1>
+    <p>Update your name, email, and security settings.</p>
+  </div>
+
+  <div class="card" style="margin-bottom:24px">
+    <h2 style="font-size:16px;font-weight:700;color:var(--pine);margin-bottom:16px">Account</h2>
+
+    <dl style="display:grid;grid-template-columns:max-content 1fr;gap:10px 24px;margin:0">
+      <dt style="color:var(--text-muted);font-size:13px;font-weight:600">Name</dt>
+      <dd style="margin:0;font-weight:500">{{ user.display_name }}</dd>
+
+      <dt style="color:var(--text-muted);font-size:13px;font-weight:600">Email</dt>
+      <dd style="margin:0;font-size:15px" class="mono">{{ user.email }}</dd>
+
+      <dt style="color:var(--text-muted);font-size:13px;font-weight:600">Status</dt>
+      <dd style="margin:0">
+        {% if user.status == 'active' %}
+          <span class="badge badge-active"><span class="dot" aria-hidden="true"></span> Active</span>
+        {% elif user.status == 'pending_totp' %}
+          <span class="badge badge-pending"><span class="ring" aria-hidden="true"></span> Pending setup</span>
+        {% elif user.status == 'pending_approval' %}
+          <span class="badge badge-pending"><span class="ring" aria-hidden="true"></span> Pending approval</span>
+        {% elif user.status == 'blocked' %}
+          <span class="badge badge-danger"><span class="dot" aria-hidden="true"></span> Blocked</span>
+        {% else %}
+          <span class="badge badge-pending"><span class="ring" aria-hidden="true"></span> {{ user.status }}</span>
+        {% endif %}
+      </dd>
+
+      {% if user.phone %}
+        <dt style="color:var(--text-muted);font-size:13px;font-weight:600">Phone</dt>
+        <dd style="margin:0" class="mono">{{ user.phone }}</dd>
+      {% endif %}
+    </dl>
+  </div>
+
+  <div class="card" style="margin-bottom:24px">
+    <h2 style="font-size:16px;font-weight:700;color:var(--pine);margin-bottom:12px">Security</h2>
+    <p style="color:var(--text-muted);font-size:14px;margin-bottom:16px">
+      Two-factor authentication is active on your account.
+    </p>
+    <a href="{% url 'totp_enroll' %}" class="btn btn-ghost" style="font-size:14px">
+      Re-enroll authenticator
+    </a>
+  </div>
+
+  <div class="card">
+    <h2 style="font-size:16px;font-weight:700;color:var(--pine);margin-bottom:12px">Notifications</h2>
+    <p style="color:var(--text-muted);font-size:14px;margin-bottom:16px">
+      Control how CondoParkShare contacts you.
+    </p>
+    <a href="{% url 'notification_prefs' %}" class="btn btn-ghost" style="font-size:14px">
+      Notification settings
+    </a>
+  </div>
+</div>
+{% endblock %}

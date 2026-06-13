@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Verify your identity — CondoParkShare{% endblock %}
+
+{% block extra_css %}
+<style>
+  .auth-shell { max-width: 440px; margin: 0 auto; }
+  .auth-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 40px;
+    box-shadow: var(--shadow);
+  }
+  .auth-logo { display: flex; justify-content: center; margin-bottom: 28px; }
+  .auth-logo img { height: 36px; width: auto; }
+  .auth-title { font-size: var(--fs-h3); font-weight: 700; color: var(--pine); text-align: center; margin-bottom: 4px; }
+  .auth-subtitle { color: var(--text-muted); font-size: 14px; text-align: center; margin-bottom: 28px; }
+  .auth-links { margin-top: 20px; font-size: 14px; color: var(--text-muted); display: flex; flex-direction: column; gap: 8px; text-align: center; }
+  .auth-links a { color: var(--meadow-ink); text-decoration: none; font-weight: 500; }
+  .auth-links a:hover { text-decoration: underline; }
+  .token-input { font-family: var(--font-mono); font-size: 24px; text-align: center; letter-spacing: .2em; }
+  .field-error { color: var(--danger-ink); font-size: 13px; margin-top: 4px; display: block; text-align: center; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="auth-shell">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <img src="{% static 'img/logo/logo-full.svg' %}" alt="CondoParkShare">
+    </div>
+
+    <h1 class="auth-title">Verify your identity</h1>
+    <p class="auth-subtitle">Enter the 6-digit code from your authenticator app</p>
+
+    {% if form.non_field_errors %}
+      <div class="alert alert-danger" role="alert">
+        {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+      </div>
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      <div class="field">
+        <label for="{{ form.token.id_for_label }}" class="visually-hidden">{{ form.token.label }}</label>
+        <input
+          type="text"
+          name="{{ form.token.html_name }}"
+          id="{{ form.token.id_for_label }}"
+          class="token-input"
+          autocomplete="one-time-code"
+          inputmode="numeric"
+          pattern="[0-9]{6}"
+          maxlength="6"
+          autofocus
+          aria-label="6-digit authenticator code"
+          aria-describedby="token-hint{% if form.token.errors %} token-error{% endif %}"
+          {% if form.token.errors %}aria-invalid="true"{% endif %}
+        >
+        <div id="token-hint" style="font-size:13px;color:var(--text-muted);text-align:center;margin-top:6px">
+          Open your authenticator app and enter the current code
+        </div>
+        {% if form.token.errors %}
+          <span id="token-error" class="field-error" role="alert">
+            {{ form.token.errors|join:", " }}
+          </span>
+        {% endif %}
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:8px">
+        Verify
+      </button>
+    </form>
+
+    <nav class="auth-links" aria-label="Alternative sign-in options">
+      <a href="{% url 'recovery_code' %}">Use a recovery code instead</a>
+      <a href="{% url 'lost_authenticator' %}">Lost your authenticator?</a>
+    </nav>
+  </div>
+</div>
+{% endblock %}

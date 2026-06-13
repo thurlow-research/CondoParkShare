@@ -18,31 +18,16 @@ services:
       - .env
     depends_on:
       - db
-    networks:
-      - internal
-
-  caddy:
-    image: caddy:2
-    restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    env_file:
-      - .env
-    depends_on:
-      - web
+      # Nexus (front Caddy) terminates TLS and reverse-proxies to this host on :8001.
+      # 8001 is free on both opus and faberix (8000 is taken on faberix by an MCP server).
+      - "8001:8000"
     networks:
-      - internal
-      - external
+      - internal   # reach db
+      - external   # host-published :8001 routes via this (non-internal) network
 
 volumes:
   pgdata:
-  caddy_data:
-  caddy_config:
 
 networks:
   internal:

@@ -1,5 +1,5 @@
-<svg width="64" height="64" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="CondoCondoParkShare">
-  <path d="M3 11V5a2 2 0 0 1 2-2h6" stroke="#8fe0b3" stroke-width="2.6" stroke-linecap="round"/>
-  <path d="M31 23v6a2 2 0 0 1-2 2h-6" stroke="#8fe0b3" stroke-width="2.6" stroke-linecap="round"/>
-  <rect x="12" y="12" width="10" height="10" rx="2.5" fill="#2e9e63"/>
+<svg width="64" height="64" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="CondoParkShare">
+  <path d="M3 11V5a2 2 0 0 1 2-2h6" stroke="#8fe0b3" stroke-width="2.6" stroke-linecap="round"></path>
+  <path d="M31 23v6a2 2 0 0 1-2 2h-6" stroke="#8fe0b3" stroke-width="2.6" stroke-linecap="round"></path>
+  <rect x="12" y="12" width="10" height="10" rx="2.5" fill="#2e9e63"></rect>
 </svg>

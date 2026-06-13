@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}My spots — CondoParkShare{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+  <div>
+    <h1>My spots</h1>
+    <p>Spots you've listed for neighbors to borrow</p>
+  </div>
+</div>
+
+{% if spot_data %}
+  <div class="cols">
+    {% for item in spot_data %}
+      {% with spot=item.spot %}
+      <div class="spot">
+        <div class="row">
+          <span class="spot-id">
+            <span class="tag mono">{{ spot.spot_number }}</span>
+            {{ spot.location_detail|default:"" }}
+          </span>
+          {% if spot.status == 'active' %}
+            <span class="badge badge-active"><span class="dot" aria-hidden="true"></span> Listed</span>
+          {% elif spot.status == 'pending' %}
+            <span class="badge badge-pending"><span class="ring" aria-hidden="true"></span> Pending review</span>
+          {% elif spot.status == 'inactive' %}
+            <span class="badge badge-inactive"><span class="ring" aria-hidden="true"></span> Inactive</span>
+          {% endif %}
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;color:var(--text-muted)">
+          <div>
+            <span style="font-weight:600;color:var(--ink);display:block">{{ item.upcoming_windows }}</span>
+            upcoming window{{ item.upcoming_windows|pluralize }}
+          </div>
+          <div>
+            <span style="font-weight:600;color:var(--ink);display:block">{{ item.active_bookings }}</span>
+            active booking{{ item.active_bookings|pluralize }}
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <a href="{% url 'spot_availability' spot.pk %}" class="btn btn-secondary" style="font-size:14px">
+            View availability
+          </a>
+          <a href="{% url 'availability_add' spot.pk %}" class="btn btn-ghost" style="font-size:14px">
+            Add window
+          </a>
+        </div>
+      </div>
+      {% endwith %}
+    {% endfor %}
+  </div>
+{% else %}
+  <div style="text-align:center;padding:64px 24px">
+    <div class="bay" style="margin:0 auto 32px;width:80px;height:80px" aria-hidden="true">
+      <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+        <rect x="16" y="16" width="16" height="16" rx="4" fill="var(--mist)" stroke="var(--line)" stroke-width="1.5"/>
+      </svg>
+    </div>
+    <h2 style="font-size:18px;color:var(--pine);margin-bottom:8px">No spots listed yet</h2>
+    <p style="color:var(--text-muted);font-size:15px;margin-bottom:0">
+      Contact your HOA admin to add a parking spot to your account.
+    </p>
+  </div>
+{% endif %}
+{% endblock %}

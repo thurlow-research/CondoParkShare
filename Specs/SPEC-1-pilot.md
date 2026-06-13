@@ -63,6 +63,9 @@ The app is built **multi-tenant from day one** (so other buildings can be added 
 - **Max length:** `max_booking_hours` (default **168** = 7 days).
 - **Overlap safety:** Postgres exclusion constraint on (`spot`, range) — DB rejects overlaps (race-safe).
 - **Availability is computed, not stored:** an `AvailabilityWindow` is one continuous range; available = windows − union of bookings, computed live; bookings fragment windows automatically.
+- **Availability is binary — no "blocked" state:** a spot is either available or booked; there is no separate "blocked", "hold", or "buffer" state exposed to searchers or the spot owner. Any internal booking status that holds the spot — including the tentative 5-minute checkout hold — is treated as **booked** for (a) any resident searching for a spot and (b) the spot owner viewing their spot's occupancy. Concretely: a spot is unavailable whenever a booking with status `tentative`, `confirmed`, or `active` overlaps the queried window (this is exactly what the Postgres exclusion constraint already enforces). The borrower sees their booking end at the time they specified; any internal hold around that window is not surfaced to them as a distinct lifecycle state. The `tentative`/`confirmed`/`active`/`completed`/`cancelled_*` enum values are internal lifecycle states only and are never presented directly to searchers or owners as availability categories.
+
+*Clarified 2026-06-12 (authorized Scott Thurlow): There is no "blocked" state. Availability is strictly binary from the perspective of searchers and the spot owner. Any internal hold or buffer (including the tentative checkout hold) counts as booked to them. The borrower sees their booking end at their specified end time; the buffer is not surfaced to them.*
 
 ### Listing
 - Low-friction "I'm away [dates]" + recurring patterns → continuous `AvailabilityWindow`(s), immediately bookable.
@@ -124,7 +127,7 @@ All domain rows carry `organization` FK + timestamps.
 - **User** — `email`(enc), `display_name`(enc), `phone`(opt, field-enc), `password`(hashed), `totp_secret`, `recovery_codes`, `notification_prefs`, `status`(pending/active/blocked), `organization`.
 - **ParkingSpot** — `spot_number`, `owner`, `organization`, location/notes, active.
 - **AvailabilityWindow** — `spot`, continuous `tstzrange`.
-- **Booking** — `spot`, `borrower`, `tstzrange` (hour-aligned), `status`; GiST exclusion constraint.
+- **Booking** — `spot`, `borrower`, `tstzrange` (hour-aligned), `status` (`tentative`/`confirmed`/`active`/`completed`/`cancelled_borrower`/`cancelled_owner`/`cancelled_admin`); GiST exclusion constraint. Status values are internal lifecycle only — searchers and owners see a binary available/booked signal (see §4 Booking).
 - **Invite** — `code`, `organization`, `issued_by`, single-use/capped, expiry, `consumed_by/at`, optional unit/spot pre-tag.
 - **AdminAuditLog** — `actor`, `action`, `target`, `organization`, timestamp.
 

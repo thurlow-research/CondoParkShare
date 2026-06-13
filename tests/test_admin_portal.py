@@ -108,46 +108,6 @@ class BookingFactory(factory.django.DjangoModelFactory):
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _load_operator_admin():
-    """
-    Load /operator/admin.py without triggering Django's import machinery for
-    the 'operator' package (which shadows Python's stdlib ``operator`` module).
-
-    Uses ``importlib.util.spec_from_file_location`` with the operator app's
-    admin_site.register temporarily replaced by a no-op so that the module-level
-    ``@operator_admin_site.register(...)`` decorators do not attempt to
-    re-register already-registered models.
-
-    Returns the loaded module object.  Callers can access
-    ``AdminAuditLogAdmin`` and ``UserAdmin`` from it.
-    """
-    import importlib.util
-    from django.apps import apps
-    from parkshare.admin_site import operator_admin_site
-
-    orig_register = operator_admin_site.register
-
-    def noop_register(*args, **kwargs):
-        def decorator(cls):
-            return cls
-        if args and isinstance(args[0], type) and hasattr(args[0], '_meta'):
-            return decorator
-        return decorator
-
-    operator_admin_site.register = noop_register
-    try:
-        spec = importlib.util.spec_from_file_location(
-            '_ps_operator_admin',
-            '/Users/sthurlow/Code/CondoParkShare/operator/admin.py',
-        )
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-    finally:
-        operator_admin_site.register = orig_register
-
-    return mod
-
-
 def _make_hoa_request(view_func, admin_user, org, method='GET', post_data=None, path='/portal/'):
     """
     Build a fake request with request.user and request.organization set,
@@ -303,8 +263,7 @@ def test_audit_log_immutable():
     from accounts.models import AdminAuditLog
     from parkshare.admin_site import operator_admin_site
 
-    mod = _load_operator_admin()
-    AdminAuditLogAdmin = mod.AdminAuditLogAdmin
+    from operator_console.admin import AdminAuditLogAdmin
 
     # Instantiate the admin class the same way Django does
     admin_instance = AdminAuditLogAdmin(
@@ -518,8 +477,7 @@ def test_impersonation_blocked_for_superuser_target():
     from parkshare.admin_site import operator_admin_site
     from accounts.models import User
 
-    mod = _load_operator_admin()
-    UserAdmin = mod.UserAdmin
+    from operator_console.admin import UserAdmin
 
     org = OrganizationFactory()
     operator = UserFactory(

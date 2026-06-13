@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}{{ resident.display_name }} — HOA portal — CondoParkShare{% endblock %}
+
+{% block content %}
+<div style="max-width:640px">
+  <nav aria-label="Breadcrumb" style="font-size:13px;color:var(--text-muted);margin-bottom:12px">
+    <a href="{% url 'portal_home' %}" style="color:var(--meadow-ink);text-decoration:none">HOA portal</a>
+    <span aria-hidden="true"> / </span>
+    <a href="{% url 'portal_resident_list' %}" style="color:var(--meadow-ink);text-decoration:none">Residents</a>
+    <span aria-hidden="true"> / </span>
+    <span aria-current="page">{{ resident.display_name }}</span>
+  </nav>
+
+  <div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+    <div>
+      <p class="eyebrow" style="margin-bottom:8px">Resident profile</p>
+      <h1 style="font-size:var(--fs-h2)">{{ resident.display_name }}</h1>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-self:flex-start">
+      {% if resident.status == 'pending_approval' %}
+        <form method="post" action="{% url 'portal_resident_approve' resident.pk %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary">Approve</button>
+        </form>
+      {% endif %}
+      {% if resident.status == 'active' %}
+        <form method="post" action="{% url 'portal_resident_block' resident.pk %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-danger">Block</button>
+        </form>
+      {% elif resident.status == 'blocked' %}
+        <form method="post" action="{% url 'portal_resident_unblock' resident.pk %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-ghost">Unblock</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:24px">
+    <h2 style="font-size:15px;font-weight:700;color:var(--pine);margin-bottom:16px">Account details</h2>
+
+    <dl style="display:grid;grid-template-columns:max-content 1fr;gap:12px 32px;margin:0;font-size:14px">
+      <dt style="color:var(--text-muted);font-weight:600">Status</dt>
+      <dd style="margin:0">
+        {% if resident.status == 'active' %}
+          <span class="badge badge-active"><span class="dot" aria-hidden="true"></span> Active</span>
+        {% elif resident.status == 'pending_approval' %}
+          <span class="badge badge-pending"><span class="ring" aria-hidden="true"></span> Pending approval</span>
+        {% elif resident.status == 'pending_totp' %}
+          <span class="badge badge-pending"><span class="ring" aria-hidden="true"></span> Pending setup</span>
+        {% elif resident.status == 'blocked' %}
+          <span class="badge badge-danger"><span class="dot" aria-hidden="true"></span> Blocked</span>
+        {% else %}
+          <span class="badge badge-pending"><span class="ring" aria-hidden="true"></span> {{ resident.status }}</span>
+        {% endif %}
+      </dd>
+
+      <dt style="color:var(--text-muted);font-weight:600">Email</dt>
+      <dd style="margin:0;font-size:14px" class="mono">{{ resident.email }}</dd>
+
+      {% if resident.phone %}
+        <dt style="color:var(--text-muted);font-weight:600">Phone</dt>
+        <dd style="margin:0" class="mono">{{ resident.phone }}</dd>
+      {% endif %}
+
+      <dt style="color:var(--text-muted);font-weight:600">HOA admin</dt>
+      <dd style="margin:0">{{ resident.is_hoa_admin|yesno:"Yes,No" }}</dd>
+
+      <dt style="color:var(--text-muted);font-weight:600">Joined</dt>
+      <dd style="margin:0" class="mono">{{ resident.date_joined|date:"d M Y" }}</dd>
+
+      <dt style="color:var(--text-muted);font-weight:600">Last login</dt>
+      <dd style="margin:0">
+        {% if resident.last_login %}
+          <span class="mono">{{ resident.last_login|date:"d M Y, H:i" }}</span>
+        {% else %}
+          <span style="color:var(--text-muted)">Never</span>
+        {% endif %}
+      </dd>
+    </dl>
+  </div>
+
+  <div class="card" style="margin-bottom:24px">
+    <h2 style="font-size:15px;font-weight:700;color:var(--pine);margin-bottom:16px">Notification preferences</h2>
+    <p style="font-size:14px;color:var(--text-muted);margin:0">
+      Push notifications: <strong>{{ resident.notification_prefs.push|yesno:"Enabled,Disabled" }}</strong>
+      &nbsp;&middot;&nbsp;
+      Marketing email: <strong>{{ resident.marketing_email_opted_in|yesno:"Opted in,Opted out" }}</strong>
+    </p>
+  </div>
+
+  <div style="padding-top:8px">
+    <a href="{% url 'portal_resident_list' %}" class="btn btn-ghost">Back to residents</a>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Set up your authenticator — CondoParkShare{% endblock %}
+
+{% block extra_css %}
+<style>
+  .enroll-shell { max-width: 520px; margin: 0 auto; }
+  .enroll-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 40px;
+    box-shadow: var(--shadow);
+  }
+  .enroll-title { font-size: var(--fs-h3); font-weight: 700; color: var(--pine); margin-bottom: 8px; }
+  .enroll-subtitle { color: var(--text-muted); font-size: 14px; margin-bottom: 32px; }
+  .qr-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  .qr-frame {
+    background: var(--white);
+    border: 2px solid var(--line);
+    border-radius: var(--r-md);
+    padding: 16px;
+    display: inline-block;
+    line-height: 0;
+  }
+  .qr-frame svg {
+    display: block;
+    width: 200px;
+    height: 200px;
+    image-rendering: pixelated;
+  }
+  .manual-entry {
+    background: var(--mist);
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    padding: 12px 16px;
+    font-size: 13px;
+    color: var(--slate);
+    width: 100%;
+    text-align: center;
+  }
+  .manual-entry summary { cursor: pointer; font-weight: 600; color: var(--pine); margin-bottom: 8px; }
+  .manual-entry code {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    word-break: break-all;
+    color: var(--ink);
+    display: block;
+    margin-top: 8px;
+  }
+  .steps-list {
+    padding: 0;
+    margin: 0 0 28px;
+    list-style: none;
+    counter-reset: steps;
+  }
+  .steps-list li {
+    counter-increment: steps;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    margin-bottom: 12px;
+    font-size: 14px;
+    color: var(--text-muted);
+  }
+  .steps-list li::before {
+    content: counter(steps);
+    min-width: 24px;
+    height: 24px;
+    background: var(--pine);
+    color: var(--white);
+    font-size: 12px;
+    font-weight: 700;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .token-input {
+    font-family: var(--font-mono);
+    font-size: 22px;
+    text-align: center;
+    letter-spacing: .2em;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="enroll-shell">
+  <div class="enroll-card">
+    <h1 class="enroll-title">Set up your authenticator</h1>
+    <p class="enroll-subtitle">
+      Two-factor authentication keeps your account safe. Scan the QR code with your authenticator app, then enter the code it shows.
+    </p>
+
+    {% if error %}
+      <div class="alert alert-danger" role="alert">{{ error }}</div>
+    {% endif %}
+
+    <ol class="steps-list" aria-label="Setup steps">
+      <li>Download an authenticator app if you don't have one (Google Authenticator, Authy, or any TOTP app).</li>
+      <li>Open the app and scan the QR code below.</li>
+      <li>Enter the 6-digit code the app shows to confirm.</li>
+    </ol>
+
+    <div class="qr-section">
+      <div class="qr-frame" role="img" aria-label="QR code for authenticator app — if you cannot scan, use the manual entry below">
+        {{ qr_svg|safe }}
+      </div>
+
+      <details class="manual-entry">
+        <summary>Can't scan? Enter the key manually</summary>
+        <code aria-label="Manual setup key">{{ device_url }}</code>
+      </details>
+    </div>
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      <div class="field">
+        <label for="id_token">6-digit code from your app</label>
+        <input
+          type="text"
+          name="token"
+          id="id_token"
+          class="token-input"
+          autocomplete="one-time-code"
+          inputmode="numeric"
+          pattern="[0-9]{6}"
+          maxlength="6"
+          autofocus
+          required
+          aria-describedby="token-hint"
+        >
+        <div id="token-hint" style="font-size:13px;color:var(--text-muted);text-align:center;margin-top:6px">
+          The code refreshes every 30 seconds
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:8px">
+        Confirm and activate
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

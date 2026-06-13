@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Remove availability window — CondoParkShare{% endblock %}
+
+{% block content %}
+<div style="max-width:480px">
+  <nav aria-label="Breadcrumb" style="font-size:13px;color:var(--text-muted);margin-bottom:12px">
+    <a href="{% url 'spot_list' %}" style="color:var(--meadow-ink);text-decoration:none">My spots</a>
+    <span aria-hidden="true"> / </span>
+    <a href="{% url 'spot_availability' spot.pk %}" style="color:var(--meadow-ink);text-decoration:none" class="mono">{{ spot.spot_number }}</a>
+    <span aria-hidden="true"> / </span>
+    <span aria-current="page">Remove window</span>
+  </nav>
+
+  <div class="page-header">
+    <h1>Remove this window?</h1>
+  </div>
+
+  {% if error %}
+    <div class="alert alert-danger" role="alert">{{ error }}</div>
+  {% endif %}
+
+  <div class="card" style="margin-bottom:20px">
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:4px;font-weight:600">Availability window</div>
+    <div class="mono" style="font-size:16px;color:var(--pine);font-weight:600">
+      {{ window.time_range.lower|date:"D, d M Y" }}
+      {{ window.time_range.lower|time:"H:i" }}
+      &ndash;
+      {{ window.time_range.upper|date:"D, d M Y" }}
+      {{ window.time_range.upper|time:"H:i" }}
+    </div>
+    <div style="margin-top:8px;font-size:13px;color:var(--text-muted)">
+      Spot <span class="mono">{{ spot.spot_number }}</span>
+    </div>
+  </div>
+
+  <p style="color:var(--text-muted);font-size:14px;margin-bottom:24px">
+    Removing this window won't affect any existing confirmed bookings. If a booking overlaps, you'll need to cancel it first.
+  </p>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button type="submit" class="btn btn-danger">
+        Remove window
+      </button>
+      <a href="{% url 'spot_availability' spot.pk %}" class="btn btn-ghost">Keep it</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

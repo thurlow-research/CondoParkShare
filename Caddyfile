@@ -1,12 +1,38 @@
-parkshare.kumajyo.com {
-    reverse_proxy web:8000
+# CondoParkShare — Caddy sections for the NEXUS front proxy.
+#
+# Nexus (Windows) runs Caddy, terminates TLS for the public domains, and
+# reverse-proxies to the app hosts, which publish the web container on :8001
+# (see docker-compose.yml). Paste/merge these blocks into the Caddyfile that
+# Caddy uses on Nexus — do not overwrite that file wholesale if it serves other
+# kumajyo apps.
+#
+# Host mapping (flip the upstreams if reversed):
+#   production -> opus.kumajyo.com:8001
+#   pre-prod   -> faberix.kumajyo.com:8001
+#
+# TLS:
+#   *.kumajyo.com names      -> served by Nexus's existing *.kumajyo.com wildcard cert.
+#   condoparkshare.com names -> Caddy auto-issues Let's Encrypt certs via TLS-ALPN-01
+#                               (:443) / HTTP-01 (:80). No token needed; just keep the
+#                               site listed and ensure :443 is internet-reachable on Nexus.
+#   (condoparkshare.com is self-hosted DNS on Nexus, NOT Cloudflare, so the
+#    Cloudflare DNS-01 challenge does not apply unless the zone is moved to CF.)
+#
+# Host header is preserved by default, so each backend's TenantMiddleware sees
+# the real domain — each backend must have an Organization row with the matching
+# hostname and list these domains in ALLOWED_HOSTS.
 
-    tls {
-        dns cloudflare {env.CF_API_TOKEN}
-    }
+# ── Production → opus ─────────────────────────────────────────────────────────
+condoparkshare.kumajyo.com, condoparkshare.com {
+	reverse_proxy opus.kumajyo.com:8001
 }
 
-parkshare.bellevuetowers.org {
-    reverse_proxy web:8000
-    # HTTP-01 auto TLS (needs port 80 open)
+# Canonical-host redirect: www → apex
+www.condoparkshare.com {
+	redir https://condoparkshare.com{uri} permanent
+}
+
+# ── Pre-production (PPE) → faberix ────────────────────────────────────────────
+ppe.condoparkshare.kumajyo.com, ppe.condoparkshare.com {
+	reverse_proxy faberix.kumajyo.com:8001
 }

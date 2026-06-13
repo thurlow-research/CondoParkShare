@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}My bookings — CondoParkShare{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+  <div>
+    <h1>My bookings</h1>
+    <p>Your current and past parking bookings</p>
+  </div>
+  <a href="{% url 'book_request' %}" class="btn btn-primary">Book a spot</a>
+</div>
+
+{% if bookings %}
+  <div style="display:flex;flex-direction:column;gap:12px">
+    {% for booking in bookings %}
+      <article class="spot">
+        <div class="row">
+          <span class="spot-id">
+            <span class="tag mono">{{ booking.spot.spot_number }}</span>
+          </span>
+          {% if booking.status == 'tentative' or booking.status == 'confirmed' or booking.status == 'active' %}
+            <span class="badge badge-active"><span class="dot" aria-hidden="true"></span> Confirmed</span>
+          {% elif booking.status == 'completed' %}
+            <span class="badge badge-complete"><span class="chk" aria-hidden="true">✓</span> Completed</span>
+          {% else %}
+            <span class="badge badge-danger"><span class="dot" aria-hidden="true"></span> Cancelled</span>
+          {% endif %}
+        </div>
+
+        <div class="when mono" style="font-size:13px">
+          {{ booking.time_range.lower|date:"D, d M Y" }}
+          {{ booking.time_range.lower|time:"H:i" }}
+          &ndash;
+          {{ booking.time_range.upper|date:"D, d M Y" }}
+          {{ booking.time_range.upper|time:"H:i" }}
+        </div>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <a href="{% url 'booking_detail' booking.pk %}" class="btn btn-ghost" style="font-size:13px;padding:7px 12px">
+            View details
+          </a>
+          {% if booking.status in 'confirmed,active' %}
+            <a href="{% url 'booking_cancel' booking.pk %}" class="btn btn-ghost" style="font-size:13px;padding:7px 12px;color:var(--clay-ink);border-color:var(--line)">
+              Cancel
+            </a>
+            <a href="{% url 'booking_release' booking.pk %}" class="btn btn-ghost" style="font-size:13px;padding:7px 12px">
+              Release early
+            </a>
+          {% endif %}
+        </div>
+      </article>
+    {% endfor %}
+  </div>
+{% else %}
+  <div style="text-align:center;padding:64px 24px">
+    <div class="bay" style="margin:0 auto 32px;width:80px;height:80px" aria-hidden="true">
+      <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+        <rect x="16" y="16" width="16" height="16" rx="4" fill="var(--mist)" stroke="var(--line)" stroke-width="1.5"/>
+      </svg>
+    </div>
+    <h2 style="font-size:18px;color:var(--pine);margin-bottom:8px">No bookings yet</h2>
+    <p style="color:var(--text-muted);font-size:15px;margin-bottom:20px">
+      Find an available spot and book it in a couple of taps.
+    </p>
+    <a href="{% url 'book_request' %}" class="btn btn-primary">Book a spot</a>
+  </div>
+{% endif %}
+{% endblock %}

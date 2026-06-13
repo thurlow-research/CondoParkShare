@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Lost authenticator — CondoParkShare{% endblock %}
+
+{% block extra_css %}
+<style>
+  .auth-shell { max-width: 440px; margin: 0 auto; }
+  .auth-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 40px;
+    box-shadow: var(--shadow);
+  }
+  .auth-logo { display: flex; justify-content: center; margin-bottom: 28px; }
+  .auth-logo img { height: 36px; width: auto; }
+  .auth-title { font-size: var(--fs-h3); font-weight: 700; color: var(--pine); text-align: center; margin-bottom: 4px; }
+  .auth-subtitle { color: var(--text-muted); font-size: 14px; text-align: center; margin-bottom: 24px; }
+  .auth-links { margin-top: 20px; font-size: 14px; display: flex; flex-direction: column; gap: 8px; text-align: center; }
+  .auth-links a { color: var(--meadow-ink); text-decoration: none; font-weight: 500; }
+  .auth-links a:hover { text-decoration: underline; }
+  .security-notice {
+    background: var(--mist);
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    padding: 14px 16px;
+    font-size: 13px;
+    color: var(--slate);
+    margin-bottom: 24px;
+  }
+  .field-error { color: var(--danger-ink); font-size: 13px; margin-top: 4px; display: block; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="auth-shell">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <img src="{% static 'img/logo/logo-full.svg' %}" alt="CondoParkShare">
+    </div>
+
+    <h1 class="auth-title">Recover your account</h1>
+    <p class="auth-subtitle">We'll send a one-time code to your email address</p>
+
+    <div class="security-notice" role="note">
+      For your security, we won't confirm whether this email has an account. If it does, you'll receive a code within a minute. Codes expire in 15 minutes.
+    </div>
+
+    {% if form.non_field_errors %}
+      <div class="alert alert-danger" role="alert">
+        {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+      </div>
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      <div class="field">
+        <label for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>
+        <input
+          type="email"
+          name="{{ form.email.html_name }}"
+          id="{{ form.email.id_for_label }}"
+          autocomplete="email"
+          {% if form.email.errors %}
+          aria-describedby="email-error"
+          aria-invalid="true"
+          {% endif %}
+        >
+        {% if form.email.errors %}
+          <span id="email-error" class="field-error" role="alert">
+            {{ form.email.errors|join:", " }}
+          </span>
+        {% endif %}
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:8px">
+        Send code
+      </button>
+    </form>
+
+    <nav class="auth-links" aria-label="Alternative sign-in options">
+      <a href="{% url 'totp_verify' %}">Back to sign in</a>
+      <a href="{% url 'recovery_code' %}">Use a recovery code instead</a>
+    </nav>
+  </div>
+</div>
+{% endblock %}

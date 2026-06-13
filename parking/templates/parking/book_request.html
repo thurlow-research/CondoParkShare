@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block title %}Book a spot — CondoParkShare{% endblock %}
+
+{% block extra_css %}
+<style>
+  .book-shell { max-width: 560px; }
+  .horizon-note {
+    background: var(--mist);
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    padding: 14px 16px;
+    font-size: 13px;
+    color: var(--slate);
+    margin-bottom: 24px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="book-shell">
+  <div class="page-header">
+    <h1>Book a spot</h1>
+    <p>Pick your dates and we'll match you with an available spot</p>
+  </div>
+
+  <div class="horizon-note" role="note">
+    <strong>On the hour only.</strong> Start and end times must be on the hour. The further ahead you can book depends on your listing history.
+  </div>
+
+  <div class="card" id="book-request-form-container">
+    {% include "parking/partials/book_request_form.html" %}
+  </div>
+</div>
+{% endblock %}

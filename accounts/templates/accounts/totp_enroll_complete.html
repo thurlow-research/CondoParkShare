@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Authenticator set up — CondoParkShare{% endblock %}
+
+{% block extra_css %}
+<style>
+  .complete-shell { max-width: 540px; margin: 0 auto; }
+  .complete-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 40px;
+    box-shadow: var(--shadow);
+  }
+  .success-badge {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--success-surface);
+    border: 1.5px solid var(--success-line);
+    border-radius: var(--r-sm);
+    padding: 12px 16px;
+    margin-bottom: 28px;
+    color: var(--meadow-ink);
+    font-weight: 600;
+  }
+  .success-badge svg { flex-shrink: 0; }
+  .complete-title { font-size: var(--fs-h3); font-weight: 700; color: var(--pine); margin-bottom: 8px; }
+  .complete-body { color: var(--text-muted); font-size: 14px; line-height: 1.6; margin-bottom: 28px; }
+  .codes-section {
+    background: var(--canvas);
+    border: 1.5px solid var(--line);
+    border-radius: var(--r-md);
+    padding: 24px;
+    margin-bottom: 24px;
+  }
+  .codes-section h2 {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--pine);
+    margin-bottom: 4px;
+  }
+  .codes-section p {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+  }
+  .codes-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .codes-grid li {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    background: var(--white);
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    padding: 8px 12px;
+    color: var(--ink);
+    word-break: break-all;
+  }
+  .warning-box {
+    background: var(--warning-surface);
+    border: 1.5px solid var(--warning-line);
+    border-radius: var(--r-sm);
+    padding: 14px 16px;
+    font-size: 13px;
+    color: var(--warning-ink);
+    margin-bottom: 28px;
+    font-weight: 500;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="complete-shell">
+  <div class="complete-card">
+    <div class="success-badge" role="status" aria-live="polite">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <circle cx="10" cy="10" r="9" stroke="var(--meadow)" stroke-width="1.5"/>
+        <path d="M6 10l3 3 5-5" stroke="var(--meadow)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Authenticator set up
+    </div>
+
+    <h1 class="complete-title">Save your recovery codes</h1>
+    <p class="complete-body">
+      These codes are your backup if you lose access to your authenticator app. Each code can only be used once. Store them somewhere safe — we'll never show them again.
+    </p>
+
+    <div class="warning-box" role="note">
+      <strong>Save these now.</strong> Once you leave this page, these codes are gone. Store them in a password manager or write them down.
+    </div>
+
+    <div class="codes-section">
+      <h2>Your recovery codes</h2>
+      <p>Keep these private — anyone with a code can access your account.</p>
+      <ul class="codes-grid" aria-label="Recovery codes">
+        {% for code in recovery_codes %}
+          <li>{{ code }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    <a href="{% url 'book_request' %}" class="btn btn-primary" style="width:100%;justify-content:center">
+      I've saved my codes — go to my account
+    </a>
+  </div>
+</div>
+{% endblock %}

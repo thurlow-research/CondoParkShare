@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}Add availability — Spot {{ spot.spot_number }} — CondoParkShare{% endblock %}
+
+{% block content %}
+<div style="max-width:520px">
+  <nav aria-label="Breadcrumb" style="font-size:13px;color:var(--text-muted);margin-bottom:12px">
+    <a href="{% url 'spot_list' %}" style="color:var(--meadow-ink);text-decoration:none">My spots</a>
+    <span aria-hidden="true"> / </span>
+    <a href="{% url 'spot_availability' spot.pk %}" style="color:var(--meadow-ink);text-decoration:none" class="mono">{{ spot.spot_number }}</a>
+    <span aria-hidden="true"> / </span>
+    <span aria-current="page">Add availability</span>
+  </nav>
+
+  <div class="page-header">
+    <h1>Add availability</h1>
+    <p>
+      When are you away and your spot is free to borrow?
+      Spot <span class="mono" style="color:var(--pine)">{{ spot.spot_number }}</span>
+    </p>
+  </div>
+
+  <div class="card">
+    {% if form.non_field_errors %}
+      <div class="alert alert-danger" role="alert">
+        {% for error in form.non_field_errors %}
+          <div>{{ error }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <form method="post"
+          id="availability-form"
+          hx-post="{% url 'availability_add' spot.pk %}"
+          hx-target="#availability-form"
+          hx-swap="outerHTML"
+          novalidate>
+      {% csrf_token %}
+
+      {# tabindex="-1" heading lets HTMX focus this region after swap #}
+      <h2 id="availability-form-heading" tabindex="-1" class="visually-hidden">Availability form</h2>
+
+      <div class="field">
+        <label for="{{ form.start.id_for_label }}">{{ form.start.label }}</label>
+        <input
+          type="datetime-local"
+          name="{{ form.start.html_name }}"
+          id="{{ form.start.id_for_label }}"
+          {% if form.start.value %}value="{{ form.start.value }}"{% endif %}
+          {% if form.start.errors %}
+          aria-describedby="start-error"
+          aria-invalid="true"
+          {% endif %}
+        >
+        {% if form.start.errors %}
+          <span id="start-error" style="color:var(--danger-ink);font-size:13px;margin-top:4px;display:block" role="alert">
+            {{ form.start.errors|join:", " }}
+          </span>
+        {% endif %}
+        <div style="font-size:12px;color:var(--text-muted);margin-top:4px">
+          Must be on the hour (e.g. 09:00, not 09:30)
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="{{ form.end.id_for_label }}">{{ form.end.label }}</label>
+        <input
+          type="datetime-local"
+          name="{{ form.end.html_name }}"
+          id="{{ form.end.id_for_label }}"
+          {% if form.end.value %}value="{{ form.end.value }}"{% endif %}
+          {% if form.end.errors %}
+          aria-describedby="end-error"
+          aria-invalid="true"
+          {% endif %}
+        >
+        {% if form.end.errors %}
+          <span id="end-error" style="color:var(--danger-ink);font-size:13px;margin-top:4px;display:block" role="alert">
+            {{ form.end.errors|join:", " }}
+          </span>
+        {% endif %}
+      </div>
+
+      {# spot field is included but hidden — pre-selected in the view #}
+      <div style="display:none">{{ form.spot }}</div>
+
+      <div style="margin-top:24px;display:flex;gap:10px;flex-wrap:wrap">
+        <button type="submit" class="btn btn-primary">Save window</button>
+        <a href="{% url 'spot_availability' spot.pk %}" class="btn btn-ghost">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  document.body.addEventListener('htmx:afterSwap', function(evt) {
+    var heading = document.getElementById('availability-form-heading');
+    if (heading) { heading.focus(); }
+  });
+</script>
+{% endblock %}
