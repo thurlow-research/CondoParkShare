@@ -29,6 +29,19 @@ REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"
 MANIFEST="$REPO_ROOT/contract/step-manifest.yaml"
 SIGNOFFS_DIR="$REPO_ROOT/signoffs"
 
+# Use the oversight venv's Python (has PyYAML) rather than bare python3.
+# On macOS Homebrew Python 3.14+ and Ubuntu 24.04+ (PEP 668), the system
+# Python has no user packages — import yaml would crash.  ensure_venv.sh
+# exports $OVERSIGHT_PYTHON which points to the venv.
+_ENSURE="$SCRIPT_DIR/ensure_venv.sh"
+if [[ -f "$_ENSURE" ]]; then
+    # shellcheck source=scripts/oversight/ensure_venv.sh
+    source "$_ENSURE"
+    _YAML_PYTHON="$OVERSIGHT_PYTHON"
+else
+    _YAML_PYTHON="python3"
+fi
+
 usage() {
     sed -n '2,33p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit "${1:-2}"
@@ -60,7 +73,7 @@ esac
 
 # Resolve the role -> agent mapping (and validate the role exists) via the manifest.
 RESOLVED_AGENT="$(
-    PYTHONSAFEPATH=1 python3 - "$MANIFEST" "$ROLE" <<'PY'
+    PYTHONSAFEPATH=1 "$_YAML_PYTHON" - "$MANIFEST" "$ROLE" <<'PY'
 import sys, yaml
 manifest_path, role = sys.argv[1], sys.argv[2]
 m = yaml.safe_load(open(manifest_path))
