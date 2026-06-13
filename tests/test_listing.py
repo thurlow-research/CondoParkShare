@@ -7,65 +7,66 @@ Covers:
   Owner views (12-15)
 """
 
-import pytest
+from datetime import datetime, timedelta
+from datetime import timezone as dt_timezone
+
 import factory
-from datetime import datetime, timezone as dt_timezone, timedelta
-
+import pytest
 from psycopg2.extras import DateTimeTZRange
-
 
 # ---------------------------------------------------------------------------
 # Factories
 # ---------------------------------------------------------------------------
 
+
 class OrganizationFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = 'parking.Organization'
+        model = "parking.Organization"
 
-    name = factory.Sequence(lambda n: f'ListingOrg {n}')
-    hostname = factory.Sequence(lambda n: f'listingorg{n}.parkshare.test')
-    support_email = factory.LazyAttribute(lambda o: f'support@{o.hostname}')
-    registration_mode = 'invite_only'
-    timezone = 'America/Los_Angeles'
+    name = factory.Sequence(lambda n: f"ListingOrg {n}")
+    hostname = factory.Sequence(lambda n: f"listingorg{n}.parkshare.test")
+    support_email = factory.LazyAttribute(lambda o: f"support@{o.hostname}")
+    registration_mode = "invite_only"
+    timezone = "America/Los_Angeles"
 
 
 class UserFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = 'accounts.User'
+        model = "accounts.User"
 
     organization = factory.SubFactory(OrganizationFactory)
-    email = factory.Sequence(lambda n: f'listinguser{n}@example.com')
-    display_name = factory.Sequence(lambda n: f'Listing User {n}')
-    status = 'active'
+    email = factory.Sequence(lambda n: f"listinguser{n}@example.com")
+    display_name = factory.Sequence(lambda n: f"Listing User {n}")
+    status = "active"
 
     @classmethod
     def _create(cls, model_class, *args, **kwargs):
         manager = model_class.objects
-        password = kwargs.pop('password', 'test-password-secure!')
-        return manager.create_user(password=password, *args, **kwargs)
+        password = kwargs.pop("password", "test-password-secure!")
+        return manager.create_user(*args, password=password, **kwargs)
 
 
 class ParkingSpotFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = 'parking.ParkingSpot'
+        model = "parking.ParkingSpot"
 
     organization = factory.SubFactory(OrganizationFactory)
     owner = factory.SubFactory(
         UserFactory,
-        organization=factory.SelfAttribute('..organization'),
+        organization=factory.SelfAttribute("..organization"),
     )
-    spot_number = factory.Sequence(lambda n: f'L{n:04d}')
-    status = 'active'
+    spot_number = factory.Sequence(lambda n: f"L{n:04d}")
+    status = "active"
 
 
 class AvailabilityWindowFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = 'parking.AvailabilityWindow'
+        model = "parking.AvailabilityWindow"
 
     organization = factory.SubFactory(OrganizationFactory)
     spot = factory.SubFactory(
         ParkingSpotFactory,
-        organization=factory.SelfAttribute('..organization'),
+        organization=factory.SelfAttribute("..organization"),
     )
     # Default: covers 08:00–20:00 on 2027-03-01 UTC
     time_range = DateTimeTZRange(
@@ -76,27 +77,28 @@ class AvailabilityWindowFactory(factory.django.DjangoModelFactory):
 
 class BookingFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = 'parking.Booking'
+        model = "parking.Booking"
 
     organization = factory.SubFactory(OrganizationFactory)
     spot = factory.SubFactory(
         ParkingSpotFactory,
-        organization=factory.SelfAttribute('..organization'),
+        organization=factory.SelfAttribute("..organization"),
     )
     borrower = factory.SubFactory(
         UserFactory,
-        organization=factory.SelfAttribute('..organization'),
+        organization=factory.SelfAttribute("..organization"),
     )
     time_range = DateTimeTZRange(
         datetime(2027, 3, 1, 10, 0, tzinfo=dt_timezone.utc),
         datetime(2027, 3, 1, 12, 0, tzinfo=dt_timezone.utc),
     )
-    status = 'confirmed'
+    status = "confirmed"
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _utc(year, month, day, hour, minute=0):
     """Convenience: return a timezone-aware UTC datetime."""
@@ -106,6 +108,7 @@ def _utc(year, month, day, hour, minute=0):
 # ---------------------------------------------------------------------------
 # 1. test_is_spot_available_no_window
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.django_db
 def test_is_spot_available_no_window():
@@ -127,6 +130,7 @@ def test_is_spot_available_no_window():
 # ---------------------------------------------------------------------------
 # 2. test_is_spot_available_with_window
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.django_db
 def test_is_spot_available_with_window():
@@ -156,6 +160,7 @@ def test_is_spot_available_with_window():
 # 3. test_is_spot_available_buffer_before
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.django_db
 def test_is_spot_available_buffer_before():
     """
@@ -182,7 +187,7 @@ def test_is_spot_available_buffer_before():
             _utc(2027, 3, 1, 11),
             _utc(2027, 3, 1, 14),
         ),
-        status='confirmed',
+        status="confirmed",
     )
 
     # Request starts at 14:30 — within 1h buffer after the booking that ends at 14:00
@@ -191,14 +196,15 @@ def test_is_spot_available_buffer_before():
         requested_start=_utc(2027, 3, 1, 14, 30),
         requested_end=_utc(2027, 3, 1, 16),
     )
-    assert result is False, (
-        "Request starting within 1h buffer after an existing booking must be blocked"
-    )
+    assert (
+        result is False
+    ), "Request starting within 1h buffer after an existing booking must be blocked"
 
 
 # ---------------------------------------------------------------------------
 # 4. test_is_spot_available_buffer_after
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.django_db
 def test_is_spot_available_buffer_after():
@@ -226,7 +232,7 @@ def test_is_spot_available_buffer_after():
             _utc(2027, 3, 1, 16),
             _utc(2027, 3, 1, 18),
         ),
-        status='confirmed',
+        status="confirmed",
     )
 
     # Request ends at 15:30 — within 1h buffer before the booking starting at 16:00
@@ -235,14 +241,15 @@ def test_is_spot_available_buffer_after():
         requested_start=_utc(2027, 3, 1, 14),
         requested_end=_utc(2027, 3, 1, 15, 30),
     )
-    assert result is False, (
-        "Request ending within 1h buffer before an existing booking must be blocked"
-    )
+    assert (
+        result is False
+    ), "Request ending within 1h buffer before an existing booking must be blocked"
 
 
 # ---------------------------------------------------------------------------
 # 5. test_is_spot_available_outside_buffer
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.django_db
 def test_is_spot_available_outside_buffer():
@@ -269,7 +276,7 @@ def test_is_spot_available_outside_buffer():
             _utc(2027, 3, 1, 10),
             _utc(2027, 3, 1, 12),
         ),
-        status='confirmed',
+        status="confirmed",
     )
 
     # Request starts at 13:01 — just outside the 1h buffer after 12:00
@@ -278,14 +285,15 @@ def test_is_spot_available_outside_buffer():
         requested_start=_utc(2027, 3, 1, 13, 1),
         requested_end=_utc(2027, 3, 1, 15),
     )
-    assert result is True, (
-        "Request starting >1h after an existing booking's end must be available"
-    )
+    assert (
+        result is True
+    ), "Request starting >1h after an existing booking's end must be available"
 
 
 # ---------------------------------------------------------------------------
 # 6. test_is_spot_available_cancelled_booking_ignored
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.django_db
 def test_is_spot_available_cancelled_booking_ignored():
@@ -310,7 +318,7 @@ def test_is_spot_available_cancelled_booking_ignored():
             _utc(2027, 3, 1, 10),
             _utc(2027, 3, 1, 12),
         ),
-        status='cancelled_owner',
+        status="cancelled_owner",
     )
 
     result = is_spot_available(
@@ -325,6 +333,7 @@ def test_is_spot_available_cancelled_booking_ignored():
 # 7. test_get_available_slots_rotation_order
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.django_db
 def test_get_available_slots_rotation_order():
     """
@@ -333,8 +342,9 @@ def test_get_available_slots_rotation_order():
     last_booking_at=today.  get_available_slots returns owner A's spot first
     (least-recently-booked first = fair rotation).
     """
-    from parking.availability import get_available_slots
     from django.utils.timezone import now
+
+    from parking.availability import get_available_slots
 
     org = OrganizationFactory()
 
@@ -344,8 +354,8 @@ def test_get_available_slots_rotation_order():
     owner_a = UserFactory(organization=org, last_booking_at=yesterday)
     owner_b = UserFactory(organization=org, last_booking_at=today)
 
-    spot_a = ParkingSpotFactory(organization=org, owner=owner_a, status='active')
-    spot_b = ParkingSpotFactory(organization=org, owner=owner_b, status='active')
+    spot_a = ParkingSpotFactory(organization=org, owner=owner_a, status="active")
+    spot_b = ParkingSpotFactory(organization=org, owner=owner_b, status="active")
 
     # Both spots need an availability window covering the requested range
     window_range = DateTimeTZRange(
@@ -362,10 +372,12 @@ def test_get_available_slots_rotation_order():
     # to enforce rotation.  The function itself returns a queryset — the caller applies
     # ordering.  We test that both spots are returned and owner_a's spot comes first
     # when sorted by owner__last_booking_at.
-    qs = get_available_slots(org, req_start, req_end).order_by('owner__last_booking_at')
-    pks = list(qs.values_list('pk', flat=True))
+    qs = get_available_slots(org, req_start, req_end).order_by("owner__last_booking_at")
+    pks = list(qs.values_list("pk", flat=True))
 
-    assert spot_a.pk in pks, "spot_a (owner A, last booked yesterday) must be in results"
+    assert (
+        spot_a.pk in pks
+    ), "spot_a (owner A, last booked yesterday) must be in results"
     assert spot_b.pk in pks, "spot_b (owner B, last booked today) must be in results"
     assert pks.index(spot_a.pk) < pks.index(spot_b.pk), (
         "Owner A's spot (last booked yesterday) must appear before owner B's spot "
@@ -377,25 +389,26 @@ def test_get_available_slots_rotation_order():
 # 8. test_window_form_valid
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.django_db
 def test_window_form_valid():
     """A valid future hour-aligned range passes AvailabilityWindowForm validation."""
-    from parking.forms import AvailabilityWindowForm
-    from django.utils.timezone import now
     from freezegun import freeze_time
+
+    from parking.forms import AvailabilityWindowForm
 
     org = OrganizationFactory()
     owner = UserFactory(organization=org)
-    spot = ParkingSpotFactory(organization=org, owner=owner, status='active')
+    spot = ParkingSpotFactory(organization=org, owner=owner, status="active")
 
     # Freeze time so "now" is predictably in the past relative to our form input
     frozen_now = datetime(2027, 1, 1, 0, 0, tzinfo=dt_timezone.utc)
     with freeze_time(frozen_now):
         form = AvailabilityWindowForm(
             data={
-                'spot': spot.pk,
-                'start': '2027-06-01 10:00:00',
-                'end': '2027-06-01 18:00:00',
+                "spot": spot.pk,
+                "start": "2027-06-01 10:00:00",
+                "end": "2027-06-01 18:00:00",
             },
             owner=owner,
         )
@@ -406,101 +419,109 @@ def test_window_form_valid():
 # 9. test_window_form_rejects_past_start
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.django_db
 def test_window_form_rejects_past_start():
     """AvailabilityWindowForm rejects a start time in the past."""
-    from parking.forms import AvailabilityWindowForm
     from freezegun import freeze_time
+
+    from parking.forms import AvailabilityWindowForm
 
     org = OrganizationFactory()
     owner = UserFactory(organization=org)
-    spot = ParkingSpotFactory(organization=org, owner=owner, status='active')
+    spot = ParkingSpotFactory(organization=org, owner=owner, status="active")
 
     frozen_now = datetime(2027, 6, 1, 12, 0, tzinfo=dt_timezone.utc)
     with freeze_time(frozen_now):
         form = AvailabilityWindowForm(
             data={
-                'spot': spot.pk,
-                'start': '2027-06-01 10:00:00',  # 2 hours in the past
-                'end': '2027-06-01 18:00:00',
+                "spot": spot.pk,
+                "start": "2027-06-01 10:00:00",  # 2 hours in the past
+                "end": "2027-06-01 18:00:00",
             },
             owner=owner,
         )
         assert not form.is_valid(), "Form with past start must be invalid"
         errors = str(form.errors)
-        assert 'future' in errors.lower() or '__all__' in form.errors, (
-            f"Expected a 'future' error; got: {form.errors}"
-        )
+        assert (
+            "future" in errors.lower() or "__all__" in form.errors
+        ), f"Expected a 'future' error; got: {form.errors}"
 
 
 # ---------------------------------------------------------------------------
 # 10. test_window_form_rejects_non_hour_aligned
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.django_db
 def test_window_form_rejects_non_hour_aligned():
     """AvailabilityWindowForm rejects a start with minute=30."""
-    from parking.forms import AvailabilityWindowForm
     from freezegun import freeze_time
+
+    from parking.forms import AvailabilityWindowForm
 
     org = OrganizationFactory()
     owner = UserFactory(organization=org)
-    spot = ParkingSpotFactory(organization=org, owner=owner, status='active')
+    spot = ParkingSpotFactory(organization=org, owner=owner, status="active")
 
     frozen_now = datetime(2027, 1, 1, 0, 0, tzinfo=dt_timezone.utc)
     with freeze_time(frozen_now):
         form = AvailabilityWindowForm(
             data={
-                'spot': spot.pk,
-                'start': '2027-06-01 10:30:00',  # minute=30, not on the hour
-                'end': '2027-06-01 18:00:00',
+                "spot": spot.pk,
+                "start": "2027-06-01 10:30:00",  # minute=30, not on the hour
+                "end": "2027-06-01 18:00:00",
             },
             owner=owner,
         )
         assert not form.is_valid(), "Form with non-hour-aligned start must be invalid"
         errors = str(form.errors)
-        assert 'hour' in errors.lower() or '__all__' in form.errors, (
-            f"Expected an 'hour' alignment error; got: {form.errors}"
-        )
+        assert (
+            "hour" in errors.lower() or "__all__" in form.errors
+        ), f"Expected an 'hour' alignment error; got: {form.errors}"
 
 
 # ---------------------------------------------------------------------------
 # 11. test_window_form_rejects_end_before_start
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.django_db
 def test_window_form_rejects_end_before_start():
     """AvailabilityWindowForm rejects end < start."""
-    from parking.forms import AvailabilityWindowForm
     from freezegun import freeze_time
+
+    from parking.forms import AvailabilityWindowForm
 
     org = OrganizationFactory()
     owner = UserFactory(organization=org)
-    spot = ParkingSpotFactory(organization=org, owner=owner, status='active')
+    spot = ParkingSpotFactory(organization=org, owner=owner, status="active")
 
     frozen_now = datetime(2027, 1, 1, 0, 0, tzinfo=dt_timezone.utc)
     with freeze_time(frozen_now):
         form = AvailabilityWindowForm(
             data={
-                'spot': spot.pk,
-                'start': '2027-06-01 18:00:00',
-                'end': '2027-06-01 10:00:00',  # end before start
+                "spot": spot.pk,
+                "start": "2027-06-01 18:00:00",
+                "end": "2027-06-01 10:00:00",  # end before start
             },
             owner=owner,
         )
         assert not form.is_valid(), "Form with end before start must be invalid"
         errors = str(form.errors)
-        assert 'after' in errors.lower() or '__all__' in form.errors, (
-            f"Expected an 'after start' error; got: {form.errors}"
-        )
+        assert (
+            "after" in errors.lower() or "__all__" in form.errors
+        ), f"Expected an 'after start' error; got: {form.errors}"
 
 
 # ---------------------------------------------------------------------------
 # Helpers for view tests
 # ---------------------------------------------------------------------------
 
+
 def _make_django_session():
     from django.contrib.sessions.backends.db import SessionStore
+
     session = SessionStore()
     session.create()
     return session
@@ -514,10 +535,9 @@ def _make_authenticated_request(method, path, user, org, data=None, headers=None
     pattern used by test_auth.py.
     """
     from django.test import RequestFactory
-    from unittest.mock import patch
 
     rf = RequestFactory()
-    if method == 'POST':
+    if method == "POST":
         request = rf.post(path, data or {})
     else:
         request = rf.get(path)
@@ -546,73 +566,82 @@ def _make_authenticated_request(method, path, user, org, data=None, headers=None
 # 12. test_availability_add_creates_window
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.django_db
 def test_availability_add_creates_window():
     """POST to availability_add creates an AvailabilityWindow for the owner's spot."""
-    from parking.models import AvailabilityWindow
-    from parking.views import availability_add
     from freezegun import freeze_time
 
+    from parking.models import AvailabilityWindow
+    from parking.views import availability_add
+
     org = OrganizationFactory()
-    owner = UserFactory(organization=org, status='active')
-    spot = ParkingSpotFactory(organization=org, owner=owner, status='active')
+    owner = UserFactory(organization=org, status="active")
+    spot = ParkingSpotFactory(organization=org, owner=owner, status="active")
 
     frozen_now = datetime(2027, 1, 1, 0, 0, tzinfo=dt_timezone.utc)
     with freeze_time(frozen_now):
         request = _make_authenticated_request(
-            'POST',
-            f'/spots/{spot.pk}/availability/add/',
+            "POST",
+            f"/spots/{spot.pk}/availability/add/",
             user=owner,
             org=org,
             data={
-                'spot': spot.pk,
-                'start': '2027-06-01 10:00:00',
-                'end': '2027-06-01 18:00:00',
+                "spot": spot.pk,
+                "start": "2027-06-01 10:00:00",
+                "end": "2027-06-01 18:00:00",
             },
         )
         response = availability_add(request, pk=spot.pk)
 
     # Should redirect on success
-    assert response.status_code in (200, 302), (
-        f"Expected 200 or 302, got {response.status_code}"
-    )
+    assert response.status_code in (
+        200,
+        302,
+    ), f"Expected 200 or 302, got {response.status_code}"
 
     windows = AvailabilityWindow.objects.filter(spot=spot)
-    assert windows.count() == 1, (
-        f"Expected 1 AvailabilityWindow to be created, found {windows.count()}"
-    )
+    assert (
+        windows.count() == 1
+    ), f"Expected 1 AvailabilityWindow to be created, found {windows.count()}"
     window = windows.first()
-    assert window.time_range.lower == datetime(2027, 6, 1, 10, 0, tzinfo=dt_timezone.utc)
-    assert window.time_range.upper == datetime(2027, 6, 1, 18, 0, tzinfo=dt_timezone.utc)
+    assert window.time_range.lower == datetime(
+        2027, 6, 1, 10, 0, tzinfo=dt_timezone.utc
+    )
+    assert window.time_range.upper == datetime(
+        2027, 6, 1, 18, 0, tzinfo=dt_timezone.utc
+    )
 
 
 # ---------------------------------------------------------------------------
 # 13. test_availability_add_rejected_non_owner
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.django_db
 def test_availability_add_rejected_non_owner():
     """POST to availability_add for another user's spot returns 403."""
-    from parking.views import availability_add
     from django.core.exceptions import PermissionDenied
     from freezegun import freeze_time
 
+    from parking.views import availability_add
+
     org = OrganizationFactory()
-    owner = UserFactory(organization=org, status='active')
-    other_user = UserFactory(organization=org, status='active')
-    spot = ParkingSpotFactory(organization=org, owner=owner, status='active')
+    owner = UserFactory(organization=org, status="active")
+    other_user = UserFactory(organization=org, status="active")
+    spot = ParkingSpotFactory(organization=org, owner=owner, status="active")
 
     frozen_now = datetime(2027, 1, 1, 0, 0, tzinfo=dt_timezone.utc)
     with freeze_time(frozen_now):
         request = _make_authenticated_request(
-            'POST',
-            f'/spots/{spot.pk}/availability/add/',
+            "POST",
+            f"/spots/{spot.pk}/availability/add/",
             user=other_user,
             org=org,
             data={
-                'spot': spot.pk,
-                'start': '2027-06-01 10:00:00',
-                'end': '2027-06-01 18:00:00',
+                "spot": spot.pk,
+                "start": "2027-06-01 10:00:00",
+                "end": "2027-06-01 18:00:00",
             },
         )
         with pytest.raises(PermissionDenied):
@@ -623,6 +652,7 @@ def test_availability_add_rejected_non_owner():
 # 14. test_availability_remove_deletes_window
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.django_db
 def test_availability_remove_deletes_window():
     """POST to availability_remove deletes the window when there are no active bookings."""
@@ -630,8 +660,8 @@ def test_availability_remove_deletes_window():
     from parking.views import availability_remove
 
     org = OrganizationFactory()
-    owner = UserFactory(organization=org, status='active')
-    spot = ParkingSpotFactory(organization=org, owner=owner, status='active')
+    owner = UserFactory(organization=org, status="active")
+    spot = ParkingSpotFactory(organization=org, owner=owner, status="active")
     window = AvailabilityWindowFactory(
         organization=org,
         spot=spot,
@@ -642,24 +672,27 @@ def test_availability_remove_deletes_window():
     )
 
     request = _make_authenticated_request(
-        'POST',
-        f'/spots/{spot.pk}/windows/{window.pk}/remove/',
+        "POST",
+        f"/spots/{spot.pk}/windows/{window.pk}/remove/",
         user=owner,
         org=org,
     )
     response = availability_remove(request, pk=spot.pk, wk=window.pk)
 
-    assert response.status_code in (200, 302, 204), (
-        f"Expected success status code, got {response.status_code}"
-    )
-    assert not AvailabilityWindow.objects.filter(pk=window.pk).exists(), (
-        "AvailabilityWindow should be deleted after remove POST"
-    )
+    assert response.status_code in (
+        200,
+        302,
+        204,
+    ), f"Expected success status code, got {response.status_code}"
+    assert not AvailabilityWindow.objects.filter(
+        pk=window.pk
+    ).exists(), "AvailabilityWindow should be deleted after remove POST"
 
 
 # ---------------------------------------------------------------------------
 # 15. test_availability_remove_blocked_by_active_booking
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.django_db
 def test_availability_remove_blocked_by_active_booking():
@@ -674,9 +707,9 @@ def test_availability_remove_blocked_by_active_booking():
     from parking.views import availability_remove
 
     org = OrganizationFactory()
-    owner = UserFactory(organization=org, status='active')
-    borrower = UserFactory(organization=org, status='active')
-    spot = ParkingSpotFactory(organization=org, owner=owner, status='active')
+    owner = UserFactory(organization=org, status="active")
+    borrower = UserFactory(organization=org, status="active")
+    spot = ParkingSpotFactory(organization=org, owner=owner, status="active")
 
     window_range = DateTimeTZRange(
         _utc(2027, 5, 1, 8),
@@ -697,25 +730,25 @@ def test_availability_remove_blocked_by_active_booking():
             _utc(2027, 5, 1, 10),
             _utc(2027, 5, 1, 12),
         ),
-        status='confirmed',
+        status="confirmed",
     )
 
     # Use HTMX header so the view returns a 422 partial instead of rendering
     # the full HTML template (which is not required to exist for this test).
     request = _make_authenticated_request(
-        'POST',
-        f'/spots/{spot.pk}/windows/{window.pk}/remove/',
+        "POST",
+        f"/spots/{spot.pk}/windows/{window.pk}/remove/",
         user=owner,
         org=org,
-        headers={'HTTP_HX_REQUEST': 'true'},
+        headers={"HTTP_HX_REQUEST": "true"},
     )
     response = availability_remove(request, pk=spot.pk, wk=window.pk)
 
     # Should not delete the window
-    assert AvailabilityWindow.objects.filter(pk=window.pk).exists(), (
-        "AvailabilityWindow must NOT be deleted when active bookings overlap"
-    )
+    assert AvailabilityWindow.objects.filter(
+        pk=window.pk
+    ).exists(), "AvailabilityWindow must NOT be deleted when active bookings overlap"
     # HTMX path returns 422 on conflict
-    assert response.status_code == 422, (
-        f"Expected 422 for HTMX conflict response, got {response.status_code}"
-    )
+    assert (
+        response.status_code == 422
+    ), f"Expected 422 for HTMX conflict response, got {response.status_code}"

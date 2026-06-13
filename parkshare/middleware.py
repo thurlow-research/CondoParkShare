@@ -17,7 +17,7 @@ _thread_locals = threading.local()
 
 def get_current_organization():
     """Return the Organization for the current request thread, or None."""
-    return getattr(_thread_locals, 'organization', None)
+    return getattr(_thread_locals, "organization", None)
 
 
 class TenantMiddleware:
@@ -35,12 +35,14 @@ class TenantMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        host = request.get_host().split(':')[0].lower()
+        host = request.get_host().split(":")[0].lower()
         try:
             from parking.models import Organization
+
             org = Organization.objects.get(hostname=host)
         except Organization.DoesNotExist:
             from django.http import Http404
+
             raise Http404
         _thread_locals.organization = org
         request.organization = org
@@ -67,35 +69,41 @@ class ImpersonationMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        impersonated_pk = request.session.get('impersonating')
-        if impersonated_pk and request.user.is_authenticated and request.user.is_superuser:
+        impersonated_pk = request.session.get("impersonating")
+        if (
+            impersonated_pk
+            and request.user.is_authenticated
+            and request.user.is_superuser
+        ):
             from accounts.models import User
+
             try:
                 impersonated = User.objects.get(pk=impersonated_pk)
             except User.DoesNotExist:
                 # Impersonation target no longer exists; clear the session keys
-                del request.session['impersonating']
-                request.session.pop('real_operator', None)
+                del request.session["impersonating"]
+                request.session.pop("real_operator", None)
             else:
                 # Block superuser-to-superuser impersonation
                 if impersonated.is_superuser:
-                    del request.session['impersonating']
-                    request.session.pop('real_operator', None)
+                    del request.session["impersonating"]
+                    request.session.pop("real_operator", None)
                     return self.get_response(request)
 
                 real_operator = request.user
                 request.user = impersonated
                 request._real_operator = real_operator
 
-                if request.method == 'POST':
+                if request.method == "POST":
                     try:
                         from accounts.models import AdminAuditLog
+
                         AdminAuditLog.objects.create(
-                            organization=getattr(request, 'organization', None),
+                            organization=getattr(request, "organization", None),
                             actor=real_operator,
                             on_behalf_of=impersonated,
-                            action='impersonate_action',
-                            notes=f'POST {request.path}',
+                            action="impersonate_action",
+                            notes=f"POST {request.path}",
                         )
                     except Exception:
                         pass

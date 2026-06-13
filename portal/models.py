@@ -1,3 +1,1 @@
-from django.db import models
-
-# Create your models here.
+# Portal has no models of its own — it surfaces data from parking and accounts.

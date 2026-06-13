@@ -1,3 +1,1 @@
-from django.contrib import admin
-
-# Register your models here.
+# Portal models are not exposed in any admin interface.

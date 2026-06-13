@@ -5,16 +5,18 @@ and stamps in controlled order, and asserts the gate's exit code. The gate's
 contract is timestamp-ordering of *git commits*, so the tests drive git directly
 rather than mocking.
 """
+
 import subprocess
 import textwrap
 from pathlib import Path
 
 import pytest
 
-GATE = Path(__file__).resolve().parent.parent / "scripts" / "oversight" / "signoff_gate.py"
+GATE = (
+    Path(__file__).resolve().parent.parent / "scripts" / "oversight" / "signoff_gate.py"
+)
 
-MANIFEST = textwrap.dedent(
-    """
+MANIFEST = textwrap.dedent("""
     contract_version: "1"
     role_mappings:
       code-review: code-reviewer
@@ -24,8 +26,7 @@ MANIFEST = textwrap.dedent(
         required_signoffs:
           - code-review
           - security
-    """
-).strip()
+    """).strip()
 
 
 def git(repo: Path, *args, env=None):
@@ -38,7 +39,12 @@ def git(repo: Path, *args, env=None):
     if env:
         base_env.update(env)
     return subprocess.run(
-        ["git", *args], cwd=repo, check=True, capture_output=True, text=True, env={**_os_environ(), **base_env}
+        ["git", *args],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+        env={**_os_environ(), **base_env},
     )
 
 
@@ -50,7 +56,13 @@ def _os_environ():
 
 def commit_at(repo: Path, message: str, when: str):
     """Commit staged changes with author+committer date pinned to `when` (ISO)."""
-    git(repo, "commit", "-m", message, env={"GIT_AUTHOR_DATE": when, "GIT_COMMITTER_DATE": when})
+    git(
+        repo,
+        "commit",
+        "-m",
+        message,
+        env={"GIT_AUTHOR_DATE": when, "GIT_COMMITTER_DATE": when},
+    )
 
 
 def write(repo: Path, rel: str, content: str):

@@ -16,9 +16,9 @@ def impersonation(request):
         impersonated_user     — the User currently being impersonated (or None)
         real_operator         — the actual logged-in superuser (or None)
     """
-    real_operator = getattr(request, '_real_operator', None)
+    real_operator = getattr(request, "_real_operator", None)
     return {
-        'impersonation_active': bool(real_operator),
-        'impersonated_user': request.user if real_operator else None,
-        'real_operator': real_operator,
+        "impersonation_active": bool(real_operator),
+        "impersonated_user": request.user if real_operator else None,
+        "real_operator": real_operator,
     }

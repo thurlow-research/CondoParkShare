@@ -66,10 +66,11 @@ def erase_user_pii(user, erased_by):
     """
     with transaction.atomic():
         # Import inside transaction to avoid circular imports at module load time.
-        from parking.models import Booking
-        from notifications.models import RelayMessage
         from django_otp.plugins.otp_totp.models import TOTPDevice
+
         from accounts.models import AdminAuditLog
+        from notifications.models import RelayMessage
+        from parking.models import Booking
 
         user_pk = user.pk  # capture BEFORE any modification
 
@@ -77,13 +78,13 @@ def erase_user_pii(user, erased_by):
         active_pks = list(
             Booking.objects.filter(
                 borrower=user,
-                status__in=['tentative', 'confirmed', 'active'],
-            ).values_list('pk', flat=True)
+                status__in=["tentative", "confirmed", "active"],
+            ).values_list("pk", flat=True)
         )
         if active_pks:
             Booking.objects.filter(pk__in=active_pks).update(
-                status='cancelled_admin',
-                cancel_reason='Account erased',
+                status="cancelled_admin",
+                cancel_reason="Account erased",
             )
 
         # --- Anonymise all bookings — remove borrower identity, preserve records -
@@ -93,8 +94,8 @@ def erase_user_pii(user, erased_by):
         )
 
         # --- Scrub relay message bodies — preserve audit trail of message count --
-        RelayMessage.objects.filter(from_user=user).update(body='[erased]')
-        RelayMessage.objects.filter(to_user=user).update(body='[erased]')
+        RelayMessage.objects.filter(from_user=user).update(body="[erased]")
+        RelayMessage.objects.filter(to_user=user).update(body="[erased]")
 
         # --- Delete TOTP devices (secret lives in TOTPDevice, not on User) -------
         TOTPDevice.objects.filter(user=user).delete()
@@ -104,11 +105,11 @@ def erase_user_pii(user, erased_by):
         user.email_otps.all().delete()
 
         # --- Scrub User PII fields ------------------------------------------------
-        user.email = 'erased-' + str(user_pk) + '@redacted.invalid'
-        user.display_name = '[Erased User]'
+        user.email = "erased-" + str(user_pk) + "@redacted.invalid"
+        user.display_name = "[Erased User]"
         user.phone = None
         user.recovery_codes = []
-        user.status = 'blocked'
+        user.status = "blocked"
         user.set_unusable_password()
         user.save()
 
@@ -116,7 +117,7 @@ def erase_user_pii(user, erased_by):
         AdminAuditLog.objects.create(
             organization=user.organization,
             actor=erased_by,
-            action='pii_erasure',
-            target_type='user',
+            action="pii_erasure",
+            target_type="user",
             target_id=user_pk,
         )

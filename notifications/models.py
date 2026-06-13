@@ -6,14 +6,15 @@ RelayMessage provides the email relay messaging feature (NEW-1).
 """
 
 import uuid
+
 from django.db import models
 
 
 class WebPushSubscription(models.Model):
     user = models.ForeignKey(
-        'accounts.User',
+        "accounts.User",
         on_delete=models.CASCADE,
-        related_name='push_subscriptions',
+        related_name="push_subscriptions",
     )
     endpoint = models.URLField(max_length=500, unique=True)
     p256dh = models.CharField(max_length=256)
@@ -21,38 +22,38 @@ class WebPushSubscription(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f'PushSub user={self.user_id} {self.endpoint[:40]}…'
+        return f"PushSub user={self.user_id} {self.endpoint[:40]}…"
 
 
 class RelayMessage(models.Model):
-    organization = models.ForeignKey('parking.Organization', on_delete=models.PROTECT)
+    organization = models.ForeignKey("parking.Organization", on_delete=models.PROTECT)
     from_user = models.ForeignKey(
-        'accounts.User',
+        "accounts.User",
         on_delete=models.PROTECT,
-        related_name='sent_relay_messages',
+        related_name="sent_relay_messages",
         null=True,
         blank=True,
         # null=True supports right-to-erasure: erase_user_pii() sets this to
         # None after scrubbing body to '[erased]'.
     )
     to_user = models.ForeignKey(
-        'accounts.User',
+        "accounts.User",
         on_delete=models.PROTECT,
-        related_name='received_relay_messages',
+        related_name="received_relay_messages",
         null=True,
         blank=True,
         # null=True supports right-to-erasure: erase_user_pii() sets this to
         # None after scrubbing body to '[erased]'.
     )
     booking = models.ForeignKey(
-        'parking.Booking',
+        "parking.Booking",
         on_delete=models.PROTECT,
-        related_name='relay_messages',
+        related_name="relay_messages",
     )
     body = models.TextField()
     reply_token = models.UUIDField(default=uuid.uuid4, unique=True)
-    token_expires_at = models.DateTimeField()   # = booking.time_range.upper
+    token_expires_at = models.DateTimeField()  # = booking.time_range.upper
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f'RelayMessage {self.pk} from={self.from_user_id} to={self.to_user_id}'
+        return f"RelayMessage {self.pk} from={self.from_user_id} to={self.to_user_id}"

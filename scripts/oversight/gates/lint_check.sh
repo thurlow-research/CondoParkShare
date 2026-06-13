@@ -31,7 +31,8 @@ for arg in "$@"; do
 done
 
 if $CHECK_ALL; then
-    mapfile -t FILES < <(find . -name "*.py" -not -path "./.venv/*" \
+    while IFS= read -r line; do FILES+=("$line"); done < <(find . -name "*.py" \
+        -not -path "./.venv/*" -not -path "./scripts/*" \
         -not -path "./node_modules/*" -not -path "./.git/*")
 fi
 

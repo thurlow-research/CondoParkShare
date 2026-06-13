@@ -1,3 +1,1 @@
-from django.contrib import admin
-
-# Register your models here.
+# Notification models are not exposed in any admin interface.

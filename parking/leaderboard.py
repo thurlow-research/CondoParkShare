@@ -33,21 +33,24 @@ def get_leaderboard(organization, limit=20):
     window_start = now_dt - timedelta(days=organization.tier_metric_window_days)
 
     return (
-        User.objects
-        .filter(organization=organization, status='active')
+        User.objects.filter(organization=organization, status="active")
         .annotate(
             elapsed_hours=Sum(
                 ExpressionWrapper(
-                    Upper('owned_spots__availability_windows__time_range') -
-                    Lower('owned_spots__availability_windows__time_range'),
+                    Upper("owned_spots__availability_windows__time_range")
+                    - Lower("owned_spots__availability_windows__time_range"),
                     output_field=DurationField(),
                 ),
                 filter=(
-                    Q(owned_spots__availability_windows__time_range__endswith__lte=now_dt) &
-                    Q(owned_spots__availability_windows__time_range__startswith__gte=window_start) &
-                    Q(owned_spots__status='active')
+                    Q(
+                        owned_spots__availability_windows__time_range__endswith__lte=now_dt
+                    )
+                    & Q(
+                        owned_spots__availability_windows__time_range__startswith__gte=window_start
+                    )
+                    & Q(owned_spots__status="active")
                 ),
             )
         )
-        .order_by('-elapsed_hours')[:limit]
+        .order_by("-elapsed_hours")[:limit]
     )

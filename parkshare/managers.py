@@ -8,6 +8,7 @@ rather than accidentally leaking cross-tenant data.
 """
 
 from django.db import models
+
 from parkshare.middleware import get_current_organization
 
 

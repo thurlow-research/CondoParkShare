@@ -39,34 +39,32 @@ def get_earned_horizon_hours(user):
 
     # Sum elapsed hours from completed availability windows within the rolling window.
     elapsed = (
-        AvailabilityWindow.objects
-        .filter(
+        AvailabilityWindow.objects.filter(
             spot__owner=user,
             spot__organization=org,
-            spot__status='active',
-            time_range__endswith__lte=now_dt,        # upper bound has passed (fully elapsed)
+            spot__status="active",
+            time_range__endswith__lte=now_dt,  # upper bound has passed (fully elapsed)
             time_range__startswith__gte=window_start,  # within the rolling metric window
         )
         .annotate(
             hours=ExpressionWrapper(
-                Upper('time_range') - Lower('time_range'),
+                Upper("time_range") - Lower("time_range"),
                 output_field=DurationField(),
             )
         )
-        .aggregate(total=Sum('hours'))['total']
+        .aggregate(total=Sum("hours"))["total"]
     )
     elapsed_hours = elapsed.total_seconds() / 3600 if elapsed else 0
 
     # Penalties: owner-cancelled bookings whose scheduled start falls within the window.
     penalties = (
-        Booking.objects
-        .filter(
+        Booking.objects.filter(
             spot__owner=user,
             spot__organization=org,
-            status='cancelled_owner',
+            status="cancelled_owner",
             time_range__startswith__gte=window_start,
-        )
-        .aggregate(total=Sum('penalty_hours'))['total'] or 0
+        ).aggregate(total=Sum("penalty_hours"))["total"]
+        or 0
     )
 
     net_hours = max(0, elapsed_hours - penalties)

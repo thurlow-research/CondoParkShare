@@ -30,7 +30,8 @@ for arg in "$@"; do
 done
 
 if $CHECK_ALL; then
-    mapfile -t FILES < <(find . -name "*.py" -not -path "./.venv/*" \
+    while IFS= read -r line; do FILES+=("$line"); done < <(find . -name "*.py" \
+        -not -path "./.venv/*" -not -path "./scripts/oversight/.venv/*" \
         -not -path "./.git/*")
 fi
 
@@ -64,7 +65,7 @@ fi
 echo ""
 echo "=== pip-audit (dependency vulnerabilities) ==="
 if [[ -x "$VENV_BIN/pip-audit" ]]; then
-    if ! "$VENV_BIN/pip-audit" --progress-spinner off -q 2>&1; then
+    if ! "$VENV_BIN/pip-audit" --progress-spinner off 2>&1; then
         echo "GATE FAIL: vulnerable dependencies found — update before proceeding"
         ERRORS=$((ERRORS + 1))
     else

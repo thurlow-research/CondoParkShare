@@ -5,9 +5,10 @@ All environment-specific settings override this file.
 No secrets here — all sensitive values come from environment variables.
 """
 
-from pathlib import Path
 import base64
 import hashlib
+from pathlib import Path
+
 import environ
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -15,34 +16,34 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 env = environ.Env(
     DEBUG=(bool, False),
     ALLOWED_HOSTS=(list, []),
-    EMAIL_BACKEND=(str, 'anymail.backends.brevo.EmailBackend'),
+    EMAIL_BACKEND=(str, "anymail.backends.brevo.EmailBackend"),
 )
 
 # Read .env if it exists (dev convenience only — production uses real env vars)
-environ.Env.read_env(BASE_DIR / '.env', overwrite=False)
+environ.Env.read_env(BASE_DIR / ".env", overwrite=False)
 
 # ---------------------------------------------------------------------------
 # Core
 # ---------------------------------------------------------------------------
 
-SECRET_KEY = env('SECRET_KEY')
+SECRET_KEY = env("SECRET_KEY")
 
-DEBUG = env('DEBUG')
+DEBUG = env("DEBUG")
 
-ALLOWED_HOSTS = env('ALLOWED_HOSTS')
+ALLOWED_HOSTS = env("ALLOWED_HOSTS")
 
-ROOT_URLCONF = 'parkshare.urls'
+ROOT_URLCONF = "parkshare.urls"
 
-WSGI_APPLICATION = 'parkshare.wsgi.application'
+WSGI_APPLICATION = "parkshare.wsgi.application"
 
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-AUTH_USER_MODEL = 'accounts.User'
+AUTH_USER_MODEL = "accounts.User"
 
 # Suppress auth.E003: USERNAME_FIELD (email) is not unique at the column level by design.
 # Multi-tenant: the same email address may exist in multiple organisations.
 # Uniqueness is enforced via unique_together = [('organization', 'email')].
-SILENCED_SYSTEM_CHECKS = ['auth.E003']
+SILENCED_SYSTEM_CHECKS = ["auth.E003"]
 
 # ---------------------------------------------------------------------------
 # Applications
@@ -50,27 +51,25 @@ SILENCED_SYSTEM_CHECKS = ['auth.E003']
 
 INSTALLED_APPS = [
     # Django contrib
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    'django.contrib.postgres',
-
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    "django.contrib.postgres",
     # Third-party
-    'django_otp',
-    'django_otp.plugins.otp_totp',
-    'django_otp.plugins.otp_static',
-    'encrypted_model_fields',
-    'anymail',
-
+    "django_otp",
+    "django_otp.plugins.otp_totp",
+    "django_otp.plugins.otp_static",
+    "encrypted_model_fields",
+    "anymail",
     # Project apps — accounts MUST precede parking (User model dependency)
-    'accounts',
-    'parking',
-    'notifications',
-    'portal',
-    'operator_console',
+    "accounts",
+    "parking",
+    "notifications",
+    "portal",
+    "operator_console",
 ]
 
 # ---------------------------------------------------------------------------
@@ -78,16 +77,16 @@ INSTALLED_APPS = [
 # ---------------------------------------------------------------------------
 
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'parkshare.middleware.TenantMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django_otp.middleware.OTPMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'parkshare.middleware.ImpersonationMiddleware',
+    "django.middleware.security.SecurityMiddleware",
+    "parkshare.middleware.TenantMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django_otp.middleware.OTPMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "parkshare.middleware.ImpersonationMiddleware",
 ]
 
 # ---------------------------------------------------------------------------
@@ -96,16 +95,16 @@ MIDDLEWARE = [
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'templates'],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
-                'parkshare.context_processors.impersonation',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [BASE_DIR / "templates"],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+                "parkshare.context_processors.impersonation",
             ],
         },
     },
@@ -116,7 +115,7 @@ TEMPLATES = [
 # ---------------------------------------------------------------------------
 
 DATABASES = {
-    'default': env.db('DATABASE_URL'),
+    "default": env.db("DATABASE_URL"),
 }
 
 # ---------------------------------------------------------------------------
@@ -124,25 +123,27 @@ DATABASES = {
 # ---------------------------------------------------------------------------
 
 PASSWORD_HASHERS = [
-    'django.contrib.auth.hashers.Argon2PasswordHasher',
-    'django.contrib.auth.hashers.BCryptSHA256PasswordHasher',
-    'django.contrib.auth.hashers.PBKDF2PasswordHasher',
-    'django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher',
+    "django.contrib.auth.hashers.Argon2PasswordHasher",
+    "django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
+    "django.contrib.auth.hashers.PBKDF2PasswordHasher",
+    "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
 ]
 
 AUTH_PASSWORD_VALIDATORS = [
-    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
-    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
-    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
-    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+    {
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"
+    },
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
 # ---------------------------------------------------------------------------
 # Internationalisation
 # ---------------------------------------------------------------------------
 
-LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'UTC'
+LANGUAGE_CODE = "en-us"
+TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True
 
@@ -150,12 +151,13 @@ USE_TZ = True
 # Static files
 # ---------------------------------------------------------------------------
 
-STATIC_URL = '/static/'
-STATICFILES_DIRS = [BASE_DIR / 'static']
+STATIC_URL = "/static/"
+STATICFILES_DIRS = [BASE_DIR / "static"]
 
 # ---------------------------------------------------------------------------
 # PII field encryption (django-encrypted-model-fields)
 # ---------------------------------------------------------------------------
+
 
 def _fernet_key(raw: str) -> str:
     """Return *raw* unchanged if it is already a valid 32-byte url-safe base64
@@ -164,7 +166,7 @@ def _fernet_key(raw: str) -> str:
     generate a proper Fernet key, while production environments continue to use
     a real key."""
     try:
-        decoded = base64.urlsafe_b64decode(raw + '==')
+        decoded = base64.urlsafe_b64decode(raw + "==")
         if len(decoded) == 32:
             return raw
     except Exception:
@@ -173,26 +175,26 @@ def _fernet_key(raw: str) -> str:
     return base64.urlsafe_b64encode(derived).decode()
 
 
-FIELD_ENCRYPTION_KEY = _fernet_key(env('PII_ENCRYPTION_KEY'))
+FIELD_ENCRYPTION_KEY = _fernet_key(env("PII_ENCRYPTION_KEY"))
 
 # ---------------------------------------------------------------------------
 # Email — django-anymail
 # ---------------------------------------------------------------------------
 
 ANYMAIL = {
-    'BREVO_API_KEY': env('BREVO_API_KEY', default=''),
+    "BREVO_API_KEY": env("BREVO_API_KEY", default=""),
 }
 
-EMAIL_BACKEND = env('EMAIL_BACKEND', default='anymail.backends.brevo.EmailBackend')
-DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='noreply@parkshare.local')
+EMAIL_BACKEND = env("EMAIL_BACKEND", default="anymail.backends.brevo.EmailBackend")
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@parkshare.local")
 
 # ---------------------------------------------------------------------------
 # Web push — pywebpush / VAPID
 # ---------------------------------------------------------------------------
 
-VAPID_PRIVATE_KEY = env('VAPID_PRIVATE_KEY', default='')
-VAPID_PUBLIC_KEY = env('VAPID_PUBLIC_KEY', default='')
-VAPID_ADMIN_EMAIL = env('VAPID_ADMIN_EMAIL', default='')
+VAPID_PRIVATE_KEY = env("VAPID_PRIVATE_KEY", default="")
+VAPID_PUBLIC_KEY = env("VAPID_PUBLIC_KEY", default="")
+VAPID_ADMIN_EMAIL = env("VAPID_ADMIN_EMAIL", default="")
 
 # ---------------------------------------------------------------------------
 # Security headers
@@ -202,4 +204,4 @@ SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 SECURE_HSTS_SECONDS = 31536000
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-X_FRAME_OPTIONS = 'DENY'
+X_FRAME_OPTIONS = "DENY"

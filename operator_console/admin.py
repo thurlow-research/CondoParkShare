@@ -19,8 +19,8 @@ from django.contrib.auth import get_user_model
 from django.shortcuts import redirect
 
 from accounts.models import AdminAuditLog
+from parking.models import Booking, Organization
 from parkshare.admin_site import operator_admin_site
-from parking.models import Organization, ParkingSpot, AvailabilityWindow, Booking
 
 User = get_user_model()
 
@@ -29,6 +29,7 @@ User = get_user_model()
 # OrganizationAdmin
 # ---------------------------------------------------------------------------
 
+
 @admin.register(Organization, site=operator_admin_site)
 class OrganizationAdmin(admin.ModelAdmin):
     """
@@ -36,41 +37,68 @@ class OrganizationAdmin(admin.ModelAdmin):
     Uses Organization.objects (unscoped) — the operator console queries all
     tenants directly.
     """
+
     list_display = [
-        'name', 'hostname', 'timezone', 'registration_mode',
-        'payer_model', 'unit_count', 'launched_at', 'created_at',
+        "name",
+        "hostname",
+        "timezone",
+        "registration_mode",
+        "payer_model",
+        "unit_count",
+        "launched_at",
+        "created_at",
     ]
-    list_filter = ['registration_mode', 'payer_model']
-    search_fields = ['name', 'hostname', 'support_email']
-    readonly_fields = ['created_at', 'updated_at']
+    list_filter = ["registration_mode", "payer_model"]
+    search_fields = ["name", "hostname", "support_email"]
+    readonly_fields = ["created_at", "updated_at"]
     fieldsets = [
-        (None, {
-            'fields': ['name', 'hostname', 'timezone', 'support_email'],
-        }),
-        ('Registration', {
-            'fields': ['registration_mode', 'unit_count', 'payer_model', 'launched_at'],
-        }),
-        ('Booking config', {
-            'fields': [
-                'booking_buffer_hours',
-                'max_concurrent_bookings',
-                'max_booking_hours',
-            ],
-        }),
-        ('Horizon config', {
-            'fields': [
-                'booking_horizon_baseline_days',
-                'booking_horizon_max_days',
-                'listing_to_horizon_ratio',
-                'tier_metric_window_days',
-                'launch_grace_days',
-                'launch_grace_horizon_days',
-            ],
-        }),
-        ('Timestamps', {
-            'fields': ['created_at', 'updated_at'],
-            'classes': ['collapse'],
-        }),
+        (
+            None,
+            {
+                "fields": ["name", "hostname", "timezone", "support_email"],
+            },
+        ),
+        (
+            "Registration",
+            {
+                "fields": [
+                    "registration_mode",
+                    "unit_count",
+                    "payer_model",
+                    "launched_at",
+                ],
+            },
+        ),
+        (
+            "Booking config",
+            {
+                "fields": [
+                    "booking_buffer_hours",
+                    "max_concurrent_bookings",
+                    "max_booking_hours",
+                ],
+            },
+        ),
+        (
+            "Horizon config",
+            {
+                "fields": [
+                    "booking_horizon_baseline_days",
+                    "booking_horizon_max_days",
+                    "listing_to_horizon_ratio",
+                    "tier_metric_window_days",
+                    "launch_grace_days",
+                    "launch_grace_horizon_days",
+                ],
+            },
+        ),
+        (
+            "Timestamps",
+            {
+                "fields": ["created_at", "updated_at"],
+                "classes": ["collapse"],
+            },
+        ),
     ]
 
 
@@ -78,7 +106,8 @@ class OrganizationAdmin(admin.ModelAdmin):
 # Bulk actions for UserAdmin
 # ---------------------------------------------------------------------------
 
-@admin.action(description='Erase PII (GDPR)')
+
+@admin.action(description="Erase PII (GDPR)")
 def pii_erasure(modeladmin, request, queryset):
     """
     Admin action: erase PII for exactly one selected user.
@@ -96,7 +125,7 @@ def pii_erasure(modeladmin, request, queryset):
     if queryset.count() != 1:
         modeladmin.message_user(
             request,
-            'Select exactly one user to erase.',
+            "Select exactly one user to erase.",
             level=messages.ERROR,
         )
         return
@@ -108,7 +137,7 @@ def pii_erasure(modeladmin, request, queryset):
 
     modeladmin.message_user(
         request,
-        f'PII erased for user {user.pk}.',
+        f"PII erased for user {user.pk}.",
         messages.SUCCESS,
     )
 
@@ -117,32 +146,57 @@ def pii_erasure(modeladmin, request, queryset):
 # UserAdmin
 # ---------------------------------------------------------------------------
 
+
 @admin.register(User, site=operator_admin_site)
 class UserAdmin(admin.ModelAdmin):
     list_display = [
-        'email', 'display_name', 'organization', 'status',
-        'is_hoa_admin', 'is_staff', 'is_active', 'created_at',
+        "email",
+        "display_name",
+        "organization",
+        "status",
+        "is_hoa_admin",
+        "is_staff",
+        "is_active",
+        "created_at",
     ]
-    list_filter = ['status', 'is_hoa_admin', 'is_staff', 'is_active', 'organization']
-    search_fields = ['email', 'display_name']
-    readonly_fields = ['created_at', 'updated_at', 'last_booking_at']
-    actions = [pii_erasure, 'impersonate_user']
+    list_filter = ["status", "is_hoa_admin", "is_staff", "is_active", "organization"]
+    search_fields = ["email", "display_name"]
+    readonly_fields = ["created_at", "updated_at", "last_booking_at"]
+    actions = [pii_erasure, "impersonate_user"]
 
     fieldsets = [
-        (None, {
-            'fields': ['email', 'display_name', 'organization', 'status'],
-        }),
-        ('Permissions', {
-            'fields': ['is_hoa_admin', 'is_staff', 'is_active', 'is_superuser',
-                       'groups', 'user_permissions'],
-        }),
-        ('Preferences', {
-            'fields': ['phone', 'notification_prefs', 'marketing_email_opted_in'],
-        }),
-        ('Timestamps', {
-            'fields': ['created_at', 'updated_at', 'last_booking_at'],
-            'classes': ['collapse'],
-        }),
+        (
+            None,
+            {
+                "fields": ["email", "display_name", "organization", "status"],
+            },
+        ),
+        (
+            "Permissions",
+            {
+                "fields": [
+                    "is_hoa_admin",
+                    "is_staff",
+                    "is_active",
+                    "is_superuser",
+                    "groups",
+                    "user_permissions",
+                ],
+            },
+        ),
+        (
+            "Preferences",
+            {
+                "fields": ["phone", "notification_prefs", "marketing_email_opted_in"],
+            },
+        ),
+        (
+            "Timestamps",
+            {
+                "fields": ["created_at", "updated_at", "last_booking_at"],
+                "classes": ["collapse"],
+            },
+        ),
     ]
 
     def impersonate_user(self, request, queryset):
@@ -160,7 +214,7 @@ class UserAdmin(admin.ModelAdmin):
         if queryset.count() != 1:
             self.message_user(
                 request,
-                'Select exactly one user to impersonate.',
+                "Select exactly one user to impersonate.",
                 level=messages.ERROR,
             )
             return
@@ -168,49 +222,64 @@ class UserAdmin(admin.ModelAdmin):
         if user.is_superuser:
             self.message_user(
                 request,
-                'Cannot impersonate a superuser.',
+                "Cannot impersonate a superuser.",
                 level=messages.ERROR,
             )
             return
 
-        request.session['impersonating'] = user.pk
-        request.session['real_operator'] = request.user.pk
+        request.session["impersonating"] = user.pk
+        request.session["real_operator"] = request.user.pk
 
         AdminAuditLog.objects.create(
             organization=user.organization,
             actor=request.user,
-            action='impersonate_start',
-            target_type='user',
+            action="impersonate_start",
+            target_type="user",
             target_id=user.pk,
         )
-        return redirect('/')
+        return redirect("/")
 
-    impersonate_user.short_description = 'Impersonate this user'
+    impersonate_user.short_description = "Impersonate this user"
 
 
 # ---------------------------------------------------------------------------
 # AdminAuditLogAdmin (read-only)
 # ---------------------------------------------------------------------------
 
+
 @admin.register(AdminAuditLog, site=operator_admin_site)
 class AdminAuditLogAdmin(admin.ModelAdmin):
     list_display = [
-        'created_at', 'actor', 'action', 'target_type', 'target_id', 'organization',
+        "created_at",
+        "actor",
+        "action",
+        "target_type",
+        "target_id",
+        "organization",
     ]
-    list_filter = ['action', 'organization']
-    search_fields = ['actor__email', 'notes']
+    list_filter = ["action", "organization"]
+    search_fields = ["actor__email", "notes"]
     readonly_fields = [
-        f.name for f in AdminAuditLog._meta.get_fields()
-        if hasattr(f, 'column') or f.__class__.__name__ in (
-            'AutoField', 'BigAutoField', 'ForeignKey', 'DateTimeField',
-            'CharField', 'TextField', 'PositiveIntegerField',
+        f.name
+        for f in AdminAuditLog._meta.get_fields()
+        if hasattr(f, "column")
+        or f.__class__.__name__
+        in (
+            "AutoField",
+            "BigAutoField",
+            "ForeignKey",
+            "DateTimeField",
+            "CharField",
+            "TextField",
+            "PositiveIntegerField",
         )
     ]
 
     def get_readonly_fields(self, request, obj=None):
         """Make every field on the model read-only."""
-        return [f.name for f in self._meta.model._meta.get_fields()
-                if hasattr(f, 'name')]
+        return [
+            f.name for f in self._meta.model._meta.get_fields() if hasattr(f, "name")
+        ]
 
     def has_add_permission(self, request):
         return False
@@ -226,13 +295,14 @@ class AdminAuditLogAdmin(admin.ModelAdmin):
 # BookingAdmin
 # ---------------------------------------------------------------------------
 
+
 @admin.register(Booking, site=operator_admin_site)
 class BookingAdmin(admin.ModelAdmin):
-    list_display = ['pk', 'spot', 'borrower', 'status', 'time_range', 'organization']
-    list_filter = ['organization', 'status']
-    search_fields = ['spot__spot_number', 'borrower__email']
-    readonly_fields = ['created_at', 'updated_at']
-    actions = ['admin_cancel_booking']
+    list_display = ["pk", "spot", "borrower", "status", "time_range", "organization"]
+    list_filter = ["organization", "status"]
+    search_fields = ["spot__spot_number", "borrower__email"]
+    readonly_fields = ["created_at", "updated_at"]
+    actions = ["admin_cancel_booking"]
 
     def admin_cancel_booking(self, request, queryset):
         """
@@ -241,24 +311,22 @@ class BookingAdmin(admin.ModelAdmin):
         Logs each cancellation to AdminAuditLog.
         """
         cancelled_count = 0
-        for booking in queryset.filter(
-            status__in=['tentative', 'confirmed', 'active']
-        ):
-            booking.status = 'cancelled_admin'
-            booking.save(update_fields=['status', 'updated_at'])
+        for booking in queryset.filter(status__in=["tentative", "confirmed", "active"]):
+            booking.status = "cancelled_admin"
+            booking.save(update_fields=["status", "updated_at"])
             AdminAuditLog.objects.create(
                 organization=booking.organization,
                 actor=request.user,
-                action='admin_cancel',
-                target_type='booking',
+                action="admin_cancel",
+                target_type="booking",
                 target_id=booking.pk,
             )
             cancelled_count += 1
 
         self.message_user(
             request,
-            f'{cancelled_count} booking(s) cancelled.',
+            f"{cancelled_count} booking(s) cancelled.",
             messages.SUCCESS,
         )
 
-    admin_cancel_booking.short_description = 'Admin cancel selected bookings'
+    admin_cancel_booking.short_description = "Admin cancel selected bookings"

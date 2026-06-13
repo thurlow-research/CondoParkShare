@@ -1,3 +1,1 @@
-from django.test import TestCase
-
-# Create your tests here.
+# Tests for accounts app live in tests/test_auth.py
