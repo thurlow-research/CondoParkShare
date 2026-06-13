@@ -13,9 +13,11 @@ coverage==7.14.1
 cryptography==48.0.1
 Django==5.1.15
 django-anymail==15.0
+django-csp==4.0
 django-encrypted-model-fields==0.6.5
 django-environ==0.13.0
 django-otp==1.7.0
+django-ratelimit==4.1.0
 factory_boy==3.3.3
 Faker==40.23.0
 freezegun==1.5.5

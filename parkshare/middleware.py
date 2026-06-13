@@ -1,5 +1,6 @@
 """
-parkshare.middleware — TenantMiddleware and ImpersonationMiddleware.
+parkshare.middleware — TenantMiddleware, ImpersonationMiddleware, and
+RatelimitMiddleware.
 
 TenantMiddleware: resolves the Organization from request hostname and stores
 it in thread-local storage so OrganizationScopedManager can read it without
@@ -8,6 +9,9 @@ a request object.
 ImpersonationMiddleware: when a superuser operator is impersonating a user
 (session key 'impersonating'), overrides request.user and logs every POST
 to AdminAuditLog.
+
+RatelimitMiddleware: converts Ratelimited exceptions (PermissionDenied
+subclass) raised by django-ratelimit block=True into proper HTTP 429 responses.
 """
 
 import threading
@@ -52,6 +56,32 @@ class TenantMiddleware:
             # Always clear thread-local after request to avoid leaking state
             # into subsequent requests on the same thread.
             _thread_locals.organization = None
+
+
+class RatelimitMiddleware:
+    """
+    Convert Ratelimited exceptions into HTTP 429 responses.
+
+    django-ratelimit raises Ratelimited (a PermissionDenied subclass) when
+    block=True and the limit is exceeded.  Without this middleware Django would
+    render it as a 403.  A 429 is the correct status and prevents confusion
+    with genuine permission errors.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        return self.get_response(request)
+
+    def process_exception(self, request, exception):
+        from django_ratelimit.exceptions import Ratelimited
+
+        if isinstance(exception, Ratelimited):
+            from django.shortcuts import render as django_render
+
+            return django_render(request, "429.html", status=429)
+        return None
 
 
 class ImpersonationMiddleware:

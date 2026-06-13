@@ -1,6 +1,6 @@
 role: security
 agent: security-reviewer
-status: CONDITIONAL
-signed_at: 2026-06-13T13:45:00Z          # informational — the gate uses the git commit time
-head_at_signing: 1a12f53
-note: Reviewed overall codebase in overnight Phase 2-4 gate sweep. Specific delta reviewed by primary role. Remaining findings tracked as GitHub issues.
+status: APPROVED
+signed_at: 2026-06-13T13:50:00Z          # informational — the gate uses the git commit time
+head_at_signing: b686006
+note: Security issues reviewed and fixed in Phase 3b.

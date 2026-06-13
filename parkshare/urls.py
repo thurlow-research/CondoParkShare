@@ -3,10 +3,19 @@ URL configuration for parkshare project.
 """
 
 from django.conf import settings
+from django.shortcuts import render
 from django.urls import include, path
 
 from accounts import views as account_views
 from parkshare.admin_site import operator_admin_site
+
+
+def _handler429(request, exception=None):
+    return render(request, "429.html", status=429)
+
+
+# Register as Django's custom 429 handler (module-level assignment required by Django).
+handler429 = _handler429
 
 urlpatterns = [
     path("accounts/", include("accounts.urls")),

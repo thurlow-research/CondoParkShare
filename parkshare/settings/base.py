@@ -10,6 +10,7 @@ import hashlib
 from pathlib import Path
 
 import environ
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -43,7 +44,14 @@ AUTH_USER_MODEL = "accounts.User"
 # Suppress auth.E003: USERNAME_FIELD (email) is not unique at the column level by design.
 # Multi-tenant: the same email address may exist in multiple organisations.
 # Uniqueness is enforced via unique_together = [('organization', 'email')].
-SILENCED_SYSTEM_CHECKS = ["auth.E003"]
+# Suppress django_ratelimit.E003: locmem cache is not shared across processes but is
+# correct for single-process dev/test.  Production deployments must configure Redis via
+# CACHES and remove this suppression.
+SILENCED_SYSTEM_CHECKS = ["auth.E003", "django_ratelimit.E003", "django_ratelimit.W001"]
+# auth.E003 — email USERNAME_FIELD uniqueness is enforced via unique_together, not column UNIQUE.
+# django_ratelimit.E003/W001 — locmem cache is not shared across workers; acceptable for
+# dev/test (single-process). production.py overrides this list to restore these checks
+# and requires a shared cache (Redis) via CACHE_URL.
 
 # ---------------------------------------------------------------------------
 # Applications
@@ -64,6 +72,8 @@ INSTALLED_APPS = [
     "django_otp.plugins.otp_static",
     "encrypted_model_fields",
     "anymail",
+    "django_ratelimit",
+    "csp",
     # Project apps — accounts MUST precede parking (User model dependency)
     "accounts",
     "parking",
@@ -78,6 +88,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "csp.middleware.CSPMiddleware",
+    "parkshare.middleware.RatelimitMiddleware",
     "parkshare.middleware.TenantMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -85,7 +97,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django_otp.middleware.OTPMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
-    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    # XFrameOptionsMiddleware removed — frame-ancestors in CSP is the authoritative control.
     "parkshare.middleware.ImpersonationMiddleware",
 ]
 
@@ -116,6 +128,19 @@ TEMPLATES = [
 
 DATABASES = {
     "default": env.db("DATABASE_URL"),
+}
+
+# ---------------------------------------------------------------------------
+# Cache — used by django-ratelimit
+# ---------------------------------------------------------------------------
+# Default: in-process memory cache (functionally correct for dev/single-process).
+# Production deployments must override with a shared cache (Redis recommended)
+# and remove the django_ratelimit.E003 suppression from SILENCED_SYSTEM_CHECKS.
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -164,13 +189,27 @@ def _fernet_key(raw: str) -> str:
     Fernet key; otherwise derive one deterministically via SHA-256.  This lets
     CI / smoke-test environments pass a plain memorable string without having to
     generate a proper Fernet key, while production environments continue to use
-    a real key."""
+    a real key.
+
+    In production (DEBUG=False) the SHA-256 derivation path is rejected: a
+    developer who sets PII_ENCRYPTION_KEY=testkey in a production .env would
+    silently receive a deterministic, low-entropy key — that failure mode is
+    blocked here instead of silently encrypting PII with a weak key."""
     try:
         decoded = base64.urlsafe_b64decode(raw + "==")
         if len(decoded) == 32:
             return raw
     except Exception:
         pass
+
+    # raw is not a valid Fernet key — derive one only in non-production.
+    if not DEBUG:
+        raise ImproperlyConfigured(
+            "PII_ENCRYPTION_KEY must be a valid 32-byte url-safe base64 Fernet key "
+            'in production. Generate one with: python -c "from cryptography.fernet '
+            'import Fernet; print(Fernet.generate_key().decode())"'
+        )
+
     derived = hashlib.sha256(raw.encode()).digest()
     return base64.urlsafe_b64encode(derived).decode()
 
@@ -204,4 +243,24 @@ SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 SECURE_HSTS_SECONDS = 31536000
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-X_FRAME_OPTIONS = "DENY"
+# ---------------------------------------------------------------------------
+# Content Security Policy (django-csp 4.x)
+# ---------------------------------------------------------------------------
+# Google Fonts requires fonts.googleapis.com for stylesheets and
+# fonts.gstatic.com for font files.  HTMX is self-hosted; no external scripts.
+# frame-ancestors: 'none' is the authoritative clickjacking control (CSP Level 3).
+# XFrameOptionsMiddleware and X_FRAME_OPTIONS are omitted — redundant with frame-ancestors.
+
+CONTENT_SECURITY_POLICY = {
+    "DIRECTIVES": {
+        "default-src": ["'self'"],
+        "font-src": ["'self'", "https://fonts.gstatic.com"],
+        "style-src": ["'self'", "https://fonts.googleapis.com"],
+        "script-src": ["'self'"],
+        "img-src": ["'self'", "data:"],
+        "object-src": ["'none'"],
+        "frame-ancestors": ["'none'"],
+        "base-uri": ["'self'"],
+        "form-action": ["'self'"],
+    },
+}

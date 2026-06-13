@@ -159,9 +159,17 @@ def message_reply(request, token):
     """
     Reply to a relay message via its reply token.
 
-    Token is validated (exists, not expired).  Real email addresses are not
-    exposed to either party.
+    Token is validated (exists, not expired).  Authentication is required on
+    both GET and POST — the token alone (which may be leaked via a forwarded
+    email) must not expose the original message body or booking details.
+    Real email addresses are not exposed to either party.
     """
+    # Require authentication before revealing any message content.  The token
+    # is delivered by email and may be forwarded or leaked; authentication
+    # ensures only the intended recipient can read or reply to the message.
+    if not request.user.is_authenticated:
+        return redirect(f"/login/?next={request.path}")
+
     original = get_object_or_404(RelayMessage, reply_token=token)
 
     if original.token_expires_at <= now():
@@ -178,13 +186,12 @@ def message_reply(request, token):
     reply_from = original.to_user
     reply_to = original.from_user
 
-    if request.method == "POST":
-        # Require authentication for POST
-        if not request.user.is_authenticated:
-            return redirect("login")
-        if request.user != reply_from:
-            raise PermissionDenied
+    # Verify the authenticated user is the intended recipient of the original
+    # message before rendering its content.
+    if request.user != reply_from:
+        raise PermissionDenied
 
+    if request.method == "POST":
         form = MessageForm(request.POST)
         if form.is_valid():
             if not can_send_relay(request.user, original.booking):
