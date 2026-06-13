@@ -623,7 +623,12 @@ def test_relay_email_hides_real_addresses():
 @pytest.mark.django_db
 @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
 def test_relay_expired_token_returns_404():
-    """GET to message_reply with an expired relay token returns HTTP 404."""
+    """GET to message_reply with an expired relay token returns HTTP 404 for
+    authenticated users, and HTTP 302 (redirect to login) for anonymous users.
+
+    Authentication is required before revealing whether a token is valid or
+    expired — the token alone must not expose message content to third parties.
+    """
     from django.test import RequestFactory
 
     from notifications.models import RelayMessage
@@ -654,14 +659,22 @@ def test_relay_expired_token_returns_404():
     )
 
     rf = RequestFactory()
-    request = rf.get(f"/messages/reply/{token}/")
-    # Attach an anonymous user so is_authenticated works
+
+    # Anonymous users are redirected to login before any token check.
     from django.contrib.auth.models import AnonymousUser
 
-    request.user = AnonymousUser()
-
-    response = message_reply(request, token=token)
-
+    anon_request = rf.get(f"/messages/reply/{token}/")
+    anon_request.user = AnonymousUser()
+    anon_response = message_reply(anon_request, token=token)
     assert (
-        response.status_code == 404
-    ), f"Expected 404 for expired relay token, got {response.status_code}"
+        anon_response.status_code == 302
+    ), f"Expected 302 (redirect to login) for anonymous user, got {anon_response.status_code}"
+    assert "/login/" in anon_response["Location"]
+
+    # Authenticated recipient sees 404 for expired token.
+    auth_request = rf.get(f"/messages/reply/{token}/")
+    auth_request.user = owner  # owner is to_user (the intended reply recipient)
+    auth_response = message_reply(auth_request, token=token)
+    assert (
+        auth_response.status_code == 404
+    ), f"Expected 404 for expired relay token, got {auth_response.status_code}"

@@ -115,7 +115,9 @@ def availability_add(request, pk):
         raise PermissionDenied
 
     if request.method == "POST":
-        form = AvailabilityWindowForm(request.POST, owner=request.user)
+        form = AvailabilityWindowForm(
+            request.POST, owner=request.user, org=request.organization
+        )
         if form.is_valid():
             start = form.cleaned_data["start"]
             end = form.cleaned_data["end"]
@@ -147,6 +149,7 @@ def availability_add(request, pk):
         form = AvailabilityWindowForm(
             initial={"spot": spot},
             owner=request.user,
+            org=request.organization,
         )
 
     context = {"spot": spot, "form": form}

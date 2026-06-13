@@ -136,7 +136,7 @@ class AvailabilityWindowForm(forms.Form):
         widget=forms.DateTimeInput(attrs={"type": "datetime-local"}),
     )
 
-    def __init__(self, *args, owner=None, **kwargs):
+    def __init__(self, *args, owner=None, org=None, **kwargs):
         super().__init__(*args, **kwargs)
         if owner is not None:
             self.fields["spot"].queryset = ParkingSpot.scoped.filter(

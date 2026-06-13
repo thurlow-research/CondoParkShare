@@ -21,10 +21,12 @@ from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.hashers import check_password, make_password
 from django.core.mail import send_mail
+from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.timezone import now
 from django.views.decorators.http import require_POST
 from django_otp.plugins.otp_totp.models import TOTPDevice
+from django_ratelimit.decorators import ratelimit
 
 from accounts.decorators import active_required
 from accounts.forms import (
@@ -40,6 +42,30 @@ from accounts.forms import (
 from accounts.models import AdminAuditLog, EmailOTP, Invite
 
 User = get_user_model()
+
+
+# ---------------------------------------------------------------------------
+# Rate-limit key helpers
+# ---------------------------------------------------------------------------
+
+
+def _key_pre_auth_user(group, request):
+    """Rate-limit key: the pre-auth user PK stored in session, or fall back to
+    IP.  Binds brute-force limits to the target account, not just the origin
+    IP, so distributed attacks from many IPs against one account are still
+    throttled."""
+    user_pk = request.session.get("_pre_auth_user_id")
+    if user_pk is not None:
+        return f"pre_auth:{user_pk}"
+    return request.META.get("REMOTE_ADDR", "unknown")
+
+
+def _key_lost_auth_user(group, request):
+    """Rate-limit key: the lost-auth user PK stored in session, or IP."""
+    user_pk = request.session.get("_lost_auth_user_id")
+    if user_pk is not None:
+        return f"lost_auth:{user_pk}"
+    return request.META.get("REMOTE_ADDR", "unknown")
 
 
 # ---------------------------------------------------------------------------
@@ -73,6 +99,7 @@ def _get_pre_auth_user(request):
 # ---------------------------------------------------------------------------
 
 
+@ratelimit(key="ip", rate="5/m", method=["POST"], block=True)
 def login_view(request):
     """
     Email + password first factor.
@@ -114,6 +141,7 @@ def logout_view(request):
 # ---------------------------------------------------------------------------
 
 
+@ratelimit(key=_key_pre_auth_user, rate="5/5m", method=["POST"], block=True)
 def totp_verify(request):
     """
     Second factor: TOTP code verification.
@@ -160,6 +188,7 @@ def totp_verify(request):
 # ---------------------------------------------------------------------------
 
 
+@ratelimit(key=_key_pre_auth_user, rate="3/10m", method=["POST"], block=True)
 def recovery_code(request):
     """
     First-line TOTP fallback: consume one of the user's hashed recovery codes.
@@ -176,31 +205,41 @@ def recovery_code(request):
         form = RecoveryCodeForm(request.POST)
         if form.is_valid():
             submitted = form.cleaned_data["code"]
-            matched_index = None
-            for i, hashed in enumerate(user.recovery_codes):
-                if check_password(submitted, hashed):
-                    matched_index = i
-                    break
+
+            # select_for_update + atomic prevents two concurrent requests from
+            # both passing check_password before either save() runs, which
+            # would let a single code grant two logins.
+            with transaction.atomic():
+                locked_user = User.objects.select_for_update().get(pk=user.pk)
+
+                matched_index = None
+                for i, hashed in enumerate(locked_user.recovery_codes):
+                    if check_password(submitted, hashed):
+                        matched_index = i
+                        break
+
+                if matched_index is not None:
+                    # Blocked accounts must not be able to log in via any path.
+                    if locked_user.status == "blocked":
+                        form.add_error("code", "Invalid recovery code.")
+                        return render(
+                            request, "accounts/recovery_code.html", {"form": form}
+                        )
+
+                    # Consume the recovery code (single-use).
+                    codes = list(locked_user.recovery_codes)
+                    codes.pop(matched_index)
+                    locked_user.recovery_codes = codes
+                    locked_user.save(update_fields=["recovery_codes"])
 
             if matched_index is not None:
-                # Blocked accounts must not be able to log in via any path.
-                if user.status == "blocked":
-                    form.add_error("code", "Invalid recovery code.")
-                    return render(
-                        request, "accounts/recovery_code.html", {"form": form}
-                    )
-
-                # Consume the recovery code (single-use).
-                codes = list(user.recovery_codes)
-                codes.pop(matched_index)
-                user.recovery_codes = codes
-                user.save(update_fields=["recovery_codes"])
-
                 # Force TOTP re-enrollment.
                 del request.session["_pre_auth_user_id"]
                 request.session["totp_reset_required"] = True
                 login(
-                    request, user, backend="django.contrib.auth.backends.ModelBackend"
+                    request,
+                    locked_user,
+                    backend="django.contrib.auth.backends.ModelBackend",
                 )
                 return redirect("totp_enroll")
             else:
@@ -216,6 +255,7 @@ def recovery_code(request):
 # ---------------------------------------------------------------------------
 
 
+@ratelimit(key="ip", rate="3/15m", method=["POST"], block=True)
 def lost_authenticator(request):
     """
     Backstop flow when both TOTP and recovery codes are unavailable.
@@ -274,6 +314,7 @@ def lost_authenticator(request):
     return render(request, "accounts/lost_authenticator.html", {"form": form})
 
 
+@ratelimit(key=_key_lost_auth_user, rate="5/15m", method=["POST"], block=True)
 def lost_authenticator_verify(request):
     """
     Validate the email OTP sent by lost_authenticator.
@@ -293,43 +334,54 @@ def lost_authenticator_verify(request):
 
             # Find non-consumed, non-expired OTP for the specific user who
             # initiated the flow — not any OTP in the org.
-            candidates = EmailOTP.objects.none()
-            if lost_auth_user_id is not None:
-                candidates = EmailOTP.objects.filter(
-                    user_id=lost_auth_user_id,
-                    consumed=False,
-                    expires_at__gt=now(),
-                    user__organization=request.organization,
-                ).select_related("user")
-
+            # select_for_update + atomic prevents two concurrent requests from
+            # both seeing consumed=False before either sets it to True.
             matched_otp = None
-            for otp in candidates:
-                if check_password(submitted, otp.code_hash):
-                    matched_otp = otp
-                    break
-
-            if matched_otp is not None:
-                user = matched_otp.user
-
-                # Blocked or unapproved accounts must not recover via this
-                # path — HOA approval cannot be bypassed via TOTP reset (#17).
-                if user.status in ("blocked", "pending_approval"):
-                    form.add_error("code", "Invalid or expired code.")
-                    return render(
-                        request,
-                        "accounts/lost_authenticator_verify.html",
-                        {"form": form},
+            matched_user = None
+            with transaction.atomic():
+                candidates = EmailOTP.objects.none()
+                if lost_auth_user_id is not None:
+                    candidates = (
+                        EmailOTP.objects.select_for_update()
+                        .filter(
+                            user_id=lost_auth_user_id,
+                            consumed=False,
+                            expires_at__gt=now(),
+                            user__organization=request.organization,
+                        )
+                        .select_related("user")
                     )
 
-                matched_otp.consumed = True
-                matched_otp.save(update_fields=["consumed"])
+                for otp in candidates:
+                    if check_password(submitted, otp.code_hash):
+                        matched_otp = otp
+                        matched_user = otp.user
+                        break
 
+                if matched_otp is not None:
+                    # Blocked or unapproved accounts must not recover via this
+                    # path — HOA approval cannot be bypassed via TOTP reset (#17).
+                    if matched_user.status in ("blocked", "pending_approval"):
+                        # Do not consume the code — just deny.
+                        matched_otp = None
+                    else:
+                        matched_otp.consumed = True
+                        matched_otp.save(update_fields=["consumed"])
+
+            if matched_otp is not None:
                 request.session.pop("_lost_auth_user_id", None)
                 request.session["totp_reset_required"] = True
                 login(
-                    request, user, backend="django.contrib.auth.backends.ModelBackend"
+                    request,
+                    matched_user,
+                    backend="django.contrib.auth.backends.ModelBackend",
                 )
                 return redirect("totp_enroll")
+            elif matched_user is not None and matched_user.status in (
+                "blocked",
+                "pending_approval",
+            ):
+                form.add_error("code", "Invalid or expired code.")
             else:
                 form.add_error("code", "Invalid or expired code.")
     else:
