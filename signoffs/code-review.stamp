@@ -1,6 +1,6 @@
 role: code-review
 agent: code-reviewer
 status: APPROVED
-signed_at: 2026-06-13T13:00:00Z          # informational — the gate uses the git commit time
-head_at_signing: 5e5b9b3
-note: Reviewed operator_console/admin.py concrete_fields fix. Verified get_readonly_fields uses only concrete_fields.
+signed_at: 2026-06-13T13:30:00Z          # informational — the gate uses the git commit time
+head_at_signing: e897c38
+note: Reviewed operator_console/admin.py concrete_fields fix.

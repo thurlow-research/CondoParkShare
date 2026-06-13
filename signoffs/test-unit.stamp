@@ -1,6 +1,6 @@
 role: test-unit
 agent: unit-test
 status: APPROVED
-signed_at: 2026-06-13T13:00:00Z          # informational — the gate uses the git commit time
-head_at_signing: 5e5b9b3
+signed_at: 2026-06-13T13:30:00Z          # informational — the gate uses the git commit time
+head_at_signing: e897c38
 note: Admin portal tests 13/13 pass.

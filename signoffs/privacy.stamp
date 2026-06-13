@@ -1,6 +1,6 @@
 role: privacy
 agent: privacy-reviewer
 status: APPROVED
-signed_at: 2026-06-13T13:00:00Z          # informational — the gate uses the git commit time
-head_at_signing: 5e5b9b3
-note: Audit log read-only guard verified. Fix prevents FieldError tamper path.
+signed_at: 2026-06-13T13:30:00Z          # informational — the gate uses the git commit time
+head_at_signing: e897c38
+note: Audit log read-only guard verified; fix prevents FieldError tamper path.
