@@ -1,47 +1,69 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Spots — HOA Portal</title>
-</head>
-<body>
-  <h1>Parking spots</h1>
-  <a href="{% url 'portal_home' %}">Back to dashboard</a>
+{% extends "base.html" %}
 
-  <table>
-    <thead>
-      <tr>
-        <th>Spot number</th>
-        <th>Owner</th>
-        <th>Status</th>
-        <th>Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for spot in spots %}
-      <tr>
-        <td>{{ spot.spot_number }}</td>
-        <td>{% if spot.owner %}{{ spot.owner.display_name }}{% else %}&mdash;{% endif %}</td>
-        <td>{{ spot.status }}</td>
-        <td>
-          {% if spot.status == 'pending' %}
-          <form method="post" action="{% url 'portal_spot_approve' spot.pk %}">
-            {% csrf_token %}
-            <button type="submit">Approve</button>
-          </form>
-          {% endif %}
-          {% if spot.status == 'active' %}
-          <form method="post" action="{% url 'portal_spot_deactivate' spot.pk %}">
-            {% csrf_token %}
-            <button type="submit">Deactivate</button>
-          </form>
-          {% endif %}
-        </td>
-      </tr>
-      {% empty %}
-      <tr><td colspan="4">No spots.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</body>
-</html>
+{% block title %}Spots — HOA portal — CondoParkShare{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+  <div>
+    <nav aria-label="Breadcrumb" style="font-size:13px;color:var(--text-muted);margin-bottom:8px">
+      <a href="{% url 'portal_home' %}" style="color:var(--meadow-ink);text-decoration:none">HOA portal</a>
+      <span aria-hidden="true"> / </span>
+      <span aria-current="page">Spots</span>
+    </nav>
+    <h1>Parking spots</h1>
+  </div>
+</div>
+
+<div class="card">
+  {% if spots %}
+    <table style="width:100%;border-collapse:collapse;font-size:14px">
+      <thead>
+        <tr style="border-bottom:1px solid var(--line)">
+          <th style="text-align:left;padding:8px 12px;font-size:12px;color:var(--text-muted);font-weight:600">Spot</th>
+          <th style="text-align:left;padding:8px 12px;font-size:12px;color:var(--text-muted);font-weight:600">Owner</th>
+          <th style="text-align:left;padding:8px 12px;font-size:12px;color:var(--text-muted);font-weight:600">Status</th>
+          <th style="text-align:left;padding:8px 12px;font-size:12px;color:var(--text-muted);font-weight:600">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for spot in spots %}
+        <tr style="border-bottom:1px solid var(--line)">
+          <td style="padding:10px 12px"><span class="mono">{{ spot.spot_number }}</span></td>
+          <td style="padding:10px 12px">{% if spot.owner %}{{ spot.owner.display_name }}{% else %}&mdash;{% endif %}</td>
+          <td style="padding:10px 12px">
+            {% if spot.status == 'active' %}
+              <span class="badge badge-active"><span class="dot" aria-hidden="true"></span> Active</span>
+            {% elif spot.status == 'pending' %}
+              <span class="badge badge-pending"><span class="ring" aria-hidden="true"></span> Pending</span>
+            {% else %}
+              <span class="badge badge-inactive"><span class="ring" aria-hidden="true"></span> {{ spot.status|capfirst }}</span>
+            {% endif %}
+          </td>
+          <td style="padding:10px 12px">
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              {% if spot.status == 'pending' %}
+              <form method="post" action="{% url 'portal_spot_approve' spot.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary" style="font-size:13px" aria-label="Approve spot {{ spot.spot_number }}">Approve</button>
+              </form>
+              {% endif %}
+              {% if spot.status == 'active' %}
+              <form method="post" action="{% url 'portal_spot_deactivate' spot.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-ghost" style="font-size:13px" aria-label="Deactivate spot {{ spot.spot_number }}">Deactivate</button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div style="text-align:center;padding:48px 24px;color:var(--text-muted)">
+      <div class="bay" style="margin:0 auto 16px;width:48px;height:48px" aria-hidden="true"></div>
+      <p style="margin:0;font-size:14px">No spots registered yet.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

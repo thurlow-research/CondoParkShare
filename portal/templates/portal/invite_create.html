@@ -1,17 +1,90 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Create invite — HOA Portal</title>
-</head>
-<body>
-  <h1>Create invite</h1>
-  <a href="{% url 'portal_invite_list' %}">Back to invites</a>
+{% extends "base.html" %}
 
-  <form method="post">
-    {% csrf_token %}
-    {{ form.as_p }}
-    <button type="submit">Create invite</button>
-  </form>
-</body>
-</html>
+{% block title %}Create invite — HOA portal — CondoParkShare{% endblock %}
+
+{% block content %}
+<div style="max-width:480px">
+  <nav aria-label="Breadcrumb" style="font-size:13px;color:var(--text-muted);margin-bottom:12px">
+    <a href="{% url 'portal_home' %}" style="color:var(--meadow-ink);text-decoration:none">HOA portal</a>
+    <span aria-hidden="true"> / </span>
+    <a href="{% url 'portal_invite_list' %}" style="color:var(--meadow-ink);text-decoration:none">Invites</a>
+    <span aria-hidden="true"> / </span>
+    <span aria-current="page">Create</span>
+  </nav>
+
+  <div class="page-header">
+    <h1>Create invite</h1>
+    <p>Generate a link to send to a new resident.</p>
+  </div>
+
+  <div class="card">
+    {% if form.non_field_errors %}
+      <div class="alert alert-danger" role="alert" style="margin-bottom:16px">
+        <span class="alert-icon" aria-hidden="true">!</span>
+        <span>{% for error in form.non_field_errors %}{{ error }}{% endfor %}</span>
+      </div>
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      <div class="field {% if form.unit_number.errors %}has-error{% endif %}">
+        <label for="{{ form.unit_number.id_for_label }}">{{ form.unit_number.label }}</label>
+        <input
+          type="text"
+          name="{{ form.unit_number.html_name }}"
+          id="{{ form.unit_number.id_for_label }}"
+          {% if form.unit_number.value %}value="{{ form.unit_number.value }}"{% endif %}
+          {% if form.unit_number.errors %}aria-describedby="invite-unit-error" aria-invalid="true"{% endif %}
+        >
+        {% if form.unit_number.help_text %}
+          <div style="font-size:12px;color:var(--text-muted);margin-top:4px">{{ form.unit_number.help_text }}</div>
+        {% endif %}
+        {% if form.unit_number.errors %}
+          <span id="invite-unit-error" class="error-text" role="alert">{{ form.unit_number.errors|join:", " }}</span>
+        {% endif %}
+      </div>
+
+      <div class="field {% if form.expires_at.errors %}has-error{% endif %}">
+        <label for="{{ form.expires_at.id_for_label }}">{{ form.expires_at.label }}</label>
+        <input
+          type="datetime-local"
+          name="{{ form.expires_at.html_name }}"
+          id="{{ form.expires_at.id_for_label }}"
+          {% if form.expires_at.value %}value="{{ form.expires_at.value }}"{% endif %}
+          {% if form.expires_at.errors %}aria-describedby="invite-expires-error" aria-invalid="true"{% endif %}
+        >
+        {% if form.expires_at.help_text %}
+          <div style="font-size:12px;color:var(--text-muted);margin-top:4px">{{ form.expires_at.help_text }}</div>
+        {% endif %}
+        {% if form.expires_at.errors %}
+          <span id="invite-expires-error" class="error-text" role="alert">{{ form.expires_at.errors|join:", " }}</span>
+        {% endif %}
+      </div>
+
+      <div class="field {% if form.max_uses.errors %}has-error{% endif %}">
+        <label for="{{ form.max_uses.id_for_label }}">{{ form.max_uses.label }}</label>
+        <input
+          type="number"
+          name="{{ form.max_uses.html_name }}"
+          id="{{ form.max_uses.id_for_label }}"
+          min="1"
+          value="{{ form.max_uses.value|default:'1' }}"
+          {% if form.max_uses.errors %}aria-describedby="invite-uses-error" aria-invalid="true"{% endif %}
+        >
+        {% if form.max_uses.help_text %}
+          <div style="font-size:12px;color:var(--text-muted);margin-top:4px">{{ form.max_uses.help_text }}</div>
+        {% endif %}
+        {% if form.max_uses.errors %}
+          <span id="invite-uses-error" class="error-text" role="alert">{{ form.max_uses.errors|join:", " }}</span>
+        {% endif %}
+      </div>
+
+      <div style="margin-top:24px;display:flex;gap:10px;flex-wrap:wrap">
+        <button type="submit" class="btn btn-primary">Create invite</button>
+        <a href="{% url 'portal_invite_list' %}" class="btn btn-ghost">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

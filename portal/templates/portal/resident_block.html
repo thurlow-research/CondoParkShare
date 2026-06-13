@@ -1,17 +1,34 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Block resident — HOA Portal</title>
-</head>
-<body>
-  <h1>Block resident</h1>
-  <p>Block <strong>{{ resident.display_name }}</strong> ({{ resident.email }})?
-     Their account will be suspended immediately.</p>
+{% extends "base.html" %}
+
+{% block title %}Block {{ resident.display_name }} — HOA portal — CondoParkShare{% endblock %}
+
+{% block content %}
+<div style="max-width:480px">
+  <nav aria-label="Breadcrumb" style="font-size:13px;color:var(--text-muted);margin-bottom:12px">
+    <a href="{% url 'portal_home' %}" style="color:var(--meadow-ink);text-decoration:none">HOA portal</a>
+    <span aria-hidden="true"> / </span>
+    <a href="{% url 'portal_resident_list' %}" style="color:var(--meadow-ink);text-decoration:none">Residents</a>
+    <span aria-hidden="true"> / </span>
+    <span aria-current="page">Block</span>
+  </nav>
+
+  <div class="page-header">
+    <h1>Block resident</h1>
+  </div>
+
+  <div class="alert alert-danger" role="alert" style="margin-bottom:24px">
+    <span class="alert-icon" aria-hidden="true">!</span>
+    <span>
+      Block <strong>{{ resident.display_name }}</strong> ({{ resident.email }})? Their account will be suspended immediately.
+    </span>
+  </div>
+
   <form method="post">
     {% csrf_token %}
-    <button type="submit">Confirm block</button>
-    <a href="{% url 'portal_resident_list' %}">Cancel</a>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button type="submit" class="btn btn-danger">Confirm block</button>
+      <a href="{% url 'portal_resident_list' %}" class="btn btn-ghost">Cancel</a>
+    </div>
   </form>
-</body>
-</html>
+</div>
+{% endblock %}

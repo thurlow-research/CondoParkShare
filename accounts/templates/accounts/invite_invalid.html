@@ -1,5 +1,43 @@
-<!DOCTYPE html>
-<html>
-<head><title>Invite Invalid</title></head>
-<body><h1>This invite link is no longer valid.</h1></body>
-</html>
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Invite not valid — CondoParkShare{% endblock %}
+
+{% block extra_css %}
+<style>
+  .auth-shell { max-width: 480px; margin: 0 auto; }
+  .auth-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 40px;
+    box-shadow: var(--shadow);
+  }
+  .auth-logo { display: flex; justify-content: center; margin-bottom: 28px; }
+  .auth-logo img { height: 36px; width: auto; }
+  .auth-title { font-size: var(--fs-h3); font-weight: 700; color: var(--pine); text-align: center; margin-bottom: 4px; }
+  .auth-subtitle { color: var(--text-muted); font-size: 14px; text-align: center; margin-bottom: 28px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="auth-shell">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <img src="{% static 'img/logo/logo-full.svg' %}" alt="CondoParkShare">
+    </div>
+
+    <h1 class="auth-title">Invite not valid</h1>
+    <p class="auth-subtitle">This invite link has expired or already been used.</p>
+
+    <div class="alert alert-warning" role="alert">
+      <span class="alert-icon" aria-hidden="true">!</span>
+      <span>Ask your building manager to send a new invite link.</span>
+    </div>
+
+    <div style="text-align:center;margin-top:24px">
+      <a href="{% url 'login' %}" class="btn btn-ghost">Back to sign in</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

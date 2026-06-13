@@ -1,48 +1,78 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cancel booking — CondoParkShare</title>
-</head>
-<body>
-  <h1>Cancel booking</h1>
+{% extends "base.html" %}
 
-  <p>
-    Spot <strong>{{ booking.spot.spot_number }}</strong>
-    from <strong>{{ booking.time_range.lower }}</strong>
-    to <strong>{{ booking.time_range.upper }}</strong>
-  </p>
+{% block title %}Cancel booking — CondoParkShare{% endblock %}
+
+{% block content %}
+<div style="max-width:520px">
+  <nav aria-label="Breadcrumb" style="font-size:13px;color:var(--text-muted);margin-bottom:12px">
+    <a href="{% url 'booking_list' %}" style="color:var(--meadow-ink);text-decoration:none">My bookings</a>
+    <span aria-hidden="true"> / </span>
+    <a href="{% url 'booking_detail' booking.pk %}" style="color:var(--meadow-ink);text-decoration:none">Booking details</a>
+    <span aria-hidden="true"> / </span>
+    <span aria-current="page">Cancel</span>
+  </nav>
+
+  <div class="page-header">
+    <h1>Cancel booking</h1>
+  </div>
+
+  <div class="card" style="margin-bottom:20px">
+    <dl style="display:grid;grid-template-columns:max-content 1fr;gap:8px 20px;margin:0;font-size:14px">
+      <dt style="color:var(--text-muted);font-weight:600">Spot</dt>
+      <dd style="margin:0"><span class="mono">{{ booking.spot.spot_number }}</span></dd>
+
+      <dt style="color:var(--text-muted);font-weight:600">From</dt>
+      <dd style="margin:0" class="mono">{{ booking.time_range.lower|date:"D, d M Y" }} {{ booking.time_range.lower|time:"H:i" }}</dd>
+
+      <dt style="color:var(--text-muted);font-weight:600">Until</dt>
+      <dd style="margin:0" class="mono">{{ booking.time_range.upper|date:"D, d M Y" }} {{ booking.time_range.upper|time:"H:i" }}</dd>
+    </dl>
+  </div>
 
   {% if is_owner %}
-    <div role="alert" class="warning-notice">
-      <p>
-        <strong>Warning:</strong> You are cancelling as the spot owner.
-        Cancelling an owner-initiated booking incurs a penalty of
-        {{ booking.time_range.upper|timeuntil:booking.time_range.lower }} hours
-        against your listing credit. Please only cancel if absolutely necessary.
-      </p>
+    <div class="alert alert-warning" role="alert" style="margin-bottom:20px">
+      <span class="alert-icon" aria-hidden="true">!</span>
+      <span>
+        <strong>Owner cancellation:</strong> Cancelling as the spot owner may affect your listing credit.
+        Only cancel if absolutely necessary.
+      </span>
     </div>
   {% endif %}
 
-  <form method="post">
+  <form method="post" novalidate>
     {% csrf_token %}
 
     {% if form %}
       {% if form.non_field_errors %}
-        <div role="alert">
-          {% for error in form.non_field_errors %}
-            <p class="form-error">{{ error }}</p>
-          {% endfor %}
+        <div class="alert alert-danger" role="alert" style="margin-bottom:16px">
+          <span class="alert-icon" aria-hidden="true">!</span>
+          <span>{% for error in form.non_field_errors %}{{ error }}{% endfor %}</span>
         </div>
       {% endif %}
-      {{ form.as_p }}
+
+      <div class="field {% if form.reason.errors %}has-error{% endif %}">
+        <label for="{{ form.reason.id_for_label }}">{{ form.reason.label }}</label>
+        <textarea
+          name="{{ form.reason.html_name }}"
+          id="{{ form.reason.id_for_label }}"
+          rows="3"
+          style="width:100%;font-family:inherit;font-size:15px;padding:11px 13px;border:1.5px solid var(--line);border-radius:var(--r-sm);background:var(--white);color:var(--ink)"
+          {% if form.reason.errors %}aria-describedby="cancel-reason-error" aria-invalid="true"{% endif %}
+        >{% if form.reason.value %}{{ form.reason.value }}{% endif %}</textarea>
+        {% if form.reason.errors %}
+          <span id="cancel-reason-error" class="error-text" role="alert">{{ form.reason.errors|join:", " }}</span>
+        {% endif %}
+      </div>
     {% else %}
-      <p>Are you sure you want to cancel this booking?</p>
+      <p style="color:var(--text-muted);font-size:14px;margin-bottom:24px">
+        Are you sure you want to cancel this booking?
+      </p>
     {% endif %}
 
-    <button type="submit">Confirm cancellation</button>
-    <a href="{% url 'booking_detail' booking.pk %}">Keep booking</a>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button type="submit" class="btn btn-danger">Confirm cancellation</button>
+      <a href="{% url 'booking_detail' booking.pk %}" class="btn btn-ghost">Keep booking</a>
+    </div>
   </form>
-</body>
-</html>
+</div>
+{% endblock %}

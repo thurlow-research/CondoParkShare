@@ -1,0 +1,32 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <title>Something went wrong — CondoParkShare</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=Spline+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/tokens.css' %}">
+  <style>
+    #main { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 40px 24px; }
+  </style>
+</head>
+<body>
+  <main id="main">
+    <div style="text-align:center;max-width:480px">
+      <div class="bay" style="margin:0 auto 32px;width:80px;height:80px" aria-hidden="true">
+        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+          <rect x="16" y="16" width="16" height="16" rx="4" fill="var(--mist)" stroke="var(--line)" stroke-width="1.5"/>
+        </svg>
+      </div>
+
+      <h1 style="font-size:var(--fs-h2);font-weight:700;color:var(--pine);margin-bottom:8px">Something went wrong</h1>
+      <p style="color:var(--text-muted);margin-bottom:24px">We hit an unexpected error. Try again or go back home.</p>
+
+      <a href="/" class="btn btn-ghost">Go home</a>
+    </div>
+  </main>
+</body>
+</html>

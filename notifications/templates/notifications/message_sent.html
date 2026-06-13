@@ -1,16 +1,20 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Message sent — CondoParkShare</title>
-</head>
-<body>
-  <h1>Message sent</h1>
+{% extends "base.html" %}
 
-  <p>Your message has been relayed. The recipient will receive it by email and
-     can reply via the secure link included in the message.</p>
+{% block title %}Message sent — CondoParkShare{% endblock %}
 
-  <a href="{% url 'booking_detail' booking.pk %}">Back to booking</a>
-</body>
-</html>
+{% block content %}
+<div style="max-width:520px">
+  <div class="page-header">
+    <h1>Message sent</h1>
+  </div>
+
+  <div class="alert alert-success" role="status">
+    <span class="alert-icon" aria-hidden="true">&#10003;</span>
+    <span>Your message has been relayed. The recipient will receive it by email and can reply via the secure link included in the message.</span>
+  </div>
+
+  <div style="margin-top:24px">
+    <a href="{% url 'booking_detail' booking.pk %}" class="btn btn-ghost">Back to booking</a>
+  </div>
+</div>
+{% endblock %}

@@ -13,7 +13,7 @@
     <h1 style="font-size:var(--fs-h2)">
       Spot <span class="mono" style="color:var(--pine)">{{ spot.spot_number }}</span>
     </h1>
-    <p>{{ spot.location_detail|default:"Manage availability and see upcoming bookings" }}</p>
+    {% if spot.location_detail %}<p>{{ spot.location_detail }}</p>{% endif %}
   </div>
   <a href="{% url 'availability_add' spot.pk %}" class="btn btn-primary">
     Add availability
@@ -45,7 +45,7 @@
                 <button
                   type="submit"
                   class="btn btn-ghost"
-                  style="font-size:13px;padding:6px 12px;color:var(--slate)"
+                  style="font-size:13px;padding:11px 14px;color:var(--slate)"
                   aria-label="Remove this availability window"
                   onclick="return confirm('Remove this availability window?')"
                 >

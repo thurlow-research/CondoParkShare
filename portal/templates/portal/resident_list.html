@@ -1,55 +1,82 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Residents — HOA Portal</title>
-</head>
-<body>
-  <h1>Residents</h1>
-  <a href="{% url 'portal_home' %}">Back to dashboard</a>
+{% extends "base.html" %}
 
-  <table>
-    <thead>
-      <tr>
-        <th>Email</th>
-        <th>Name</th>
-        <th>Status</th>
-        <th>HOA admin</th>
-        <th>Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for resident in residents %}
-      <tr>
-        <td>{{ resident.email }}</td>
-        <td>{{ resident.display_name }}</td>
-        <td>{{ resident.status }}</td>
-        <td>{% if resident.is_hoa_admin %}Yes{% else %}No{% endif %}</td>
-        <td>
-          {% if resident.status == 'pending_approval' %}
-          <form method="post" action="{% url 'portal_resident_approve' resident.pk %}">
-            {% csrf_token %}
-            <button type="submit">Approve</button>
-          </form>
-          {% endif %}
-          {% if resident.status != 'blocked' %}
-          <form method="post" action="{% url 'portal_resident_block' resident.pk %}">
-            {% csrf_token %}
-            <button type="submit">Block</button>
-          </form>
-          {% else %}
-          <form method="post" action="{% url 'portal_resident_unblock' resident.pk %}">
-            {% csrf_token %}
-            <button type="submit">Unblock</button>
-          </form>
-          {% endif %}
-        </td>
-      </tr>
-      {% empty %}
-      <tr><td colspan="5">No residents.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</body>
-</html>
+{% block title %}Residents — HOA portal — CondoParkShare{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+  <div>
+    <nav aria-label="Breadcrumb" style="font-size:13px;color:var(--text-muted);margin-bottom:8px">
+      <a href="{% url 'portal_home' %}" style="color:var(--meadow-ink);text-decoration:none">HOA portal</a>
+      <span aria-hidden="true"> / </span>
+      <span aria-current="page">Residents</span>
+    </nav>
+    <h1>Residents</h1>
+  </div>
+</div>
+
+<div class="card">
+  {% if residents %}
+    <table style="width:100%;border-collapse:collapse;font-size:14px">
+      <thead>
+        <tr style="border-bottom:1px solid var(--line)">
+          <th style="text-align:left;padding:8px 12px;font-size:12px;color:var(--text-muted);font-weight:600">Name</th>
+          <th style="text-align:left;padding:8px 12px;font-size:12px;color:var(--text-muted);font-weight:600">Email</th>
+          <th style="text-align:left;padding:8px 12px;font-size:12px;color:var(--text-muted);font-weight:600">Status</th>
+          <th style="text-align:left;padding:8px 12px;font-size:12px;color:var(--text-muted);font-weight:600">HOA admin</th>
+          <th style="text-align:left;padding:8px 12px;font-size:12px;color:var(--text-muted);font-weight:600">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for resident in residents %}
+        <tr style="border-bottom:1px solid var(--line)">
+          <td style="padding:10px 12px">
+            <a href="{% url 'portal_resident_detail' resident.pk %}" style="color:var(--meadow-ink);text-decoration:none;font-weight:500">
+              {{ resident.display_name }}
+            </a>
+          </td>
+          <td style="padding:10px 12px;color:var(--slate)">{{ resident.email }}</td>
+          <td style="padding:10px 12px">
+            {% if resident.status == 'active' %}
+              <span class="badge badge-active"><span class="dot" aria-hidden="true"></span> Active</span>
+            {% elif resident.status == 'pending_approval' %}
+              <span class="badge badge-pending"><span class="ring" aria-hidden="true"></span> Pending</span>
+            {% elif resident.status == 'blocked' %}
+              <span class="badge badge-danger"><span class="dot" aria-hidden="true"></span> Blocked</span>
+            {% else %}
+              <span class="badge badge-pending"><span class="ring" aria-hidden="true"></span> {{ resident.status }}</span>
+            {% endif %}
+          </td>
+          <td style="padding:10px 12px;color:var(--slate)">{{ resident.is_hoa_admin|yesno:"Yes,No" }}</td>
+          <td style="padding:10px 12px">
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              {% if resident.status == 'pending_approval' %}
+              <form method="post" action="{% url 'portal_resident_approve' resident.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary" style="font-size:13px" aria-label="Approve {{ resident.display_name }}">Approve</button>
+              </form>
+              {% endif %}
+              {% if resident.status != 'blocked' %}
+              <form method="post" action="{% url 'portal_resident_block' resident.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger" style="font-size:13px" aria-label="Block {{ resident.display_name }}">Block</button>
+              </form>
+              {% else %}
+              <form method="post" action="{% url 'portal_resident_unblock' resident.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-ghost" style="font-size:13px" aria-label="Unblock {{ resident.display_name }}">Unblock</button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div style="text-align:center;padding:48px 24px;color:var(--text-muted)">
+      <div class="bay" style="margin:0 auto 16px;width:48px;height:48px" aria-hidden="true"></div>
+      <p style="margin:0;font-size:14px">No residents yet.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

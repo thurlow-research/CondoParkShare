@@ -84,7 +84,7 @@
       text-decoration: none;
       font-size: 14px;
       font-weight: 500;
-      padding: 7px 12px;
+      padding: 11px 12px;
       border-radius: var(--r-sm);
       transition: background .12s ease, color .12s ease;
     }
@@ -111,7 +111,7 @@
       font-family: inherit;
       font-size: 14px;
       font-weight: 500;
-      padding: 7px 12px;
+      padding: 11px 12px;
       border-radius: var(--r-sm);
       cursor: pointer;
       transition: background .12s ease, color .12s ease;
@@ -150,6 +150,9 @@
 
     /* --- Alert/message strip --- */
     .alert {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
       padding: 12px 16px;
       border-radius: var(--r-sm);
       margin-bottom: 20px;
@@ -168,9 +171,9 @@
       color: var(--meadow-ink);
     }
     .alert-info {
-      background: var(--mist);
-      border-color: var(--line);
-      color: var(--slate);
+      background: var(--info-surface);
+      border-color: var(--info-line);
+      color: var(--info-ink);
     }
 
     /* --- Non-field form errors --- */
@@ -302,7 +305,8 @@
       {% if messages %}
         {% for message in messages %}
           <div class="alert {% if message.tags == 'error' %}alert-danger{% elif message.tags == 'success' %}alert-success{% else %}alert-info{% endif %}" role="alert">
-            {{ message }}
+            <span class="alert-icon" aria-hidden="true">{% if message.tags == 'error' %}!{% elif message.tags == 'success' %}&#10003;{% else %}i{% endif %}</span>
+            <span>{{ message }}</span>
           </div>
         {% endfor %}
       {% endif %}

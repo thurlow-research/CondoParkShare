@@ -1,10 +1,11 @@
 <div id="availability-form-errors" role="alert">
+  <h2 id="availability-form-heading" tabindex="-1" class="visually-hidden">Form errors</h2>
   {% for field in form %}
     {% for error in field.errors %}
-      <p class="form-error">{{ field.label }}: {{ error }}</p>
+      <span class="error-text">{{ field.label }}: {{ error }}</span>
     {% endfor %}
   {% endfor %}
   {% for error in form.non_field_errors %}
-    <p class="form-error">{{ error }}</p>
+    <span class="error-text">{{ error }}</span>
   {% endfor %}
 </div>
