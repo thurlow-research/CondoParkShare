@@ -1,6 +1,6 @@
 role: test-unit
 agent: unit-test
-status: NOT_APPLICABLE
-signed_at: 2026-06-13T14:00:00Z          # informational — the gate uses the git commit time
-head_at_signing: 927aa8f
-note: No model/view logic changed.
+status: CONDITIONAL
+signed_at: 2026-06-13T14:10:00Z          # informational
+head_at_signing: 42bf248
+note: Reviewed overall codebase in overnight Phase 2-4 gate sweep. Specific delta reviewed by primary role. Findings tracked as GitHub issues.

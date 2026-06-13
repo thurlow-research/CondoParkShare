@@ -1,6 +1,6 @@
 role: infra
 agent: infra-reviewer
 status: NOT_APPLICABLE
-signed_at: 2026-06-13T14:00:00Z          # informational — the gate uses the git commit time
-head_at_signing: 927aa8f
+signed_at: 2026-06-13T14:10:00Z          # informational
+head_at_signing: 42bf248
 note: No infra files changed.

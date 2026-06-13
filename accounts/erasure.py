@@ -70,7 +70,7 @@ def erase_user_pii(user, erased_by):
 
         from accounts.models import AdminAuditLog
         from notifications.models import RelayMessage
-        from parking.models import Booking
+        from parking.models import Booking, ParkingSpot
 
         user_pk = user.pk  # capture BEFORE any modification
 
@@ -93,9 +93,14 @@ def erase_user_pii(user, erased_by):
             is_anonymized=True,
         )
 
-        # --- Scrub relay message bodies — preserve audit trail of message count --
-        RelayMessage.objects.filter(from_user=user).update(body="[erased]")
-        RelayMessage.objects.filter(to_user=user).update(body="[erased]")
+        # --- Null spot ownership — field is null=True, PROTECT-free on erasure ---
+        ParkingSpot.objects.filter(owner=user).update(owner=None)
+
+        # --- Scrub relay message bodies and null FK columns to remove identity ---
+        RelayMessage.objects.filter(from_user=user).update(
+            body="[erased]", from_user=None
+        )
+        RelayMessage.objects.filter(to_user=user).update(body="[erased]", to_user=None)
 
         # --- Delete TOTP devices (secret lives in TOTPDevice, not on User) -------
         TOTPDevice.objects.filter(user=user).delete()
@@ -110,6 +115,8 @@ def erase_user_pii(user, erased_by):
         user.phone = None
         user.recovery_codes = []
         user.status = "blocked"
+        # Consent withdrawal under GDPR Art. 7(3) — clear marketing opt-in.
+        user.marketing_email_opted_in = False
         user.set_unusable_password()
         user.save()
 

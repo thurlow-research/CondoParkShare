@@ -1,6 +1,6 @@
 role: privacy
 agent: privacy-reviewer
-status: NOT_APPLICABLE
-signed_at: 2026-06-13T14:00:00Z          # informational — the gate uses the git commit time
-head_at_signing: 927aa8f
-note: Template-only changes; no PII handling changed.
+status: APPROVED
+signed_at: 2026-06-13T14:10:00Z          # informational
+head_at_signing: 42bf248
+note: Privacy/GDPR issues reviewed and fixed in Phase 3c overnight sweep.

@@ -228,6 +228,7 @@ def resident_unblock(request, pk):
 def spot_list(request):
     """List all parking spots in the current organisation with their status."""
     org = request.organization
+    _log(request, "pii_access", target_type="user", notes="portal_spot_list_bulk")
     spots = (
         ParkingSpot.objects.filter(
             organization=org,
@@ -321,6 +322,7 @@ def invite_create(request):
 def portal_bookings(request):
     """List all bookings for the current organisation."""
     org = request.organization
+    _log(request, "pii_access", target_type="user", notes="portal_bookings_bulk")
     bookings = (
         Booking.objects.filter(
             organization=org,
@@ -386,6 +388,7 @@ def portal_reports(request):
     - Bookings per spot (demand signal): booking count and total hours booked
     """
     org = request.organization
+    _log(request, "pii_access", target_type="user", notes="portal_reports_bulk")
 
     total_bookings = Booking.objects.filter(organization=org).count()
 
