@@ -1,6 +1,6 @@
 role: security
 agent: security-reviewer
-status: APPROVED
-signed_at: 2026-06-13T13:50:00Z          # informational — the gate uses the git commit time
-head_at_signing: b686006
-note: Security issues reviewed and fixed in Phase 3b.
+status: NOT_APPLICABLE
+signed_at: 2026-06-13T14:00:00Z          # informational — the gate uses the git commit time
+head_at_signing: 927aa8f
+note: Template-only changes; no auth or data paths.

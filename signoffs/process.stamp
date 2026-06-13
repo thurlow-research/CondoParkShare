@@ -1,6 +1,6 @@
 role: process
 agent: pm-agent
 status: NOT_APPLICABLE
-signed_at: 2026-06-13T13:50:00Z          # informational — the gate uses the git commit time
-head_at_signing: b686006
-note: Security hardening conforms to spec.
+signed_at: 2026-06-13T14:00:00Z          # informational — the gate uses the git commit time
+head_at_signing: 927aa8f
+note: Design fixes align with existing spec.
