@@ -1,6 +1,6 @@
 role: process
 agent: pm-agent
 status: NOT_APPLICABLE
-signed_at: 2026-06-13T04:00:59Z          # informational — the gate uses the git commit time
-head_at_signing: 4c7ae32
-note: Docs-only session handoff summary; no code in this role's scope. Interim per HOS#22.
+signed_at: 2026-06-13T13:00:00Z          # informational — the gate uses the git commit time
+head_at_signing: 5e5b9b3
+note: Bug fix conforming to existing spec.
