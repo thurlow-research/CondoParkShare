@@ -260,6 +260,9 @@ def lost_authenticator(request):
                     recipient_list=[user.email],
                     fail_silently=True,
                 )
+                # Bind the pending recovery to this specific user so the verify
+                # view can filter by user_id rather than scanning all org OTPs.
+                request.session["_lost_auth_user_id"] = user.pk
             except User.DoesNotExist:
                 pass  # Enumerate-safe: identical response path.
 
@@ -283,12 +286,21 @@ def lost_authenticator_verify(request):
         if form.is_valid():
             submitted = form.cleaned_data["code"]
 
-            # Find non-consumed, non-expired OTPs scoped to this org.
-            candidates = EmailOTP.objects.filter(
-                consumed=False,
-                expires_at__gt=now(),
-                user__organization=request.organization,
-            ).select_related("user")
+            # Require that the verify page was reached via the email-submit step
+            # (which stores the user PK). Guards against direct navigation and
+            # cross-user OTP consumption within an org (#22).
+            lost_auth_user_id = request.session.get("_lost_auth_user_id")
+
+            # Find non-consumed, non-expired OTP for the specific user who
+            # initiated the flow — not any OTP in the org.
+            candidates = EmailOTP.objects.none()
+            if lost_auth_user_id is not None:
+                candidates = EmailOTP.objects.filter(
+                    user_id=lost_auth_user_id,
+                    consumed=False,
+                    expires_at__gt=now(),
+                    user__organization=request.organization,
+                ).select_related("user")
 
             matched_otp = None
             for otp in candidates:
@@ -299,9 +311,9 @@ def lost_authenticator_verify(request):
             if matched_otp is not None:
                 user = matched_otp.user
 
-                # Blocked accounts must not be able to log in via any path,
-                # including the lost-authenticator recovery flow.
-                if user.status == "blocked":
+                # Blocked or unapproved accounts must not recover via this
+                # path — HOA approval cannot be bypassed via TOTP reset (#17).
+                if user.status in ("blocked", "pending_approval"):
                     form.add_error("code", "Invalid or expired code.")
                     return render(
                         request,
@@ -312,6 +324,7 @@ def lost_authenticator_verify(request):
                 matched_otp.consumed = True
                 matched_otp.save(update_fields=["consumed"])
 
+                request.session.pop("_lost_auth_user_id", None)
                 request.session["totp_reset_required"] = True
                 login(
                     request, user, backend="django.contrib.auth.backends.ModelBackend"
@@ -379,8 +392,13 @@ def totp_enroll(request):
             plaintext_codes = [secrets.token_urlsafe(10) for _ in range(10)]
             hashed_codes = [make_password(code) for code in plaintext_codes]
             request.user.recovery_codes = hashed_codes
-            request.user.status = "active"
-            request.user.save(update_fields=["recovery_codes", "status"])
+            # Only advance pending_totp → active. Never elevate pending_approval
+            # (defense-in-depth: verify view already blocks this path, #17).
+            enroll_fields = ["recovery_codes"]
+            if request.user.status == "pending_totp":
+                request.user.status = "active"
+                enroll_fields.append("status")
+            request.user.save(update_fields=enroll_fields)
 
             # Clear re-enrollment flag.
             request.session.pop("totp_reset_required", None)
