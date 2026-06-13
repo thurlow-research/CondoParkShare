@@ -1,16 +1,34 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Approve resident — HOA Portal</title>
-</head>
-<body>
-  <h1>Approve resident</h1>
-  <p>Approve <strong>{{ resident.display_name }}</strong> ({{ resident.email }})?</p>
+{% extends "base.html" %}
+
+{% block title %}Approve {{ resident.display_name }} — HOA portal — CondoParkShare{% endblock %}
+
+{% block content %}
+<div style="max-width:480px">
+  <nav aria-label="Breadcrumb" style="font-size:13px;color:var(--text-muted);margin-bottom:12px">
+    <a href="{% url 'portal_home' %}" style="color:var(--meadow-ink);text-decoration:none">HOA portal</a>
+    <span aria-hidden="true"> / </span>
+    <a href="{% url 'portal_resident_list' %}" style="color:var(--meadow-ink);text-decoration:none">Residents</a>
+    <span aria-hidden="true"> / </span>
+    <span aria-current="page">Approve</span>
+  </nav>
+
+  <div class="page-header">
+    <h1>Approve resident</h1>
+  </div>
+
+  <div class="alert alert-warning" role="alert" style="margin-bottom:24px">
+    <span class="alert-icon" aria-hidden="true">!</span>
+    <span>
+      Approve <strong>{{ resident.display_name }}</strong> ({{ resident.email }}) to give them full access to the building's parking system.
+    </span>
+  </div>
+
   <form method="post">
     {% csrf_token %}
-    <button type="submit">Confirm approval</button>
-    <a href="{% url 'portal_resident_list' %}">Cancel</a>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button type="submit" class="btn btn-primary">Confirm approval</button>
+      <a href="{% url 'portal_resident_list' %}" class="btn btn-ghost">Cancel</a>
+    </div>
   </form>
-</body>
-</html>
+</div>
+{% endblock %}

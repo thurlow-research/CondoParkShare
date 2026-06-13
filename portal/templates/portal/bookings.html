@@ -1,46 +1,68 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Bookings — HOA Portal</title>
-</head>
-<body>
-  <h1>Bookings</h1>
-  <a href="{% url 'portal_home' %}">Back to dashboard</a>
+{% extends "base.html" %}
 
-  <table>
-    <thead>
-      <tr>
-        <th>ID</th>
-        <th>Spot</th>
-        <th>Borrower</th>
-        <th>Time range</th>
-        <th>Status</th>
-        <th>Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for booking in bookings %}
-      <tr>
-        <td>{{ booking.pk }}</td>
-        <td>{{ booking.spot.spot_number }}</td>
-        <td>{% if booking.borrower %}{{ booking.borrower.display_name }}{% else %}[erased]{% endif %}</td>
-        <td>{{ booking.time_range }}</td>
-        <td>{{ booking.status }}</td>
-        <td>
-          {% if booking.status in 'tentative,confirmed,active' %}
-          <form method="post" action="{% url 'portal_booking_cancel' booking.pk %}">
-            {% csrf_token %}
-            <input type="hidden" name="cancel_reason" value="Cancelled by HOA admin">
-            <button type="submit">Cancel</button>
-          </form>
-          {% endif %}
-        </td>
-      </tr>
-      {% empty %}
-      <tr><td colspan="6">No bookings.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</body>
-</html>
+{% block title %}Bookings — HOA portal — CondoParkShare{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+  <div>
+    <nav aria-label="Breadcrumb" style="font-size:13px;color:var(--text-muted);margin-bottom:8px">
+      <a href="{% url 'portal_home' %}" style="color:var(--meadow-ink);text-decoration:none">HOA portal</a>
+      <span aria-hidden="true"> / </span>
+      <span aria-current="page">Bookings</span>
+    </nav>
+    <h1>Bookings</h1>
+  </div>
+</div>
+
+<div class="card">
+  {% if bookings %}
+    <table style="width:100%;border-collapse:collapse;font-size:14px">
+      <thead>
+        <tr style="border-bottom:1px solid var(--line)">
+          <th style="text-align:left;padding:8px 12px;font-size:12px;color:var(--text-muted);font-weight:600">Spot</th>
+          <th style="text-align:left;padding:8px 12px;font-size:12px;color:var(--text-muted);font-weight:600">Resident</th>
+          <th style="text-align:left;padding:8px 12px;font-size:12px;color:var(--text-muted);font-weight:600">Time range</th>
+          <th style="text-align:left;padding:8px 12px;font-size:12px;color:var(--text-muted);font-weight:600">Status</th>
+          <th style="text-align:left;padding:8px 12px;font-size:12px;color:var(--text-muted);font-weight:600">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for booking in bookings %}
+        <tr style="border-bottom:1px solid var(--line)">
+          <td style="padding:10px 12px"><span class="mono">{{ booking.spot.spot_number }}</span></td>
+          <td style="padding:10px 12px">{% if booking.borrower %}{{ booking.borrower.display_name }}{% else %}<span style="color:var(--text-muted)">[erased]</span>{% endif %}</td>
+          <td style="padding:10px 12px;font-size:13px">
+            <span class="mono">{{ booking.time_range.lower|date:"d M" }} {{ booking.time_range.lower|time:"H:i" }} &ndash; {{ booking.time_range.upper|date:"d M" }} {{ booking.time_range.upper|time:"H:i" }}</span>
+          </td>
+          <td style="padding:10px 12px">
+            {% if booking.status == 'confirmed' or booking.status == 'active' %}
+              <span class="badge badge-active"><span class="dot" aria-hidden="true"></span> {{ booking.status|capfirst }}</span>
+            {% elif booking.status == 'completed' %}
+              <span class="badge badge-complete"><span class="chk" aria-hidden="true">&#10003;</span> Completed</span>
+            {% elif booking.status == 'tentative' %}
+              <span class="badge badge-pending"><span class="ring" aria-hidden="true"></span> Tentative</span>
+            {% else %}
+              <span class="badge badge-danger"><span class="dot" aria-hidden="true"></span> {{ booking.status|capfirst }}</span>
+            {% endif %}
+          </td>
+          <td style="padding:10px 12px">
+            {% if booking.status in 'tentative,confirmed,active' %}
+            <form method="post" action="{% url 'portal_booking_cancel' booking.pk %}">
+              {% csrf_token %}
+              <input type="hidden" name="cancel_reason" value="Cancelled by HOA admin">
+              <button type="submit" class="btn btn-danger" style="font-size:13px" aria-label="Cancel booking {{ booking.pk }}">Cancel</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div style="text-align:center;padding:48px 24px;color:var(--text-muted)">
+      <div class="bay" style="margin:0 auto 16px;width:48px;height:48px" aria-hidden="true"></div>
+      <p style="margin:0;font-size:14px">No bookings.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

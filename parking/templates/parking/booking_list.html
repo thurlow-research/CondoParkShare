@@ -37,14 +37,14 @@
         </div>
 
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <a href="{% url 'booking_detail' booking.pk %}" class="btn btn-ghost" style="font-size:13px;padding:7px 12px">
+          <a href="{% url 'booking_detail' booking.pk %}" class="btn btn-ghost" style="font-size:13px">
             View details
           </a>
           {% if booking.status in 'confirmed,active' %}
-            <a href="{% url 'booking_cancel' booking.pk %}" class="btn btn-ghost" style="font-size:13px;padding:7px 12px;color:var(--clay-ink);border-color:var(--line)">
+            <a href="{% url 'booking_cancel' booking.pk %}" class="btn btn-ghost" style="font-size:13px;color:var(--clay-ink);border-color:var(--line)">
               Cancel
             </a>
-            <a href="{% url 'booking_release' booking.pk %}" class="btn btn-ghost" style="font-size:13px;padding:7px 12px">
+            <a href="{% url 'booking_release' booking.pk %}" class="btn btn-ghost" style="font-size:13px">
               Release early
             </a>
           {% endif %}

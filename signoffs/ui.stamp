@@ -1,6 +1,6 @@
 role: ui
 agent: ui-reviewer
-status: NOT_APPLICABLE
-signed_at: 2026-06-13T13:50:00Z          # informational — the gate uses the git commit time
-head_at_signing: b686006
-note: 429.html minimal error page.
+status: APPROVED
+signed_at: 2026-06-13T14:00:00Z          # informational — the gate uses the git commit time
+head_at_signing: 927aa8f
+note: UI/design-pack conformance reviewed and fixed in Phase 3d overnight sweep.

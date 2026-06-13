@@ -1,40 +1,69 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Reply to message — CondoParkShare</title>
-</head>
-<body>
-  <h1>Reply to message</h1>
+{% extends "base.html" %}
 
-  <p>
-    Booking: spot <strong>{{ booking.spot.spot_number }}</strong>
-    from <strong>{{ booking.time_range.lower }}</strong>
-    to <strong>{{ booking.time_range.upper }}</strong>
-  </p>
+{% block title %}Reply to message — CondoParkShare{% endblock %}
 
-  <div>
-    <h2>Original message</h2>
-    <blockquote>{{ original.body }}</blockquote>
+{% block content %}
+<div style="max-width:520px">
+  <nav aria-label="Breadcrumb" style="font-size:13px;color:var(--text-muted);margin-bottom:12px">
+    <a href="{% url 'booking_detail' booking.pk %}" style="color:var(--meadow-ink);text-decoration:none">Booking details</a>
+    <span aria-hidden="true"> / </span>
+    <span aria-current="page">Reply</span>
+  </nav>
+
+  <div class="page-header">
+    <h1>Reply to message</h1>
+    <p>Your reply will be relayed. Your email address will not be shared.</p>
   </div>
 
-  <p>Your reply will be relayed. Your email address will not be shared.</p>
+  <div class="card" style="margin-bottom:20px">
+    <dl style="display:grid;grid-template-columns:max-content 1fr;gap:8px 20px;margin:0;font-size:14px">
+      <dt style="color:var(--text-muted);font-weight:600">Spot</dt>
+      <dd style="margin:0"><span class="mono">{{ booking.spot.spot_number }}</span></dd>
 
-  <form method="post">
-    {% csrf_token %}
+      <dt style="color:var(--text-muted);font-weight:600">From</dt>
+      <dd style="margin:0" class="mono">{{ booking.time_range.lower|date:"D, d M Y" }} {{ booking.time_range.lower|time:"H:i" }}</dd>
 
+      <dt style="color:var(--text-muted);font-weight:600">Until</dt>
+      <dd style="margin:0" class="mono">{{ booking.time_range.upper|date:"D, d M Y" }} {{ booking.time_range.upper|time:"H:i" }}</dd>
+    </dl>
+  </div>
+
+  <div class="card" style="margin-bottom:20px;background:var(--mist);border-color:var(--line)">
+    <h2 style="font-size:13px;font-weight:700;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em">Original message</h2>
+    <blockquote style="margin:0;padding-left:12px;border-left:3px solid var(--line);color:var(--slate);font-size:14px">
+      {{ original.body }}
+    </blockquote>
+  </div>
+
+  <div class="card">
     {% if form.non_field_errors %}
-      <div role="alert">
-        {% for error in form.non_field_errors %}
-          <p class="form-error">{{ error }}</p>
-        {% endfor %}
+      <div class="alert alert-danger" role="alert" style="margin-bottom:16px">
+        <span class="alert-icon" aria-hidden="true">!</span>
+        <span>{% for error in form.non_field_errors %}{{ error }}{% endfor %}</span>
       </div>
     {% endif %}
 
-    {{ form.as_p }}
+    <form method="post" novalidate>
+      {% csrf_token %}
 
-    <button type="submit">Send reply</button>
-  </form>
-</body>
-</html>
+      <div class="field {% if form.body.errors %}has-error{% endif %}">
+        <label for="{{ form.body.id_for_label }}">{{ form.body.label }}</label>
+        <textarea
+          name="{{ form.body.html_name }}"
+          id="{{ form.body.id_for_label }}"
+          rows="4"
+          style="width:100%;font-family:inherit;font-size:15px;padding:11px 13px;border:1.5px solid var(--line);border-radius:var(--r-sm);background:var(--white);color:var(--ink)"
+          {% if form.body.errors %}aria-describedby="reply-body-error" aria-invalid="true"{% endif %}
+        >{% if form.body.value %}{{ form.body.value }}{% endif %}</textarea>
+        {% if form.body.errors %}
+          <span id="reply-body-error" class="error-text" role="alert">{{ form.body.errors|join:", " }}</span>
+        {% endif %}
+      </div>
+
+      <div style="margin-top:24px">
+        <button type="submit" class="btn btn-primary">Send reply</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

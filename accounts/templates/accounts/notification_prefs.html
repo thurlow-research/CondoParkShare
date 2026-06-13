@@ -12,7 +12,8 @@
   <div class="card">
     {% if form.non_field_errors %}
       <div class="alert alert-danger" role="alert">
-        {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+        <span class="alert-icon" aria-hidden="true">!</span>
+        <span>{% for error in form.non_field_errors %}{{ error }}{% endfor %}</span>
       </div>
     {% endif %}
 

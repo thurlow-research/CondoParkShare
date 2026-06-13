@@ -58,23 +58,23 @@
       </dd>
 
       <dt style="color:var(--text-muted);font-weight:600">Email</dt>
-      <dd style="margin:0;font-size:14px" class="mono">{{ resident.email }}</dd>
+      <dd style="margin:0;font-size:14px">{{ resident.email }}</dd>
 
       {% if resident.phone %}
         <dt style="color:var(--text-muted);font-weight:600">Phone</dt>
-        <dd style="margin:0" class="mono">{{ resident.phone }}</dd>
+        <dd style="margin:0">{{ resident.phone }}</dd>
       {% endif %}
 
       <dt style="color:var(--text-muted);font-weight:600">HOA admin</dt>
       <dd style="margin:0">{{ resident.is_hoa_admin|yesno:"Yes,No" }}</dd>
 
       <dt style="color:var(--text-muted);font-weight:600">Joined</dt>
-      <dd style="margin:0" class="mono">{{ resident.date_joined|date:"d M Y" }}</dd>
+      <dd style="margin:0">{{ resident.date_joined|date:"d M Y" }}</dd>
 
       <dt style="color:var(--text-muted);font-weight:600">Last login</dt>
       <dd style="margin:0">
         {% if resident.last_login %}
-          <span class="mono">{{ resident.last_login|date:"d M Y, H:i" }}</span>
+          {{ resident.last_login|date:"d M Y" }} at <span class="mono">{{ resident.last_login|time:"H:i" }}</span>
         {% else %}
           <span style="color:var(--text-muted)">Never</span>
         {% endif %}

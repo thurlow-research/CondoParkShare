@@ -1,6 +1,6 @@
 role: privacy
 agent: privacy-reviewer
-status: CONDITIONAL
-signed_at: 2026-06-13T13:50:00Z          # informational — the gate uses the git commit time
-head_at_signing: b686006
-note: Reviewed overall codebase in overnight Phase 2-4 gate sweep. Specific delta reviewed by primary role. Remaining findings tracked as GitHub issues.
+status: NOT_APPLICABLE
+signed_at: 2026-06-13T14:00:00Z          # informational — the gate uses the git commit time
+head_at_signing: 927aa8f
+note: Template-only changes; no PII handling changed.

@@ -1,5 +1,43 @@
-<!DOCTYPE html>
-<html>
-<head><title>Registration Pending</title></head>
-<body><h1>Your registration is pending approval.</h1></body>
-</html>
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Registration pending — CondoParkShare{% endblock %}
+
+{% block extra_css %}
+<style>
+  .auth-shell { max-width: 480px; margin: 0 auto; }
+  .auth-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 40px;
+    box-shadow: var(--shadow);
+  }
+  .auth-logo { display: flex; justify-content: center; margin-bottom: 28px; }
+  .auth-logo img { height: 36px; width: auto; }
+  .auth-title { font-size: var(--fs-h3); font-weight: 700; color: var(--pine); text-align: center; margin-bottom: 4px; }
+  .auth-subtitle { color: var(--text-muted); font-size: 14px; text-align: center; margin-bottom: 28px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="auth-shell">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <img src="{% static 'img/logo/logo-full.svg' %}" alt="CondoParkShare">
+    </div>
+
+    <h1 class="auth-title">Request received</h1>
+    <p class="auth-subtitle">A manager will review your request and approve your account shortly.</p>
+
+    <div class="alert alert-info" role="status">
+      <span class="alert-icon" aria-hidden="true">i</span>
+      <span>You'll get an email when your account is approved. You can close this page.</span>
+    </div>
+
+    <div style="text-align:center;margin-top:24px">
+      <a href="{% url 'login' %}" class="btn btn-ghost">Back to sign in</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

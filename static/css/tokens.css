@@ -155,10 +155,10 @@ a{color:var(--meadow-ink)}
 .badge .chk{font-size:11px;line-height:1;font-weight:700}
 .badge-active{background:var(--status-surface);color:var(--status-live)}   /* Active, Listed */
 .badge-active .dot{background:var(--status-live)}
-.badge-pending{background:var(--white);color:var(--status-ink);border-color:var(--status-line)} /* Pending approval */
+.badge-pending{background:var(--white);color:var(--status-ink);border:1px solid var(--status-line)} /* Pending approval */
 .badge-complete{background:var(--status-surface);color:var(--status-ink)} /* Completed */
 .badge-complete .dot{background:var(--status-ink)}
-.badge-inactive{background:transparent;color:var(--status-ink);border-color:var(--status-line)} /* Inactive */
+.badge-inactive{background:transparent;color:var(--status-ink);border:1px solid var(--status-line)} /* Inactive */
 
 /* ---------- Form fields ---------- */
 .field{display:block;margin-bottom:14px}

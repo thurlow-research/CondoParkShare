@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}Page not found — CondoParkShare{% endblock %}
+
+{% block content %}
+<div style="text-align:center;padding:64px 24px">
+  <div class="bay" style="margin:0 auto 32px;width:80px;height:80px" aria-hidden="true">
+    <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+      <rect x="16" y="16" width="16" height="16" rx="4" fill="var(--mist)" stroke="var(--line)" stroke-width="1.5"/>
+    </svg>
+  </div>
+
+  <div class="page-header" style="margin-bottom:24px">
+    <h1 style="font-size:var(--fs-h2)">Page not found</h1>
+    <p>That page doesn't exist. Try going back or heading home.</p>
+  </div>
+
+  <a href="{% url 'book_request' %}" class="btn btn-ghost">Go home</a>
+</div>
+{% endblock %}

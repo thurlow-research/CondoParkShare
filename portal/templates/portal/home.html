@@ -1,49 +1,68 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HOA Portal — CondoParkShare</title>
-</head>
-<body>
-  <h1>HOA Portal</h1>
+{% extends "base.html" %}
 
-  <ul>
-    <li>Pending approvals: {{ pending_approvals }}</li>
-    <li>Active bookings: {{ active_bookings }}</li>
-    <li>Pending spot approvals: {{ pending_spots }}</li>
-  </ul>
+{% block title %}HOA portal — CondoParkShare{% endblock %}
 
-  <h2>Recent activity</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>When</th>
-        <th>Actor</th>
-        <th>Action</th>
-        <th>Target</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for entry in recent_audit %}
-      <tr>
-        <td>{{ entry.created_at }}</td>
-        <td>{{ entry.actor.display_name }}</td>
-        <td>{{ entry.action }}</td>
-        <td>{{ entry.target_type }} {{ entry.target_id }}</td>
-      </tr>
-      {% empty %}
-      <tr><td colspan="4">No activity yet.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+{% block content %}
+<div class="page-header">
+  <h1>HOA portal</h1>
+  <p>Building overview and recent activity</p>
+</div>
 
-  <nav>
-    <a href="{% url 'portal_resident_list' %}">Residents</a>
-    <a href="{% url 'portal_spot_list' %}">Spots</a>
-    <a href="{% url 'portal_invite_list' %}">Invites</a>
-    <a href="{% url 'portal_bookings' %}">Bookings</a>
-    <a href="{% url 'portal_reports' %}">Reports</a>
-  </nav>
-</body>
-</html>
+<div class="cols" style="margin-bottom:32px">
+  <div class="card" style="text-align:center">
+    <div style="font-size:32px;font-weight:800;color:var(--pine);font-family:var(--font-mono)">{{ pending_approvals }}</div>
+    <div style="font-size:13px;color:var(--text-muted);margin-top:4px">Pending approvals</div>
+    <a href="{% url 'portal_resident_list' %}" class="btn btn-ghost" style="margin-top:16px;font-size:13px">Review residents</a>
+  </div>
+  <div class="card" style="text-align:center">
+    <div style="font-size:32px;font-weight:800;color:var(--pine);font-family:var(--font-mono)">{{ active_bookings }}</div>
+    <div style="font-size:13px;color:var(--text-muted);margin-top:4px">Active bookings</div>
+    <a href="{% url 'portal_bookings' %}" class="btn btn-ghost" style="margin-top:16px;font-size:13px">View bookings</a>
+  </div>
+  <div class="card" style="text-align:center">
+    <div style="font-size:32px;font-weight:800;color:var(--pine);font-family:var(--font-mono)">{{ pending_spots }}</div>
+    <div style="font-size:13px;color:var(--text-muted);margin-top:4px">Pending spot approvals</div>
+    <a href="{% url 'portal_spot_list' %}" class="btn btn-ghost" style="margin-top:16px;font-size:13px">Review spots</a>
+  </div>
+</div>
+
+<div class="card">
+  <h2 style="font-size:15px;font-weight:700;color:var(--pine);margin-bottom:16px">Recent activity</h2>
+
+  {% if recent_audit %}
+    <table style="width:100%;border-collapse:collapse;font-size:14px">
+      <thead>
+        <tr style="border-bottom:1px solid var(--line)">
+          <th style="text-align:left;padding:8px 12px;font-size:12px;color:var(--text-muted);font-weight:600">When</th>
+          <th style="text-align:left;padding:8px 12px;font-size:12px;color:var(--text-muted);font-weight:600">Actor</th>
+          <th style="text-align:left;padding:8px 12px;font-size:12px;color:var(--text-muted);font-weight:600">Action</th>
+          <th style="text-align:left;padding:8px 12px;font-size:12px;color:var(--text-muted);font-weight:600">Target</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in recent_audit %}
+        <tr style="border-bottom:1px solid var(--line)">
+          <td style="padding:10px 12px" class="mono" style="font-size:13px">{{ entry.created_at|date:"d M Y" }} <span class="mono">{{ entry.created_at|time:"H:i" }}</span></td>
+          <td style="padding:10px 12px">{{ entry.actor.display_name }}</td>
+          <td style="padding:10px 12px">{{ entry.action }}</td>
+          <td style="padding:10px 12px;color:var(--text-muted)">{{ entry.target_type }} {{ entry.target_id }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div style="text-align:center;padding:32px 0;color:var(--text-muted)">
+      <div class="bay" style="margin:0 auto 16px;width:48px;height:48px" aria-hidden="true"></div>
+      <p style="margin:0;font-size:14px">No activity yet.</p>
+    </div>
+  {% endif %}
+</div>
+
+<nav style="margin-top:24px;display:flex;gap:8px;flex-wrap:wrap" aria-label="Portal navigation">
+  <a href="{% url 'portal_resident_list' %}" class="btn btn-ghost">Residents</a>
+  <a href="{% url 'portal_spot_list' %}" class="btn btn-ghost">Spots</a>
+  <a href="{% url 'portal_invite_list' %}" class="btn btn-ghost">Invites</a>
+  <a href="{% url 'portal_bookings' %}" class="btn btn-ghost">Bookings</a>
+  <a href="{% url 'portal_reports' %}" class="btn btn-ghost">Reports</a>
+</nav>
+{% endblock %}

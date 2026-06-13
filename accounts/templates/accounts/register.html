@@ -1,23 +1,119 @@
-{% load i18n %}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Request access — CondoParkShare</title>
-</head>
-<body>
-  <h1>Request access</h1>
+{% extends "base.html" %}
+{% load static %}
 
-  {# Privacy / lawful-basis notice — GDPR Art. 13 / CCPA §1798.100 disclosure #}
-  <div role="note" class="privacy-notice">
-    {{ form.privacy_notice.help_text }}
+{% block title %}Request access — CondoParkShare{% endblock %}
+
+{% block extra_css %}
+<style>
+  .auth-shell { max-width: 480px; margin: 0 auto; }
+  .auth-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 40px;
+    box-shadow: var(--shadow);
+  }
+  .auth-logo { display: flex; justify-content: center; margin-bottom: 28px; }
+  .auth-logo img { height: 36px; width: auto; }
+  .auth-title { font-size: var(--fs-h3); font-weight: 700; color: var(--pine); text-align: center; margin-bottom: 4px; }
+  .auth-subtitle { color: var(--text-muted); font-size: 14px; text-align: center; margin-bottom: 28px; }
+  .privacy-notice {
+    background: var(--mist);
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    padding: 12px 14px;
+    font-size: 12px;
+    color: var(--slate);
+    margin-bottom: 24px;
+  }
+  .field-error { color: var(--danger-ink); font-size: 13px; margin-top: 4px; display: block; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="auth-shell">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <img src="{% static 'img/logo/logo-full.svg' %}" alt="CondoParkShare">
+    </div>
+
+    <h1 class="auth-title">Request access</h1>
+    <p class="auth-subtitle">Enter your details and a manager will approve your account</p>
+
+    {% if form.non_field_errors %}
+      <div class="alert alert-danger" role="alert">
+        <span class="alert-icon" aria-hidden="true">!</span>
+        <span>{% for error in form.non_field_errors %}{{ error }}{% endfor %}</span>
+      </div>
+    {% endif %}
+
+    {# Privacy / lawful-basis notice — GDPR Art. 13 / CCPA §1798.100 disclosure #}
+    <div role="note" class="privacy-notice">{{ form.privacy_notice.help_text }}</div>
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      <div class="field {% if form.email.errors %}has-error{% endif %}">
+        <label for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>
+        <input
+          type="email"
+          name="{{ form.email.html_name }}"
+          id="{{ form.email.id_for_label }}"
+          autocomplete="email"
+          {% if form.email.value %}value="{{ form.email.value }}"{% endif %}
+          {% if form.email.errors %}aria-describedby="reg-email-error" aria-invalid="true"{% endif %}
+        >
+        {% if form.email.errors %}
+          <span id="reg-email-error" class="error-text" role="alert">{{ form.email.errors|join:", " }}</span>
+        {% endif %}
+      </div>
+
+      <div class="field {% if form.display_name.errors %}has-error{% endif %}">
+        <label for="{{ form.display_name.id_for_label }}">{{ form.display_name.label }}</label>
+        <input
+          type="text"
+          name="{{ form.display_name.html_name }}"
+          id="{{ form.display_name.id_for_label }}"
+          autocomplete="name"
+          {% if form.display_name.value %}value="{{ form.display_name.value }}"{% endif %}
+          {% if form.display_name.errors %}aria-describedby="reg-name-error" aria-invalid="true"{% endif %}
+        >
+        {% if form.display_name.errors %}
+          <span id="reg-name-error" class="error-text" role="alert">{{ form.display_name.errors|join:", " }}</span>
+        {% endif %}
+      </div>
+
+      <div class="field {% if form.unit_number.errors %}has-error{% endif %}">
+        <label for="{{ form.unit_number.id_for_label }}">{{ form.unit_number.label }}</label>
+        <input
+          type="text"
+          name="{{ form.unit_number.html_name }}"
+          id="{{ form.unit_number.id_for_label }}"
+          {% if form.unit_number.value %}value="{{ form.unit_number.value }}"{% endif %}
+          {% if form.unit_number.errors %}aria-describedby="reg-unit-error" aria-invalid="true"{% endif %}
+        >
+        {% if form.unit_number.errors %}
+          <span id="reg-unit-error" class="error-text" role="alert">{{ form.unit_number.errors|join:", " }}</span>
+        {% endif %}
+      </div>
+
+      <div style="margin-bottom:14px">
+        <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-size:14px">
+          <input
+            type="checkbox"
+            name="{{ form.marketing_email_opted_in.html_name }}"
+            id="{{ form.marketing_email_opted_in.id_for_label }}"
+            style="width:16px;height:16px;margin-top:2px;flex-shrink:0;accent-color:var(--meadow)"
+            {% if form.marketing_email_opted_in.value %}checked{% endif %}
+          >
+          <span>{{ form.marketing_email_opted_in.label }}</span>
+        </label>
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:8px">
+        Request access
+      </button>
+    </form>
   </div>
-
-  <form method="post">
-    {% csrf_token %}
-    {{ form.as_p }}
-    <button type="submit">Submit request</button>
-  </form>
-</body>
-</html>
+</div>
+{% endblock %}

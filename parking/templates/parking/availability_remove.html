@@ -17,7 +17,10 @@
   </div>
 
   {% if error %}
-    <div class="alert alert-danger" role="alert">{{ error }}</div>
+    <div class="alert alert-danger" role="alert">
+      <span class="alert-icon" aria-hidden="true">!</span>
+      <span>{{ error }}</span>
+    </div>
   {% endif %}
 
   <div class="card" style="margin-bottom:20px">

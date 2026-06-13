@@ -1,6 +1,6 @@
 role: test-system
 agent: system-test
 status: NOT_APPLICABLE
-signed_at: 2026-06-13T13:50:00Z          # informational — the gate uses the git commit time
-head_at_signing: b686006
-note: No system flows changed.
+signed_at: 2026-06-13T14:00:00Z          # informational — the gate uses the git commit time
+head_at_signing: 927aa8f
+note: No system flow changed.

@@ -1,40 +1,68 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Release booking early — CondoParkShare</title>
-</head>
-<body>
-  <h1>Release booking early</h1>
+{% extends "base.html" %}
 
-  <p>
-    Spot <strong>{{ booking.spot.spot_number }}</strong>
-    from <strong>{{ booking.time_range.lower }}</strong>
-    to <strong>{{ booking.time_range.upper }}</strong>
-  </p>
+{% block title %}Release booking early — CondoParkShare{% endblock %}
 
-  <p>
-    If you no longer need the spot until the end of your booking,
-    you can release it early. The spot will be returned to inventory
-    from the time you choose.
-  </p>
+{% block content %}
+<div style="max-width:520px">
+  <nav aria-label="Breadcrumb" style="font-size:13px;color:var(--text-muted);margin-bottom:12px">
+    <a href="{% url 'booking_list' %}" style="color:var(--meadow-ink);text-decoration:none">My bookings</a>
+    <span aria-hidden="true"> / </span>
+    <a href="{% url 'booking_detail' booking.pk %}" style="color:var(--meadow-ink);text-decoration:none">Booking details</a>
+    <span aria-hidden="true"> / </span>
+    <span aria-current="page">Release early</span>
+  </nav>
 
-  <form method="post">
-    {% csrf_token %}
+  <div class="page-header">
+    <h1>Release booking early</h1>
+    <p>Free up the spot from a time before your booking ends.</p>
+  </div>
 
+  <div class="card" style="margin-bottom:20px">
+    <dl style="display:grid;grid-template-columns:max-content 1fr;gap:8px 20px;margin:0;font-size:14px">
+      <dt style="color:var(--text-muted);font-weight:600">Spot</dt>
+      <dd style="margin:0"><span class="mono">{{ booking.spot.spot_number }}</span></dd>
+
+      <dt style="color:var(--text-muted);font-weight:600">From</dt>
+      <dd style="margin:0" class="mono">{{ booking.time_range.lower|date:"D, d M Y" }} {{ booking.time_range.lower|time:"H:i" }}</dd>
+
+      <dt style="color:var(--text-muted);font-weight:600">Until</dt>
+      <dd style="margin:0" class="mono">{{ booking.time_range.upper|date:"D, d M Y" }} {{ booking.time_range.upper|time:"H:i" }}</dd>
+    </dl>
+  </div>
+
+  <div class="card">
     {% if form.non_field_errors %}
-      <div role="alert">
-        {% for error in form.non_field_errors %}
-          <p class="form-error">{{ error }}</p>
-        {% endfor %}
+      <div class="alert alert-danger" role="alert" style="margin-bottom:16px">
+        <span class="alert-icon" aria-hidden="true">!</span>
+        <span>{% for error in form.non_field_errors %}{{ error }}{% endfor %}</span>
       </div>
     {% endif %}
 
-    {{ form.as_p }}
+    <form method="post" novalidate>
+      {% csrf_token %}
 
-    <button type="submit">Release spot early</button>
-    <a href="{% url 'booking_detail' booking.pk %}">Keep full booking</a>
-  </form>
-</body>
-</html>
+      <div class="field {% if form.release_to.errors %}has-error{% endif %}">
+        <label for="{{ form.release_to.id_for_label }}">{{ form.release_to.label }}</label>
+        <input
+          type="datetime-local"
+          name="{{ form.release_to.html_name }}"
+          id="{{ form.release_to.id_for_label }}"
+          {% if form.release_to.value %}value="{{ form.release_to.value }}"{% endif %}
+          {% if form.release_to.errors %}aria-describedby="release-to-error" aria-invalid="true"{% endif %}
+        >
+        {% if form.release_to.errors %}
+          <span id="release-to-error" class="error-text" role="alert">{{ form.release_to.errors|join:", " }}</span>
+        {% endif %}
+        {% if form.release_to.help_text %}
+          <div style="font-size:12px;color:var(--text-muted);margin-top:4px">{{ form.release_to.help_text }}</div>
+        {% endif %}
+      </div>
+
+      <div style="margin-top:24px;display:flex;gap:10px;flex-wrap:wrap">
+        <button type="submit" class="btn btn-primary">Release spot early</button>
+        <a href="{% url 'booking_detail' booking.pk %}" class="btn btn-ghost">Keep full booking</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

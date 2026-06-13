@@ -17,7 +17,7 @@
       <dd style="margin:0;font-weight:500">{{ user.display_name }}</dd>
 
       <dt style="color:var(--text-muted);font-size:13px;font-weight:600">Email</dt>
-      <dd style="margin:0;font-size:15px" class="mono">{{ user.email }}</dd>
+      <dd style="margin:0;font-size:15px">{{ user.email }}</dd>
 
       <dt style="color:var(--text-muted);font-size:13px;font-weight:600">Status</dt>
       <dd style="margin:0">
@@ -36,7 +36,7 @@
 
       {% if user.phone %}
         <dt style="color:var(--text-muted);font-size:13px;font-weight:600">Phone</dt>
-        <dd style="margin:0" class="mono">{{ user.phone }}</dd>
+        <dd style="margin:0">{{ user.phone }}</dd>
       {% endif %}
     </dl>
   </div>
