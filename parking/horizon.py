@@ -9,7 +9,7 @@ from datetime import timedelta
 from math import floor
 
 from django.db.models import DurationField, ExpressionWrapper, Sum
-from django.db.models.functions import Lower, Upper
+from django.db.models.functions import Greatest, Least, Lower, Upper
 from django.utils.timezone import now
 
 
@@ -37,20 +37,26 @@ def get_earned_horizon_hours(user):
 
     window_start = now_dt - timedelta(days=org.tier_metric_window_days)
 
-    # Sum elapsed hours from completed availability windows within the rolling window.
+    # Sum elapsed hours from availability windows that overlap the rolling window,
+    # clamping spanning windows to the window boundary rather than dropping them.
+    # Windows entirely in the future (upper <= now_dt is False) or entirely before
+    # window_start (upper <= window_start) are excluded via the two endswith filters.
     elapsed = (
         AvailabilityWindow.objects.filter(
             spot__owner=user,
             spot__organization=org,
             spot__status="active",
             time_range__endswith__lte=now_dt,  # upper bound has passed (fully elapsed)
-            time_range__startswith__gte=window_start,  # within the rolling metric window
+            time_range__endswith__gt=window_start,  # window hasn't ended before rolling window started
         )
         .annotate(
+            clamped_start=Greatest(Lower("time_range"), window_start),
+            clamped_end=Least(Upper("time_range"), now_dt),
             hours=ExpressionWrapper(
-                Upper("time_range") - Lower("time_range"),
+                Least(Upper("time_range"), now_dt)
+                - Greatest(Lower("time_range"), window_start),
                 output_field=DurationField(),
-            )
+            ),
         )
         .aggregate(total=Sum("hours"))["total"]
     )

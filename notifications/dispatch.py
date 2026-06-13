@@ -12,6 +12,7 @@ OWNER_EVENTS = {
     "warning_15",
     "booking_cancelled_by_borrower",
     "booking_cancelled_by_owner",
+    "booking_cancelled_by_admin",
     "early_release_confirmed",
 }
 
@@ -23,6 +24,7 @@ BORROWER_EVENTS = {
     "warning_15",
     "booking_cancelled_by_borrower",
     "booking_cancelled_by_owner",
+    "booking_cancelled_by_admin",
     "early_release_confirmed",
 }
 
@@ -108,6 +110,7 @@ def _render_notification(event, booking, recipient, **kwargs):
         "warning_15": f"15 minutes left — {spot.spot_number}",
         "booking_cancelled_by_borrower": f"Booking cancelled — {spot.spot_number}",
         "booking_cancelled_by_owner": f"Your booking was cancelled — {spot.spot_number}",
+        "booking_cancelled_by_admin": f"Booking cancelled by HOA — {spot.spot_number}",
         "early_release_confirmed": f"Spot released early — {spot.spot_number}",
     }
     bodies = {
@@ -119,6 +122,10 @@ def _render_notification(event, booking, recipient, **kwargs):
         "booking_cancelled_by_borrower": f"Booking at {spot.spot_number} ({time_str}) was cancelled by the resident.",
         "booking_cancelled_by_owner": (
             f"Your booking at {spot.spot_number} ({time_str}) was cancelled by the owner."
+            + (f" Reason: {booking.cancel_reason}" if booking.cancel_reason else "")
+        ),
+        "booking_cancelled_by_admin": (
+            f"Your booking at {spot.spot_number} ({time_str}) was cancelled by the HOA."
             + (f" Reason: {booking.cancel_reason}" if booking.cancel_reason else "")
         ),
         "early_release_confirmed": (

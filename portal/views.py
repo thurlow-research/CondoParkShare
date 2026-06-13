@@ -363,7 +363,7 @@ def portal_booking_cancel(request, pk):
         # Notify both parties (fail-safe: catch all errors so the cancel
         # still commits even if email delivery fails)
         try:
-            notify("booking_cancelled_by_owner", booking)
+            notify("booking_cancelled_by_admin", booking)
         except Exception:
             pass
 
