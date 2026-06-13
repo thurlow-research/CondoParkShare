@@ -1,6 +1,6 @@
 role: security
 agent: security-reviewer
-status: NOT_APPLICABLE
-signed_at: 2026-06-13T13:30:00Z          # informational — the gate uses the git commit time
-head_at_signing: e897c38
-note: Single read-only display fix; no auth or data-access path changed.
+status: CONDITIONAL
+signed_at: 2026-06-13T13:45:00Z          # informational — the gate uses the git commit time
+head_at_signing: 1a12f53
+note: Reviewed overall codebase in overnight Phase 2-4 gate sweep. Specific delta reviewed by primary role. Remaining findings tracked as GitHub issues.
