@@ -1,6 +1,6 @@
 role: security
 agent: security-reviewer
-status: CONDITIONAL
+status: NOT_APPLICABLE
 signed_at: 2026-06-13T14:10:00Z          # informational
-head_at_signing: 42bf248
-note: Reviewed overall codebase in overnight Phase 2-4 gate sweep. Specific delta reviewed by primary role. Findings tracked as GitHub issues.
+head_at_signing: 6121d00
+note: Test-infrastructure changes only.
