@@ -1,0 +1,6 @@
+role: code-review
+agent: code-reviewer
+status: APPROVED
+signed_at: 2026-06-13T03:42:54Z          # informational — the gate uses the git commit time
+head_at_signing: b752bae
+note: code-reviewer APPROVED: home view + root URL route (#16); non-active user bounces to login, no loop.

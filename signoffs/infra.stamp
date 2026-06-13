@@ -1,0 +1,6 @@
+role: infra
+agent: infra-reviewer
+status: APPROVED
+signed_at: 2026-06-13T03:42:54Z          # informational — the gate uses the git commit time
+head_at_signing: b752bae
+note: infra-reviewer APPROVED: ALLOWED_HOSTS matches Caddyfile (#15); deploy.sh exact-match hostname guard (#18).

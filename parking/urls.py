@@ -9,6 +9,8 @@ from django.urls import path
 from parking import views
 
 urlpatterns = [
+    path('', views.home, name='home'),
+
     # Booking (resident)
     path('book/', views.book_request, name='book_request'),
     path('book/confirm/', views.book_confirm, name='book_confirm'),
