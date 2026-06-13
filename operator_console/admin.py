@@ -199,6 +199,27 @@ class UserAdmin(admin.ModelAdmin):
         ),
     ]
 
+    def changelist_view(self, request, extra_context=None):
+        AdminAuditLog.objects.create(
+            organization=None,
+            actor=request.user,
+            action="pii_access",
+            target_type="user",
+            notes="operator_user_list",
+        )
+        return super().changelist_view(request, extra_context)
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        AdminAuditLog.objects.create(
+            organization=None,
+            actor=request.user,
+            action="pii_access",
+            target_type="user",
+            target_id=int(object_id),
+            notes="operator_user_detail",
+        )
+        return super().change_view(request, object_id, form_url, extra_context)
+
     def impersonate_user(self, request, queryset):
         """
         Begin impersonating a selected user.

@@ -81,12 +81,17 @@ class LostAuthenticatorVerifyForm(forms.Form):
 # ---------------------------------------------------------------------------
 
 _PRIVACY_NOTICE_TEXT = (
-    "By registering, you agree that CondoParkShare will store your name, "
-    "email address, and phone number to manage your parking access. "
-    "This information is processed on the basis of your consent and our "
-    "legitimate interest in operating the service. See our Privacy Policy "
-    "for details on retention, your rights of access/erasure, and how to "
-    "withdraw consent."
+    "By registering, you agree that your name, email address, and phone "
+    "number will be stored to manage your parking access. "
+    "Data Controller: your building's HOA or property manager, operating "
+    "CondoParkShare as a service. "
+    "This information is processed on the basis of your consent and the "
+    "legitimate interest in operating the parking service. "
+    "You have the right to access, correct, or erase your data at any time. "
+    "To request erasure or withdraw consent, contact your building's HOA "
+    "administrator or email the support address shown on this site. "
+    "Retention: data is held for the duration of your membership and deleted "
+    "upon erasure request."
 )
 
 
