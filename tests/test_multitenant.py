@@ -14,7 +14,7 @@ Covers:
 
 import pytest
 from django.http import Http404
-from django.test import RequestFactory
+from django.test import RequestFactory, override_settings
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -142,6 +142,7 @@ def test_scoped_manager_returns_none_without_org():
 
 
 @pytest.mark.django_db
+@override_settings(ALLOWED_HOSTS=["test.example.com"])
 def test_tenant_middleware_sets_request_org():
     """
     TenantMiddleware must look up the Organization by HTTP_HOST and set
@@ -171,6 +172,7 @@ def test_tenant_middleware_sets_request_org():
 
 
 @pytest.mark.django_db
+@override_settings(ALLOWED_HOSTS=["unknown.example.com"])
 def test_tenant_middleware_404_unknown_host():
     """TenantMiddleware must raise Http404 for a host that matches no Organization."""
     from parkshare.middleware import TenantMiddleware
@@ -189,6 +191,7 @@ def test_tenant_middleware_404_unknown_host():
 
 
 @pytest.mark.django_db
+@override_settings(ALLOWED_HOSTS=["clear.example.com"])
 def test_tenant_middleware_clears_threadlocal():
     """
     After the request completes (including when the view raises), the thread-local

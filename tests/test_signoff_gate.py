@@ -7,6 +7,7 @@ rather than mocking.
 """
 
 import subprocess
+import sys
 import textwrap
 from pathlib import Path
 
@@ -77,7 +78,7 @@ def stamp(role: str, status: str = "APPROVED") -> str:
 
 def run_gate(repo: Path, *args):
     return subprocess.run(
-        ["python3", str(GATE), *args],
+        [sys.executable, str(GATE), *args],
         cwd=repo,
         capture_output=True,
         text=True,

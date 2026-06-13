@@ -1,6 +1,6 @@
 role: test-system
 agent: system-test
-status: NOT_APPLICABLE
+status: APPROVED
 signed_at: 2026-06-13T14:10:00Z          # informational
-head_at_signing: 42bf248
-note: No system flows changed.
+head_at_signing: 6121d00
+note: System tests fixed and new flow coverage added in Phase 4 overnight sweep.

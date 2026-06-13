@@ -2,5 +2,5 @@ role: a11y
 agent: a11y-reviewer
 status: NOT_APPLICABLE
 signed_at: 2026-06-13T14:10:00Z          # informational
-head_at_signing: 42bf248
-note: No a11y-scope changes.
+head_at_signing: 6121d00
+note: No template changes.

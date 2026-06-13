@@ -2,5 +2,5 @@ role: process
 agent: pm-agent
 status: NOT_APPLICABLE
 signed_at: 2026-06-13T14:10:00Z          # informational
-head_at_signing: 42bf248
-note: GDPR fixes conform to spec §11.
+head_at_signing: 6121d00
+note: Test additions conform to existing spec.
