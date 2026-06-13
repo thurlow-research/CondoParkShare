@@ -45,6 +45,14 @@ note: Clean review. No cross-tenant leaks.
 `NOT_APPLICABLE` stamp still has to be re-committed after later changes — a role
 can never silently fall behind the code.
 
+> **Interim — `NOT_APPLICABLE` is a project extension, not HOS.** The HOS sign-off
+> taxonomy is `APPROVED` / `CONDITIONAL` / `ESCALATED`; `NOT_APPLICABLE` was added
+> *here* so a PR can pass when a role's domain isn't touched. It is human-set by
+> convention but **not** human-*enforced* by the gate. **Clean this up on the next
+> HOS drop:** replace it with the framework-blessed, human-approved gate override
+> requested in [HumanOversightSystem#22](https://github.com/ScottThurlow/HumanOversightSystem/issues/22),
+> and re-add `ESCALATED` to match the HOS taxonomy.
+
 ## How an agent signs off
 
 ```bash

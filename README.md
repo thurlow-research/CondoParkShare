@@ -4,6 +4,13 @@ A website to facilitate residents sharing parking spots for guests at Bellevue T
 
 Residents can offer their available parking spaces to fellow residents who need guest parking, making it easy to coordinate and share this limited resource within the community.
 
+## Why this project exists
+
+CondoParkShare serves two purposes at once:
+
+1. **A proving ground for the Human Oversight System (HOS)** — it is a real, non-trivial build used to exercise and harden the [HumanOversightSystem](https://github.com/ScottThurlow/HumanOversightSystem) governance framework (multi-agent review, sign-off gates, risk tiering, prompt-as-artifact discipline) under realistic conditions.
+2. **A utility for Bellevue Towers residents** — it delivers genuine day-to-day value: coordinating and sharing the building's scarce guest parking.
+
 ## Features
 
 - **Account Registration** — Residents register with name, email, unit, parking spot, and phone. Accounts require admin approval.
