@@ -1,0 +1,6 @@
+role: process
+agent: pm-agent
+status: NOT_APPLICABLE
+signed_at: 2026-06-13T03:11:03Z          # informational — the gate uses the git commit time
+head_at_signing: 399df50
+note: Docs-only re-validation record (audit report + UX readiness doc); no code in this role's scope.
