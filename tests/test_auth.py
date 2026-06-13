@@ -455,17 +455,21 @@ def test_lost_authenticator_verify_consumed_on_use(rf):
         consumed=False,
     )
 
-    def _make_verify_request(code):
+    def _make_verify_request(code, session_user_id=None):
         request = rf.post("/accounts/lost-authenticator/verify/", {"code": code})
         request.organization = org
         request.session = _make_django_session()
+        if session_user_id is not None:
+            request.session["_lost_auth_user_id"] = session_user_id
         return request
 
     # First attempt — should succeed and consume
     from unittest.mock import patch
 
     with patch("django.contrib.auth.login"):
-        response1 = lost_authenticator_verify(_make_verify_request(otp_plaintext))
+        response1 = lost_authenticator_verify(
+            _make_verify_request(otp_plaintext, session_user_id=user.pk)
+        )
 
     otp.refresh_from_db()
     assert otp.consumed, "OTP should be marked consumed after first use"
@@ -473,16 +477,114 @@ def test_lost_authenticator_verify_consumed_on_use(rf):
     assert response1.status_code == 302, "First valid use should redirect"
 
     # Second attempt — same code, now consumed; should fail
-    response2 = lost_authenticator_verify(_make_verify_request(otp_plaintext))
-    # Failed attempts render the form (200) or redirect to verify (302 with error)
-    # The view renders the form with an error for invalid/consumed codes
+    response2 = lost_authenticator_verify(
+        _make_verify_request(otp_plaintext, session_user_id=user.pk)
+    )
     assert response2.status_code in (
         200,
         302,
     ), "Second attempt response should be 200 (form error)"
-    # If 200, the form shows an error; otp.consumed remains True
     otp.refresh_from_db()
     assert otp.consumed, "OTP should still be consumed after second attempt"
+
+
+@pytest.mark.django_db
+def test_lost_authenticator_verify_pending_approval_blocked(rf):
+    """
+    A pending_approval user cannot recover via the lost-authenticator path
+    and must not transition to active status through it (#17).
+    """
+    from accounts.models import EmailOTP
+    from accounts.views import lost_authenticator_verify
+
+    org = OrganizationFactory()
+    user = UserFactory(organization=org, status="pending_approval")
+
+    otp_plaintext = "193847"
+    EmailOTP.objects.create(
+        user=user,
+        code_hash=make_password(otp_plaintext),
+        expires_at=now() + timedelta(minutes=15),
+        consumed=False,
+    )
+
+    request = rf.post("/accounts/lost-authenticator/verify/", {"code": otp_plaintext})
+    request.organization = org
+    request.session = _make_django_session()
+    request.session["_lost_auth_user_id"] = user.pk
+
+    response = lost_authenticator_verify(request)
+
+    # Must not redirect to totp_enroll; must render form with error
+    assert response.status_code == 200, "pending_approval should not be redirected"
+    user.refresh_from_db()
+    assert user.status == "pending_approval", "Status must not change"
+
+
+@pytest.mark.django_db
+def test_lost_authenticator_verify_no_cross_user_otp(rf):
+    """
+    A submitted OTP code can only match the user whose PK is stored in session;
+    it cannot consume another org member's OTP (#22).
+    """
+    from accounts.models import EmailOTP
+    from accounts.views import lost_authenticator_verify
+
+    org = OrganizationFactory()
+    user_a = UserFactory(organization=org, status="active")
+    user_b = UserFactory(organization=org, status="active")
+
+    otp_for_b = "777321"
+    EmailOTP.objects.create(
+        user=user_b,
+        code_hash=make_password(otp_for_b),
+        expires_at=now() + timedelta(minutes=15),
+        consumed=False,
+    )
+
+    # Session is bound to user_a — submitting user_b's code must fail
+    request = rf.post("/accounts/lost-authenticator/verify/", {"code": otp_for_b})
+    request.organization = org
+    request.session = _make_django_session()
+    request.session["_lost_auth_user_id"] = user_a.pk
+
+    response = lost_authenticator_verify(request)
+
+    assert response.status_code == 200, "Cross-user OTP must be rejected"
+    # user_b's OTP must remain unconsumed
+    assert not EmailOTP.objects.get(user=user_b).consumed
+
+
+@pytest.mark.django_db
+def test_totp_enroll_reset_preserves_pending_approval_status(rf):
+    """
+    Defense-in-depth: even if a pending_approval user somehow reaches
+    totp_enroll with totp_reset_required=True, their status is not
+    elevated to active (#17).
+    """
+    from unittest.mock import patch
+
+    from accounts.views import totp_enroll
+
+    org = OrganizationFactory()
+    user = UserFactory(organization=org, status="pending_approval")
+    device = _make_totp_device(user, confirmed=False)
+
+    with patch(
+        "django_otp.plugins.otp_totp.models.TOTPDevice.verify_token", return_value=True
+    ):
+        request = rf.post("/accounts/totp/enroll/", {"token": "000000"})
+        request.user = user
+        request.session = _make_django_session()
+        request.session["totp_reset_required"] = True
+        request.organization = org
+
+        totp_enroll(request)
+
+    user.refresh_from_db()
+    assert user.status == "pending_approval", (
+        "totp_enroll must not elevate pending_approval to active"
+    )
 
 
 # ---------------------------------------------------------------------------
