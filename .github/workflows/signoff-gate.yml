@@ -1,0 +1,40 @@
+name: Sign-off gate
+
+# Blocks a PR unless every agent in the validation suite has a committed
+# sign-off stamp (signoffs/<role>.stamp) that is no older than every file the PR
+# changes. The gate's clock is the git commit timestamp — see
+# scripts/oversight/signoff_gate.py for the full contract.
+#
+# To make this a required check, enable branch protection on the target branch
+# and mark "Sign-off gate / gate" as required.
+
+on:
+  pull_request:
+    branches: [main, build]
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out PR head
+        uses: actions/checkout@v4
+        with:
+          # Full history so merge-base(base, HEAD) and per-file commit
+          # timestamps resolve correctly.
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyYAML
+        run: pip install --quiet "PyYAML==6.0.3"
+
+      - name: Run sign-off gate
+        run: |
+          python3 scripts/oversight/signoff_gate.py \
+            --base "origin/${{ github.base_ref }}"
