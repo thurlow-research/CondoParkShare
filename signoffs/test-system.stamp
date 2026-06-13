@@ -1,6 +1,6 @@
 role: test-system
 agent: system-test
 status: NOT_APPLICABLE
-signed_at: 2026-06-13T03:42:54Z          # informational — the gate uses the git commit time
-head_at_signing: b752bae
-note: No security/privacy/UI/test surface in this PR (ALLOWED_HOSTS value, root-redirect view, deploy hostname guard). DB-backed tests deferred.
+signed_at: 2026-06-13T04:00:59Z          # informational — the gate uses the git commit time
+head_at_signing: 4c7ae32
+note: Docs-only session handoff summary; no code in this role's scope. Interim per HOS#22.
