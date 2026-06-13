@@ -1,6 +1,6 @@
 role: code-review
 agent: code-reviewer
-status: NOT_APPLICABLE
-signed_at: 2026-06-13T03:19:23Z          # informational — the gate uses the git commit time
-head_at_signing: e574cd3
-note: Docs/governance-housekeeping record (audit report, UX readiness, gate-doc + README purposes); no code in this role's scope. Interim per HOS#22.
+status: APPROVED
+signed_at: 2026-06-13T03:42:54Z          # informational — the gate uses the git commit time
+head_at_signing: b752bae
+note: code-reviewer APPROVED: home view + root URL route (#16); non-active user bounces to login, no loop.

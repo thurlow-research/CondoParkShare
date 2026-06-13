@@ -19,8 +19,8 @@
 #   --no-build    docker compose up without rebuilding images.
 #
 # Host overrides (env): PPE_HOST (default faberix), PROD_HOST (default opus).
-# Hostname guard: the script checks the local hostname contains the expected
-# token so a prod deploy cannot be run on the wrong box. Override with --force-host.
+# Hostname guard: the local short hostname must match the expected host exactly
+# so a prod deploy cannot be run on the wrong box. Override with --force-host.
 #
 # Exit 0 on success, non-zero on gate failure / wrong host / usage error.
 set -euo pipefail
@@ -70,11 +70,11 @@ echo "=========================================="
 
 # ── Hostname guard ───────────────────────────────────────────────────────────
 LOCAL_HOST="$(hostname -s 2>/dev/null || hostname)"
-if [[ "$LOCAL_HOST" != *"$TARGET_HOST"* ]]; then
+if [[ "$LOCAL_HOST" != "$TARGET_HOST" ]]; then
     if $FORCE_HOST; then
         echo "WARNING: local host '$LOCAL_HOST' != expected '$TARGET_HOST' (overridden by --force-host)."
     else
-        echo "deploy: refusing — local host '$LOCAL_HOST' does not look like '$TARGET_HOST'." >&2
+        echo "deploy: refusing — local host '$LOCAL_HOST' is not '$TARGET_HOST'." >&2
         echo "        Run this on $TARGET_HOST, or pass --force-host if you know better." >&2
         exit 3
     fi

@@ -27,6 +27,17 @@ from parking.horizon import check_horizon_gate
 from parking.models import AvailabilityWindow, Booking, ParkingSpot
 
 
+def home(request):
+    """
+    Root landing (``/``). Authenticated residents go to their bookings;
+    everyone else is sent to login. Deliberately undecorated — anonymous and
+    not-yet-active users must be able to hit the root URL without a 404.
+    """
+    if request.user.is_authenticated:
+        return redirect('booking_list')
+    return redirect('login')
+
+
 @active_required
 def spot_list(request):
     """
