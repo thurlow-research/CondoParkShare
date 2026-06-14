@@ -24,6 +24,24 @@ Read before acting:
 2. `contract/step-manifest.yaml` — step config
 3. `.claudetmp/oversight/validators/risk-assessment.md` — for the validated tier
 
+**Before acting on the evaluator artifact, validate it:**
+```bash
+# 1. Step number matches — extract from filename and compare to step manifest
+# 2. Timestamp is fresh — artifact was written after the most recent commit to this step
+#    git log -1 --format="%ct" HEAD   vs   stat -f "%m" (macOS) / stat -c "%Y" (Linux) on the artifact
+# 3. HEAD SHA matches — the artifact's `head_sha:` field must equal current HEAD
+#    ART_HEAD=$(grep -m1 '^head_sha:' "$ARTIFACT" | awk '{print $2}')
+#    [ -n "$ART_HEAD" ] && [ "$ART_HEAD" = "$(git rev-parse HEAD)" ]
+#    If `head_sha:` is ABSENT → fail closed (an evaluation that cannot be
+#    staleness-checked is not trustworthy); if present but != HEAD → stale.
+# 4. Recommendation field is present and valid — PROCEED | CONDITIONAL_PROCEED | ESCALATE
+# 5. Working tree is CLEAN — head_sha matching HEAD is not enough; uncommitted
+#    changes would mean the evaluation does not reflect what would be committed.
+#    [ -z "$(git status --porcelain)" ]   # any output → dirty → fail closed
+#    (Exception: permit only ignored/untemp paths; any tracked modification fails.)
+```
+If any check fails: do NOT open a PR. Print the validation failure and halt. A stale, mismatched, **or missing-`head_sha`** artifact means the evaluation may not reflect the current code state — the evaluator emits `head_sha:` in its output template, and the orchestrator fails closed without it.
+
 ---
 
 ## PROCEED
@@ -119,7 +137,7 @@ The step has items the human must verify before merge, but is otherwise ready.
 
 **1. Write the handoff document** (same as PROCEED).
 
-**2. Open the PR** with the AI attribution notice first (same format as PROCEED), the handoff document, and a "Human Review Required Before Merge" section appended last:
+**2. Append the "Human Review Required Before Merge" section TO `handoff.md`** — it must live in the file that becomes the PR body, not float as standalone text, or the human-review items vanish when the PR is opened. Append this block to the end of `.claudetmp/oversight/step{N}-handoff.md`:
 
 ```markdown
 ## ⚠ Human Review Required Before Merge
@@ -133,8 +151,11 @@ a resolved finding or confidence gap that automated review cannot fully clear.
 *These are in addition to panel findings, which will be posted as review threads.*
 ```
 
-**3. Title and open the PR:**
+**3. Title and open the PR** (the body now includes the section appended in step 2):
 ```bash
+# Assert the section made it into the body before opening (CONDITIONAL_PROCEED only):
+grep -q "Human Review Required Before Merge" .claudetmp/oversight/step{N}-handoff.md \
+  || { echo "ERROR: CONDITIONAL_PROCEED handoff is missing the Human Review section — do not open the PR"; exit 1; }
 gh pr create \
   --title "[AI: oversight-orchestrator] Step {N}: {step name}" \
   --body "$(cat .claudetmp/oversight/step{N}-handoff.md)"
@@ -195,3 +216,4 @@ Re-run oversight-evaluator after creating the file.
 - Do not open a PR when recommendation is ESCALATE.
 - Do not override ESCALATE to PROCEED without explicit human instruction.
 - Do not create GitHub issues (issue creation is the base agents' responsibility).
+- **Do not open a PR without the `[AI: oversight-orchestrator]` title prefix and the `## 🤖 AI-Submitted Pull Request` disclosure block as the first section of the body.** This is non-negotiable. Any PR missing the disclosure is a protocol violation visible to the human reviewer and will be flagged. See `docs/AGENTS.md` — Universal AI disclosure requirement.

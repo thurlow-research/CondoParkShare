@@ -1,6 +1,6 @@
 role: security
 agent: security-reviewer
-status: NOT_APPLICABLE
-signed_at: 2026-06-13T14:10:00Z          # informational
-head_at_signing: 6121d00
-note: Test-infrastructure changes only.
+status: APPROVED
+signed_at: 2026-06-14T02:16:23Z          # informational — the gate uses the git commit time
+head_at_signing: 304e0a4
+note: APPROVED; gaming-vector + isolation verified

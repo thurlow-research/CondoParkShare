@@ -15,22 +15,32 @@ Usage: python issue_query.py file.py [file2.py ...]
 
 from __future__ import annotations
 import json
-import re
 import subprocess
 import sys
 from pathlib import Path
 
-from schema import make_result, make_finding, normalize, WEIGHTS
+# self-bootstrap: ensure this file's dir (with schema.py) is importable
+# regardless of caller cwd/PYTHONPATH (run_validators, run_panel, direct).
+import sys as _hos_sys
+import pathlib as _hos_pl
+_hos_sys.path.insert(0, str(_hos_pl.Path(__file__).resolve().parent))
+from schema import make_result, make_finding, normalize, WEIGHTS  # noqa: E402
 
-_RISK_LABELS = ["bug", "security-finding", "privacy-finding",
-                "design-concern", "spec-gap", "test-resistance", "escaped-defect"]
+_RISK_LABELS = [
+    "bug",
+    "security-finding",
+    "privacy-finding",
+    "design-concern",
+    "spec-gap",
+    "test-resistance",
+    "escaped-defect",
+]
 
 
 def _gh_issues_for_files(file_paths: list[str]) -> list[dict]:
     """Query GitHub issues mentioning any of the given file paths."""
     try:
-        subprocess.run(["gh", "issue", "list", "--help"],
-                       capture_output=True, check=True)
+        subprocess.run(["gh", "issue", "list", "--help"], capture_output=True, check=True)
     except (FileNotFoundError, subprocess.CalledProcessError):
         return []
 
@@ -38,10 +48,22 @@ def _gh_issues_for_files(file_paths: list[str]) -> list[dict]:
     for label in _RISK_LABELS:
         try:
             result = subprocess.run(
-                ["gh", "issue", "list", "--label", label,
-                 "--state", "all", "--limit", "200",
-                 "--json", "number,title,labels,body,url"],
-                capture_output=True, text=True, timeout=15,
+                [
+                    "gh",
+                    "issue",
+                    "list",
+                    "--label",
+                    label,
+                    "--state",
+                    "all",
+                    "--limit",
+                    "200",
+                    "--json",
+                    "number,title,labels,body,url",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=15,
             )
             if result.returncode != 0:
                 continue
@@ -55,7 +77,12 @@ def _gh_issues_for_files(file_paths: list[str]) -> list[dict]:
                         issue["matched_label"] = label
                         all_issues.append(issue)
                         break
-        except (json.JSONDecodeError, subprocess.TimeoutExpired):
+        except (
+            json.JSONDecodeError,
+            subprocess.TimeoutExpired,
+            FileNotFoundError,
+            subprocess.CalledProcessError,
+        ):
             continue
 
     # Deduplicate by issue number
@@ -74,9 +101,10 @@ def _git_churn(file_paths: list[str]) -> dict[str, int]:
     for fp in file_paths:
         try:
             result = subprocess.run(
-                ["git", "log", "--oneline", "--follow",
-                 "--since=90.days", "--", fp],
-                capture_output=True, text=True, timeout=10,
+                ["git", "log", "--oneline", "--follow", "--since=90.days", "--", fp],
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
             churn[fp] = len(result.stdout.strip().splitlines())
         except subprocess.TimeoutExpired:
@@ -98,18 +126,23 @@ def analyse_files(file_paths: list[str]) -> dict:
 
     evidence = [
         make_finding(
-            issue.get("matched_file", "?"), 0,
+            issue.get("matched_file", "?"),
+            0,
             f"[{issue['matched_label']}] #{issue['number']}: {issue['title']}",
-            severity="high" if issue["matched_label"] in
-                     ("security-finding", "escaped-defect") else "medium",
+            severity=(
+                "high"
+                if issue["matched_label"] in ("security-finding", "escaped-defect")
+                else "medium"
+            ),
         )
         for issue in issues[:10]
     ]
 
     high_churn = {fp: c for fp, c in churn.items() if c >= 5}
     for fp, c in sorted(high_churn.items(), key=lambda x: x[1], reverse=True)[:3]:
-        evidence.append(make_finding(fp, 0, f"high churn: {c} commits in 90 days",
-                                      severity="medium"))
+        evidence.append(
+            make_finding(fp, 0, f"high churn: {c} commits in 90 days", severity="medium")
+        )
 
     checklist = []
     if issues:
@@ -129,9 +162,15 @@ def analyse_files(file_paths: list[str]) -> dict:
         score=score,
         raw_value={
             "issue_count": issue_count,
-            "issues": [{"number": i["number"], "title": i["title"],
-                         "label": i["matched_label"], "file": i.get("matched_file")}
-                        for i in issues],
+            "issues": [
+                {
+                    "number": i["number"],
+                    "title": i["title"],
+                    "label": i["matched_label"],
+                    "file": i.get("matched_file"),
+                }
+                for i in issues
+            ],
             "churn": churn,
             "note": "empty on new projects — accumulates value over time",
         },
@@ -144,8 +183,18 @@ def analyse_files(file_paths: list[str]) -> dict:
 def main() -> None:
     files = [f for f in sys.argv[1:] if Path(f).exists()]
     if not files:
-        print(json.dumps(make_result("historical_density", 0.0, {"error": "no input"},
-                                     weight=WEIGHTS["historical_density"], error="no input files"), indent=2))
+        print(
+            json.dumps(
+                make_result(
+                    "historical_density",
+                    0.0,
+                    {"error": "no input"},
+                    weight=WEIGHTS["historical_density"],
+                    error="no input files",
+                ),
+                indent=2,
+            )
+        )
         return
     print(json.dumps(analyse_files(files), indent=2))
 

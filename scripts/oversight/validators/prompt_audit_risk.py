@@ -33,36 +33,34 @@ import subprocess
 import sys
 from pathlib import Path
 
-from schema import make_result, make_finding, normalize, WEIGHTS
+# self-bootstrap: ensure this file's dir (with schema.py) is importable
+# regardless of caller cwd/PYTHONPATH (run_validators, run_panel, direct).
+import sys as _hos_sys
+import pathlib as _hos_pl
+_hos_sys.path.insert(0, str(_hos_pl.Path(__file__).resolve().parent))
+from schema import make_result, normalize, WEIGHTS  # noqa: E402
 
 # ── Ambiguity signals ─────────────────────────────────────────────────────────
 
 # Each phrase adds to the ambiguity score
 _AMBIGUITY_PATTERNS = [
-    (r'\?',                           0.3,  "question mark (unresolved question)"),
-    (r'\bTBD\b|\bTODO\b|\bFIXME\b',  0.5,  "TBD/TODO/FIXME in prompt"),
-    (r'\bprobably\b|\bmaybe\b|\bperhaps\b|\bpossibly\b',
-                                      0.4,  "hedging language"),
-    (r'\bassume\b|\bpresumably\b|\bi think\b|\bnot sure\b',
-                                      0.5,  "assumption language"),
-    (r'\bunclear\b|\bambiguous\b|\bunderspecified\b',
-                                      0.6,  "explicit ambiguity marker"),
-    (r'\bif (?:possible|applicable|needed|relevant)\b',
-                                      0.3,  "conditional requirement"),
-    (r'\bor (?:maybe|perhaps|alternatively)\b',
-                                      0.3,  "alternative requirement"),
-    (r'\betc\.?\b|\band so on\b|\band similar\b',
-                                      0.4,  "open-ended enumeration (etc.)"),
-    (r'\bI don\'?t know\b|\bnot specified\b|\bneeds clarification\b',
-                                      0.7,  "explicit uncertainty"),
+    (r"\?", 0.3, "question mark (unresolved question)"),
+    (r"\bTBD\b|\bTODO\b|\bFIXME\b", 0.5, "TBD/TODO/FIXME in prompt"),
+    (r"\bprobably\b|\bmaybe\b|\bperhaps\b|\bpossibly\b", 0.4, "hedging language"),
+    (r"\bassume\b|\bpresumably\b|\bi think\b|\bnot sure\b", 0.5, "assumption language"),
+    (r"\bunclear\b|\bambiguous\b|\bunderspecified\b", 0.6, "explicit ambiguity marker"),
+    (r"\bif (?:possible|applicable|needed|relevant)\b", 0.3, "conditional requirement"),
+    (r"\bor (?:maybe|perhaps|alternatively)\b", 0.3, "alternative requirement"),
+    (r"\betc\.?\b|\band so on\b|\band similar\b", 0.4, "open-ended enumeration (etc.)"),
+    (r"\bI don\'?t know\b|\bnot specified\b|\bneeds clarification\b", 0.7, "explicit uncertainty"),
 ]
 
 # Signals that indicate a CLEAR, well-specified prompt (reduce ambiguity score)
 _CLARITY_PATTERNS = [
-    (r'\bexactly\b|\bprecisely\b|\bspecifically\b',  -0.2, "precision marker"),
-    (r'\bper spec\b|\bper rfc\b|\baccording to §',    -0.3, "spec citation"),
-    (r'\bmust\b|\bshall\b|\brequired\b',              -0.1, "normative language"),
-    (r'\btest case[s]?\b|\bunit test\b',              -0.2, "tests specified"),
+    (r"\bexactly\b|\bprecisely\b|\bspecifically\b", -0.2, "precision marker"),
+    (r"\bper spec\b|\bper rfc\b|\baccording to §", -0.3, "spec citation"),
+    (r"\bmust\b|\bshall\b|\brequired\b", -0.1, "normative language"),
+    (r"\btest case[s]?\b|\bunit test\b", -0.2, "tests specified"),
 ]
 
 
@@ -116,12 +114,13 @@ def score_fidelity_surface(
             signals.append(f"code/prompt ratio {ratio:.1f} — modest spec coverage")
 
     # Count function definitions in code that aren't mentioned in prompt
-    func_names = re.findall(r'def (\w+)\s*\(', code_text)
-    mentioned_in_prompt = [f for f in func_names
-                           if f.lower() in prompt_text.lower()]
-    unmentioned = [f for f in func_names
-                   if f not in mentioned_in_prompt and
-                   not f.startswith(("_", "test_", "setUp", "tearDown"))]
+    func_names = re.findall(r"def (\w+)\s*\(", code_text)
+    mentioned_in_prompt = [f for f in func_names if f.lower() in prompt_text.lower()]
+    unmentioned = [
+        f
+        for f in func_names
+        if f not in mentioned_in_prompt and not f.startswith(("_", "test_", "setUp", "tearDown"))
+    ]
     if unmentioned:
         count = len(unmentioned)
         score += min(0.5, count * 0.1)
@@ -143,7 +142,9 @@ def get_prompt_artifact(file_path: str, prompts_dir: str) -> tuple[str | None, s
     try:
         out = subprocess.run(
             ["git", "log", "-5", "--format=%B", "--", file_path],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         ).stdout
         for line in out.splitlines():
             if line.startswith("Prompt-Artifact:"):
@@ -177,9 +178,22 @@ def get_process_ambiguity(step: str | None = None) -> tuple[float, list[str]]:
     # Count spec-gap GitHub issues
     try:
         result = subprocess.run(
-            ["gh", "issue", "list", "--label", "spec-gap", "--state", "all",
-             "--limit", "50", "--json", "number,title"],
-            capture_output=True, text=True, timeout=10,
+            [
+                "gh",
+                "issue",
+                "list",
+                "--label",
+                "spec-gap",
+                "--state",
+                "all",
+                "--limit",
+                "50",
+                "--json",
+                "number,title",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         issues = json.loads(result.stdout)
         count = len(issues)
@@ -192,16 +206,19 @@ def get_process_ambiguity(step: str | None = None) -> tuple[float, list[str]]:
     # Check architect design iteration temp files for this step
     if step:
         import glob
+
         pattern = f".claudetmp/design/architect-{step}-*.md"
         files = sorted(glob.glob(pattern), reverse=True)[:1]
         for f in files:
             try:
                 content = Path(f).read_text()
-                m = re.search(r'^iteration:\s*(\d+)', content, re.M)
+                m = re.search(r"^iteration:\s*(\d+)", content, re.M)
                 if m and int(m.group(1)) >= 3:
                     iters = int(m.group(1))
                     score += min(0.4, (iters - 2) * 0.1)
-                    signals.append(f"architect design review took {iters} iterations — design was ambiguous")
+                    signals.append(
+                        f"architect design review took {iters} iterations — design was ambiguous"
+                    )
             except Exception:
                 pass
 
@@ -213,7 +230,7 @@ def analyse_files(
     prompts_dir: str = "prompts",
     step: str | None = None,
 ) -> dict:
-    from schema import make_result, make_finding, normalize, WEIGHTS
+    from schema import make_result, make_finding, WEIGHTS
 
     all_ambiguity_signals: list[str] = []
     all_fidelity_signals: list[str] = []
@@ -244,11 +261,14 @@ def analyse_files(
         all_ambiguity_signals.extend(amb_signals)
 
         if amb_score > 0.5:
-            evidence.append(make_finding(
-                fp, 0,
-                f"High prompt ambiguity (score={amb_score:.2f}): {'; '.join(amb_signals[:3])}",
-                "medium" if amb_score < 0.75 else "high",
-            ))
+            evidence.append(
+                make_finding(
+                    fp,
+                    0,
+                    f"High prompt ambiguity (score={amb_score:.2f}): {'; '.join(amb_signals[:3])}",
+                    "medium" if amb_score < 0.75 else "high",
+                )
+            )
             checklist.append(
                 f"{Path(fp).name}: prompt was ambiguous — verify the coder's interpretation "
                 f"matches what was intended. Key signals: {', '.join(amb_signals[:2])}"
@@ -260,24 +280,32 @@ def analyse_files(
         all_fidelity_signals.extend(fid_signals)
 
         if fid_signals:
-            evidence.append(make_finding(
-                fp, 0,
-                f"Fidelity surface: {'; '.join(fid_signals[:2])}",
-                "medium" if fid_score > 0.4 else "low",
-            ))
+            evidence.append(
+                make_finding(
+                    fp,
+                    0,
+                    f"Fidelity surface: {'; '.join(fid_signals[:2])}",
+                    "medium" if fid_score > 0.4 else "low",
+                )
+            )
 
     # Process-level ambiguity signals
     proc_score, proc_signals = get_process_ambiguity(step)
     all_ambiguity_signals.extend(proc_signals)
-    max_ambiguity = max(max_ambiguity, proc_score * 0.5)  # process signals weight less than prompt signals
+    max_ambiguity = max(
+        max_ambiguity, proc_score * 0.5
+    )  # process signals weight less than prompt signals
 
     if missing_artifacts:
-        evidence.append(make_finding(
-            missing_artifacts[0], 0,
-            f"{len(missing_artifacts)} file(s) have no prompt artifact — "
-            "cannot verify authoring intent",
-            "medium",
-        ))
+        evidence.append(
+            make_finding(
+                missing_artifacts[0],
+                0,
+                f"{len(missing_artifacts)} file(s) have no prompt artifact — "
+                "cannot verify authoring intent",
+                "medium",
+            )
+        )
         checklist.append(
             f"{len(missing_artifacts)} file(s) missing prompt artifacts: "
             f"{', '.join(Path(f).name for f in missing_artifacts[:3])}. "
@@ -313,18 +341,26 @@ def main() -> None:
     if "--prompts-dir" in args:
         i = args.index("--prompts-dir")
         prompts_dir = args[i + 1]
-        args = args[:i] + args[i + 2:]
+        args = args[:i] + args[i + 2 :]
     if "--step" in args:
         i = args.index("--step")
         step = args[i + 1]
-        args = args[:i] + args[i + 2:]
+        args = args[:i] + args[i + 2 :]
 
     files = [f for f in args if Path(f).exists()]
     if not files:
-        print(json.dumps(make_result(
-            "prompt_ambiguity", 0.0, {"error": "no input files"},
-            weight=WEIGHTS.get("prompt_ambiguity", 0.07), error="no input files",
-        ), indent=2))
+        print(
+            json.dumps(
+                make_result(
+                    "prompt_ambiguity",
+                    0.0,
+                    {"error": "no input files"},
+                    weight=WEIGHTS.get("prompt_ambiguity", 0.07),
+                    error="no input files",
+                ),
+                indent=2,
+            )
+        )
         return
 
     print(json.dumps(analyse_files(files, prompts_dir=prompts_dir, step=step), indent=2))

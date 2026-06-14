@@ -251,7 +251,7 @@ if $DRY_RUN; then
 fi
 
 if ! command -v "$REVIEWER" &>/dev/null; then
-    echo "$REVIEWER not found. Install + auth: ./scripts/setup_clis.sh"
+    echo "$REVIEWER not found. Install + auth via the HOS machine bootstrap (bootstrap/setup_clis.sh)"
     exit 1
 fi
 

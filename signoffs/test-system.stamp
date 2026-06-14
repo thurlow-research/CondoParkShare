@@ -1,6 +1,6 @@
 role: test-system
 agent: system-test
-status: APPROVED
-signed_at: 2026-06-13T14:10:00Z          # informational
-head_at_signing: 6121d00
-note: System tests fixed and new flow coverage added in Phase 4 overnight sweep.
+status: NOT_APPLICABLE
+signed_at: 2026-06-14T02:16:23Z          # informational — the gate uses the git commit time
+head_at_signing: 304e0a4
+note: N/A: leaderboard UI deferred, no e2e flow

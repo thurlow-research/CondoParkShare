@@ -59,12 +59,14 @@ CODEX_THRESHOLD="${OVERSIGHT_CODEX_THRESHOLD:-0.55}"
 OUT_DIR=".claudetmp/second-review"
 STEP=""
 SCORE=""
+TIER=""
 DIFF_REF=""
 FILES=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --score)   SCORE="$2";    shift 2 ;;
+        --tier)    TIER="$2";     shift 2 ;;
         --step)    STEP="$2";     shift 2 ;;
         --diff)    DIFF_REF="$2"; shift 2 ;;
         --files)   shift; while [[ $# -gt 0 && "$1" != --* ]]; do FILES+=("$1"); shift; done ;;
@@ -86,22 +88,34 @@ fi
 
 SCORE="${SCORE:-0}"
 
-# Determine which reviewers fire
+# Determine which reviewers fire.
+# Fire on the validated TIER floor OR the composite score — whichever demands
+# more review. The deterministic risk floor raises tier (auth→HIGH, booking/
+# payment→CRITICAL) WITHOUT raising the composite score, so a HIGH-by-floor step
+# can have a low score; gating on score alone would silently skip the mandatory
+# cross-vendor review the tier requires. Tier is the ratchet floor here too.
 RUN_AGY=false
 RUN_CODEX=false
 AGY_AVAILABLE=false
 CODEX_AVAILABLE=false
 
+# Normalize tier to upper for comparison.
+TIER_UC=$(printf '%s' "$TIER" | tr '[:lower:]' '[:upper:]')
+
+# agy is mandatory at MEDIUM+ (tier) or score ≥ AGY_THRESHOLD.
+case "$TIER_UC" in MEDIUM|HIGH|CRITICAL) RUN_AGY=true ;; esac
 python3 -c "
 s=float('$SCORE'); t=float('$AGY_THRESHOLD')
 exit(0 if s >= t else 1)" 2>/dev/null && RUN_AGY=true || true
 
+# codex is mandatory at HIGH+ (tier) or score ≥ CODEX_THRESHOLD.
+case "$TIER_UC" in HIGH|CRITICAL) RUN_CODEX=true ;; esac
 python3 -c "
 s=float('$SCORE'); t=float('$CODEX_THRESHOLD')
 exit(0 if s >= t else 1)" 2>/dev/null && RUN_CODEX=true || true
 
 if ! $RUN_AGY && ! $RUN_CODEX; then
-    echo "run_second_review: score=$SCORE below both thresholds (agy≥$AGY_THRESHOLD, codex≥$CODEX_THRESHOLD) — skip"
+    echo "run_second_review: score=$SCORE below both thresholds (agy≥$AGY_THRESHOLD, codex≥$CODEX_THRESHOLD) and tier=${TIER:-none} below MEDIUM — skip"
     # Write a sentinel so oversight-evaluator can distinguish "skipped" from "missing"
     mkdir -p ".claudetmp/second-review"
     TS=$(date +%Y%m%dT%H%M%S)
@@ -109,9 +123,10 @@ if ! $RUN_AGY && ! $RUN_CODEX; then
 # Second Review — Step ${STEP}
 Timestamp: ${TS}
 verdict: skipped
-reason: composite score=${SCORE} is below both thresholds (agy≥${AGY_THRESHOLD}, codex≥${CODEX_THRESHOLD})
+reason: composite score=${SCORE} below both thresholds (agy≥${AGY_THRESHOLD}, codex≥${CODEX_THRESHOLD}) and tier=${TIER:-none} below MEDIUM
 agy_threshold: ${AGY_THRESHOLD}
 codex_threshold: ${CODEX_THRESHOLD}
+validated_tier: ${TIER:-none}
 EOF
     exit 0
 fi
@@ -442,13 +457,18 @@ blocks = re.findall(r'```json\s*(\{.*?\})\s*```', content, re.DOTALL)
 severities = ["critical", "high", "medium", "low", "none"]
 highest = "none"
 request_changes = False
+had_error = False
 finding_count = 0
 
 for block in blocks:
     try:
         data = json.loads(block)
     except Exception:
+        # An unparseable reviewer block is itself a review failure — fail closed.
+        had_error = True
         continue
+    if data.get("verdict") == "error" or data.get("error"):
+        had_error = True
     if data.get("verdict") == "request_changes":
         request_changes = True
     for f in data.get("findings", []):
@@ -458,9 +478,20 @@ for block in blocks:
         if sev in ("critical", "high"):
             finding_count += 1
 
-verdict = "request_changes" if request_changes else "approve"
-if not blocks:
+# Precedence: error > request_changes > approve. A runtime reviewer error
+# (timeout, rate-limit, crash after the CLI passed pre-check) must NOT collapse
+# into `approve` — that would silently convert the mandatory independent review
+# into a PASS. The error-block is swallowed into `approve` only if we let it;
+# instead a fired reviewer that errored makes the aggregate `error`, and the
+# script exits non-zero so the pipeline fails closed (symmetric with the
+# unavailable-at-pre-check guard above). The oversight-evaluator also treats a
+# MEDIUM+ second-review file with verdict:error as COMPLIANCE FAIL.
+if not blocks or had_error:
     verdict = "error"
+elif request_changes:
+    verdict = "request_changes"
+else:
+    verdict = "approve"
 
 # Rewrite the top-level verdict fields in the file
 new_content = re.sub(r'^verdict: pending$', f'verdict: {verdict}', content, flags=re.M)
@@ -517,4 +548,19 @@ print(d.get('usage',{}).get('output_tokens',d.get('usage',{}).get('completion_to
 
     echo ""
     python3 "$TRACKER" report 2>/dev/null || true
+fi
+
+# ── Fail closed on a runtime reviewer error ──────────────────────────────────
+# A fired-and-required reviewer that errored at runtime makes the aggregate
+# verdict `error`. Exit non-zero so the pipeline does not proceed on a review
+# that never produced an independent judgment — symmetric with the
+# vendor-unavailable-at-pre-check guard. The evaluator independently treats a
+# MEDIUM+ `verdict: error` file as COMPLIANCE FAIL, but failing here too means a
+# transient agy/codex crash blocks the pipeline at the source rather than
+# relying solely on the downstream reader.
+FINAL_VERDICT=$(grep -m1 '^verdict:' "$OUTFILE" | awk '{print $2}')
+if [[ "$FINAL_VERDICT" == "error" ]]; then
+    echo "run_second_review: FAIL-CLOSED — a required reviewer errored at runtime (verdict=error)." >&2
+    echo "  The mandatory cross-vendor review did not produce an independent judgment. Re-run." >&2
+    exit 1
 fi

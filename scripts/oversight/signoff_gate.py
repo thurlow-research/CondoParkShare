@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""signoff_gate.py — validation-suite sign-off gate for CondoParkShare.
+"""signoff_gate.py — validation-suite sign-off gate (HOS framework script).
 
 Blocks a change from merging (CI / PR mode) or deploying (deploy mode) unless
 every agent in the validation suite has a *committed* sign-off stamp that is no
@@ -61,10 +61,14 @@ except ImportError:  # pragma: no cover - surfaced as an env error
     sys.exit(2)
 
 SIGNOFFS_DIR = "signoffs"
-# NOTE: NOT_APPLICABLE/NA is a project extension, NOT part of the HOS taxonomy
-# (APPROVED/CONDITIONAL/ESCALATED). It is interim until HumanOversightSystem#22
-# (a human-approved gate override) lands; on the next HOS drop, drop NA and
-# re-add ESCALATED. See signoffs/README.md.
+# A stamp records a *satisfied* role: APPROVED, CONDITIONAL (human verifies the
+# conditional item before merge), or NOT_APPLICABLE (role explicitly out of
+# scope for the change — the stamp-level equivalent of the N/A register entry,
+# HOS#58). ESCALATED is intentionally NOT a stamp state: an unresolved
+# escalation is by definition not satisfied, so it has no passing stamp and the
+# gate fails (missing stamp) until the escalation is resolved and the role is
+# re-signed. A human-authorized waiver is handled by gate suspension (HOS#22),
+# not by a stamp. See signoffs/README.md.
 VALID_STATUSES = {"APPROVED", "CONDITIONAL", "NOT_APPLICABLE", "NA"}
 STAMP_SUFFIX = ".stamp"
 

@@ -19,21 +19,53 @@ import json
 import sys
 from pathlib import Path
 
-from schema import make_result, make_finding, normalize, WEIGHTS
+# self-bootstrap: ensure this file's dir (with schema.py) is importable
+# regardless of caller cwd/PYTHONPATH (run_validators, run_panel, direct).
+import sys as _hos_sys
+import pathlib as _hos_pl
+_hos_sys.path.insert(0, str(_hos_pl.Path(__file__).resolve().parent))
+from schema import make_result, make_finding, normalize, WEIGHTS  # noqa: E402
 
 # ORM method names that indicate a queryset operation (database hit)
-_ORM_METHODS = frozenset({
-    "all", "filter", "exclude", "get", "first", "last", "count",
-    "exists", "values", "values_list", "annotate", "aggregate",
-    "select_related", "prefetch_related", "order_by", "distinct",
-    "create", "update", "delete", "bulk_create", "bulk_update",
-    "get_or_create", "update_or_create",
-})
+_ORM_METHODS = frozenset(
+    {
+        "all",
+        "filter",
+        "exclude",
+        "get",
+        "first",
+        "last",
+        "count",
+        "exists",
+        "values",
+        "values_list",
+        "annotate",
+        "aggregate",
+        "select_related",
+        "prefetch_related",
+        "order_by",
+        "distinct",
+        "create",
+        "update",
+        "delete",
+        "bulk_create",
+        "bulk_update",
+        "get_or_create",
+        "update_or_create",
+    }
+)
 
 # Attributes that suggest accessing a related manager (common N+1 pattern)
-_RELATED_MANAGER_PATTERNS = frozenset({
-    "objects", "all", "filter", "set", "add", "remove",
-})
+_RELATED_MANAGER_PATTERNS = frozenset(
+    {
+        "objects",
+        "all",
+        "filter",
+        "set",
+        "add",
+        "remove",
+    }
+)
 
 
 class _N1Visitor(ast.NodeVisitor):
@@ -61,12 +93,12 @@ class _N1Visitor(ast.NodeVisitor):
         self._enter_loop(node, node.body)
 
     def visit_Call(self, node: ast.Call) -> None:
-        if self._in_loop:
+        if self._in_loop():
             self._check_orm_call(node)
         self.generic_visit(node)
 
     def visit_Attribute(self, node: ast.Attribute) -> None:
-        if self._in_loop and node.attr in _ORM_METHODS:
+        if self._in_loop() and node.attr in _ORM_METHODS:
             # Heuristic: attribute access of an ORM method name inside a loop
             # Check if the parent is a Call (actual method call, not just reference)
             self._record_candidate(node)
@@ -84,12 +116,14 @@ class _N1Visitor(ast.NodeVisitor):
         # Avoid duplicate recording for the same line
         if any(f["line"] == lineno for f in self.findings):
             return
-        self.findings.append({
-            "file": self.filename,
-            "line": lineno,
-            "loop_depth": self._loop_depth,
-            "attr": getattr(node, "attr", "?"),
-        })
+        self.findings.append(
+            {
+                "file": self.filename,
+                "line": lineno,
+                "loop_depth": self._loop_depth,
+                "attr": getattr(node, "attr", "?"),
+            }
+        )
 
 
 def analyse_files(file_paths: list[str]) -> dict:
@@ -109,9 +143,12 @@ def analyse_files(file_paths: list[str]) -> dict:
     score = normalize(count, 0, 8)
 
     evidence = [
-        make_finding(f["file"], f["line"],
-                     f"potential N+1: .{f['attr']}() inside loop (depth={f['loop_depth']})",
-                     severity="medium")
+        make_finding(
+            f["file"],
+            f["line"],
+            f"potential N+1: .{f['attr']}() inside loop (depth={f['loop_depth']})",
+            severity="medium",
+        )
         for f in all_findings[:10]
     ]
 
@@ -140,8 +177,18 @@ def analyse_files(file_paths: list[str]) -> dict:
 def main() -> None:
     files = [f for f in sys.argv[1:] if f.endswith(".py") and Path(f).exists()]
     if not files:
-        print(json.dumps(make_result("n1_queries", 0.0, {"error": "no input"},
-                                     weight=WEIGHTS["n1_queries"], error="no input files"), indent=2))
+        print(
+            json.dumps(
+                make_result(
+                    "n1_queries",
+                    0.0,
+                    {"error": "no input"},
+                    weight=WEIGHTS["n1_queries"],
+                    error="no input files",
+                ),
+                indent=2,
+            )
+        )
         return
     print(json.dumps(analyse_files(files), indent=2))
 

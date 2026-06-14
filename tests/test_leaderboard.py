@@ -11,7 +11,6 @@ import factory
 import pytest
 from psycopg2.extras import DateTimeTZRange
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -118,7 +117,9 @@ def test_leaderboard_empty_org():
     # No users created
 
     result = list(get_leaderboard(org, limit=20))
-    assert result == [], f"Leaderboard should be empty for an org with no users, got {result}"
+    assert (
+        result == []
+    ), f"Leaderboard should be empty for an org with no users, got {result}"
 
 
 @pytest.mark.django_db
@@ -144,7 +145,9 @@ def test_leaderboard_orders_by_elapsed_hours_descending():
         AvailabilityWindow.objects.create(
             organization=org,
             spot=spot_a,
-            time_range=DateTimeTZRange(window_start_a, window_start_a + timedelta(hours=50)),
+            time_range=DateTimeTZRange(
+                window_start_a, window_start_a + timedelta(hours=50)
+            ),
         )
 
         # owner_b: 10 hours in the past (within the 180-day window)
@@ -152,7 +155,9 @@ def test_leaderboard_orders_by_elapsed_hours_descending():
         AvailabilityWindow.objects.create(
             organization=org,
             spot=spot_b,
-            time_range=DateTimeTZRange(window_start_b, window_start_b + timedelta(hours=10)),
+            time_range=DateTimeTZRange(
+                window_start_b, window_start_b + timedelta(hours=10)
+            ),
         )
 
         result = list(get_leaderboard(org, limit=20))
@@ -196,14 +201,19 @@ def test_leaderboard_excludes_future_windows():
     assert len(result) >= 1
     owner_entry = next((u for u in result if u.pk == owner.pk), None)
     assert owner_entry is not None
-    assert owner_entry.elapsed_hours is None or owner_entry.elapsed_hours == timedelta(0), (
-        f"Future window must not count toward elapsed hours; got {owner_entry.elapsed_hours}"
-    )
+    assert owner_entry.elapsed_hours is None or owner_entry.elapsed_hours == timedelta(
+        0
+    ), f"Future window must not count toward elapsed hours; got {owner_entry.elapsed_hours}"
 
 
 @pytest.mark.django_db
 def test_leaderboard_excludes_windows_outside_metric_window():
-    """Windows that start before the rolling metric window are excluded."""
+    """Windows that *end* before the rolling metric window are excluded.
+
+    Exclusion is end-based (``endswith > window_start``), matching the
+    authoritative horizon metric: a window whose upper bound predates the
+    rolling window contributes nothing.
+    """
     from freezegun import freeze_time
 
     from parking.leaderboard import get_leaderboard
@@ -216,7 +226,7 @@ def test_leaderboard_excludes_windows_outside_metric_window():
         owner = UserFactory(organization=org)
         spot = ParkingSpotFactory(organization=org, owner=owner, status="active")
 
-        # Window entirely before the 180-day rolling window
+        # Window entirely before the 180-day rolling window (ends at -200 days)
         old_end = frozen_now - timedelta(days=200)
         old_start = old_end - timedelta(hours=100)
         AvailabilityWindow.objects.create(
@@ -229,8 +239,52 @@ def test_leaderboard_excludes_windows_outside_metric_window():
 
     owner_entry = next((u for u in result if u.pk == owner.pk), None)
     assert owner_entry is not None
-    assert owner_entry.elapsed_hours is None or owner_entry.elapsed_hours == timedelta(0), (
-        f"Window outside metric window must not be counted; got {owner_entry.elapsed_hours}"
+    assert owner_entry.elapsed_hours is None or owner_entry.elapsed_hours == timedelta(
+        0
+    ), f"Window outside metric window must not be counted; got {owner_entry.elapsed_hours}"
+
+
+@pytest.mark.django_db
+def test_leaderboard_clamps_window_straddling_metric_start():
+    """A window that begins before window_start but elapses within it is clamped.
+
+    Regression test for SPEC-1 §78 ("Leaderboard: same elapsed-listed-hours
+    basis"): the leaderboard must use the same clamped basis as
+    parking.horizon.get_earned_horizon_hours. A window straddling the rolling
+    window start must contribute only its in-window portion — not be dropped
+    (the prior bug) and not be counted in full.
+    """
+    from freezegun import freeze_time
+
+    from parking.leaderboard import get_leaderboard
+    from parking.models import AvailabilityWindow
+
+    frozen_now = _utc(2027, 6, 1, 12)
+    with freeze_time(frozen_now):
+        org = OrganizationFactory(tier_metric_window_days=180)
+        # window_start = frozen_now - 180 days = 2026-12-03 12:00
+        window_start = frozen_now - timedelta(days=180)
+
+        owner = UserFactory(organization=org)
+        spot = ParkingSpotFactory(organization=org, owner=owner, status="active")
+
+        # Window starts 10h BEFORE window_start and ends 40h AFTER it (fully past).
+        # In-window (clamped) portion = 40h; the 10h before window_start is excluded.
+        straddle_start = window_start - timedelta(hours=10)
+        straddle_end = window_start + timedelta(hours=40)
+        AvailabilityWindow.objects.create(
+            organization=org,
+            spot=spot,
+            time_range=DateTimeTZRange(straddle_start, straddle_end),
+        )
+
+        result = list(get_leaderboard(org, limit=20))
+
+    owner_entry = next((u for u in result if u.pk == owner.pk), None)
+    assert owner_entry is not None
+    assert owner_entry.elapsed_hours == timedelta(hours=40), (
+        "Straddling window must be clamped to window_start: expected 40h "
+        f"in-window portion, got {owner_entry.elapsed_hours}"
     )
 
 
@@ -244,7 +298,9 @@ def test_leaderboard_limit_honored():
         UserFactory(organization=org, status="active")
 
     result = list(get_leaderboard(org, limit=3))
-    assert len(result) <= 3, f"Leaderboard should return at most 3 results; got {len(result)}"
+    assert (
+        len(result) <= 3
+    ), f"Leaderboard should return at most 3 results; got {len(result)}"
 
 
 @pytest.mark.django_db
@@ -283,14 +339,101 @@ def test_leaderboard_annotates_elapsed_hours():
         AvailabilityWindow.objects.create(
             organization=org,
             spot=spot,
-            time_range=DateTimeTZRange(window_start, window_start + timedelta(hours=24)),
+            time_range=DateTimeTZRange(
+                window_start, window_start + timedelta(hours=24)
+            ),
         )
 
         result = list(get_leaderboard(org, limit=20))
 
     owner_entry = next((u for u in result if u.pk == owner.pk), None)
     assert owner_entry is not None, "Owner should appear in leaderboard"
-    assert hasattr(owner_entry, "elapsed_hours"), "User entry should have elapsed_hours annotation"
-    assert owner_entry.elapsed_hours == timedelta(hours=24), (
-        f"elapsed_hours should be timedelta(24h); got {owner_entry.elapsed_hours}"
+    assert hasattr(
+        owner_entry, "elapsed_hours"
+    ), "User entry should have elapsed_hours annotation"
+    assert owner_entry.elapsed_hours == timedelta(
+        hours=24
+    ), f"elapsed_hours should be timedelta(24h); got {owner_entry.elapsed_hours}"
+
+
+@pytest.mark.django_db
+def test_leaderboard_org_guard_excludes_cross_org_windows():
+    """Org guard: hours from a spot belonging to a different org must not count.
+
+    Bypasses the spot-owner-same-org invariant via QuerySet.update() to exercise
+    the defense-in-depth Q(owned_spots__organization=organization) clause.
+    Removing that clause lets the 24h window count for user_a; test asserts 0/None.
+    """
+    from freezegun import freeze_time
+
+    from parking.leaderboard import get_leaderboard
+    from parking.models import AvailabilityWindow, ParkingSpot
+
+    frozen_now = _utc(2027, 6, 1, 12)
+    with freeze_time(frozen_now):
+        org_a = OrganizationFactory()
+        org_b = OrganizationFactory()
+        user_a = UserFactory(organization=org_a)
+
+        # Create spot in org_a (satisfies FK), then reassign org to org_b via update()
+        spot = ParkingSpotFactory(organization=org_a, owner=user_a, status="active")
+        ParkingSpot.objects.filter(pk=spot.pk).update(organization=org_b)
+
+        # Fully-elapsed 24h window in the metric window, on the now-org_b spot
+        window_end = frozen_now - timedelta(hours=1)
+        window_start_w = window_end - timedelta(hours=24)
+        AvailabilityWindow.objects.create(
+            organization=org_b,
+            spot=spot,
+            time_range=DateTimeTZRange(window_start_w, window_end),
+        )
+
+        result = list(get_leaderboard(org_a, limit=20))
+
+    user_entry = next((u for u in result if u.pk == user_a.pk), None)
+    assert user_entry is not None
+    assert user_entry.elapsed_hours is None or user_entry.elapsed_hours == timedelta(
+        0
+    ), (
+        "Hours from a spot belonging to org_b must not count toward org_a leaderboard; "
+        f"got {user_entry.elapsed_hours}"
+    )
+
+
+@pytest.mark.django_db
+def test_leaderboard_zero_hour_users_rank_last():
+    """Users with no listed hours rank BELOW users with listed hours.
+
+    Regression test (found by cross-vendor second review): a user with no
+    availability windows annotates elapsed_hours to NULL. Under a bare
+    .order_by("-elapsed_hours"), PostgreSQL sorts NULLS FIRST for DESC, which
+    incorrectly placed zero-listing users at the TOP. The query uses
+    F("elapsed_hours").desc(nulls_last=True) to rank them last.
+    """
+    from freezegun import freeze_time
+
+    from parking.leaderboard import get_leaderboard
+    from parking.models import AvailabilityWindow
+
+    frozen_now = _utc(2027, 6, 1, 12)
+    with freeze_time(frozen_now):
+        org = OrganizationFactory(tier_metric_window_days=180)
+
+        has_hours = UserFactory(organization=org)
+        no_hours = UserFactory(organization=org)
+
+        spot = ParkingSpotFactory(organization=org, owner=has_hours, status="active")
+        ws = _utc(2027, 5, 1, 0)
+        AvailabilityWindow.objects.create(
+            organization=org,
+            spot=spot,
+            time_range=DateTimeTZRange(ws, ws + timedelta(hours=24)),
+        )
+
+        result = list(get_leaderboard(org, limit=20))
+
+    pks = [u.pk for u in result if u.pk in (has_hours.pk, no_hours.pk)]
+    assert pks[0] == has_hours.pk and pks[-1] == no_hours.pk, (
+        "User with 24h listed must rank above the zero-hour user; "
+        f"order was {pks} (has_hours={has_hours.pk}, no_hours={no_hours.pk})"
     )

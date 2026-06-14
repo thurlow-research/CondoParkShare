@@ -55,18 +55,18 @@ def normalize(value: float, low: float, high: float) -> float:
 
 # Weights for composite score — tunable as research data accumulates
 WEIGHTS = {
-    "risk_number":          0.18,
-    "cyclomatic":           0.08,
-    "cognitive":            0.08,
-    "function_metrics":     0.07,
-    "n1_queries":           0.08,
-    "migration_risk":       0.12,
-    "static_analysis":      0.15,
-    "historical_density":   0.12,
+    "risk_number": 0.18,
+    "cyclomatic": 0.08,
+    "cognitive": 0.08,
+    "function_metrics": 0.07,
+    "n1_queries": 0.08,
+    "migration_risk": 0.12,
+    "static_analysis": 0.15,
+    "historical_density": 0.12,
     "hallucination_surface": 0.06,
-    "portability":          0.06,
-    "ip_check":             0.08,
-    "prompt_ambiguity":     0.07,
+    "portability": 0.06,
+    "ip_check": 0.08,
+    "prompt_ambiguity": 0.07,
 }
 
 # Score thresholds that map to risk tier.
@@ -75,10 +75,10 @@ WEIGHTS = {
 # for range checks as the tuples look inclusive but hi is exclusive.
 # Boundary value 0.30 → MEDIUM (not LOW); 0.55 → HIGH; 0.78 → CRITICAL.
 TIER_THRESHOLDS = {
-    "LOW":      (0.00, 0.30),   # score < 0.30
-    "MEDIUM":   (0.30, 0.55),   # 0.30 ≤ score < 0.55
-    "HIGH":     (0.55, 0.78),   # 0.55 ≤ score < 0.78
-    "CRITICAL": (0.78, 1.00),   # score ≥ 0.78
+    "LOW": (0.00, 0.30),  # score < 0.30
+    "MEDIUM": (0.30, 0.55),  # 0.30 ≤ score < 0.55
+    "HIGH": (0.55, 0.78),  # 0.55 ≤ score < 0.78
+    "CRITICAL": (0.78, 1.00),  # score ≥ 0.78
 }
 
 
@@ -98,7 +98,10 @@ def composite_score(results: list[dict]) -> float:
 def score_to_tier(score: float) -> str:
     # Exclusive upper bounds — consistent with run_validators.sh inline Python.
     # Boundary value 0.30 → MEDIUM (not LOW), matching the threshold semantics.
-    if score < 0.30: return "LOW"
-    if score < 0.55: return "MEDIUM"
-    if score < 0.78: return "HIGH"
+    if score < 0.30:
+        return "LOW"
+    if score < 0.55:
+        return "MEDIUM"
+    if score < 0.78:
+        return "HIGH"
     return "CRITICAL"

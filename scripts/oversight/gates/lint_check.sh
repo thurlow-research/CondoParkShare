@@ -15,6 +15,9 @@ set -euo pipefail
 GATES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/oversight/ensure_venv.sh
 source "$GATES_DIR/../ensure_venv.sh"
+# shellcheck source=scripts/oversight/gates/check_suspension.sh
+source "$GATES_DIR/check_suspension.sh"
+is_suspended "lint" && { print_suspended "lint"; exit 0; }
 
 PASS=0
 FAIL=1
@@ -32,7 +35,7 @@ done
 
 if $CHECK_ALL; then
     while IFS= read -r line; do FILES+=("$line"); done < <(find . -name "*.py" \
-        -not -path "./.venv/*" -not -path "./scripts/*" \
+        -not -path "./.venv/*" -not -path "./scripts/oversight/.venv/*" \
         -not -path "./node_modules/*" -not -path "./.git/*")
 fi
 
