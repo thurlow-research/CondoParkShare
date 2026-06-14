@@ -1,6 +1,6 @@
 role: test-unit
 agent: unit-test
 status: APPROVED
-signed_at: 2026-06-14T02:08:20Z          # informational — the gate uses the git commit time
-head_at_signing: 8dd4fb2
-note: 100% cov; 3/3 changed-line mutants; +nulls_last regression test (11 tests)
+signed_at: 2026-06-14T02:16:23Z          # informational — the gate uses the git commit time
+head_at_signing: 304e0a4
+note: APPROVED; 100% cov, 3/3 mutants, 11 tests

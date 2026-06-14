@@ -1,6 +1,6 @@
 role: infra
 agent: infra-reviewer
 status: NOT_APPLICABLE
-signed_at: 2026-06-14T02:08:21Z          # informational — the gate uses the git commit time
-head_at_signing: 8dd4fb2
-note: N/A: no infra/compose/Caddy/backup files
+signed_at: 2026-06-14T02:16:23Z          # informational — the gate uses the git commit time
+head_at_signing: 304e0a4
+note: N/A: no infra files

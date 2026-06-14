@@ -1,6 +1,6 @@
 role: security
 agent: security-reviewer
 status: APPROVED
-signed_at: 2026-06-14T02:08:20Z          # informational — the gate uses the git commit time
-head_at_signing: 8dd4fb2
-note: No gaming-vector bypass; explicit org guard; no new attack surface (deferred)
+signed_at: 2026-06-14T02:16:23Z          # informational — the gate uses the git commit time
+head_at_signing: 304e0a4
+note: APPROVED; gaming-vector + isolation verified
