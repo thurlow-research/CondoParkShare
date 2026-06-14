@@ -257,9 +257,18 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 # AUDIT_RECOVERY_LOG — path for the JSONL recovery sink (one JSON object per
 # line). Override via the environment variable of the same name.
 #
-# PRODUCTION NOTE: this path MUST be on a persisted volume (e.g. a named
-# Docker volume or NAS-mounted path). A container restart will lose anything
-# written to ephemeral storage. Flag for infra review before going live.
+# The default resolves to /app/logs/audit-recovery.jsonl inside the container.
+# docker-compose.yml mounts the named volume audit_logs:/app/logs, so the file
+# survives container restart/replacement.  If you run outside Docker, override
+# this variable to a path on durable storage.
+#
+# AUDIT_LIVENESS_STATUS — future: heartbeat file written by the audit pipeline
+# monitor (not yet implemented). Reserve the path inside the same volume so
+# operators can locate both files in one place.
+# AUDIT_LIVENESS_STATUS = env(
+#     "AUDIT_LIVENESS_STATUS",
+#     default=str(BASE_DIR / "logs" / "audit-liveness.status"),
+# )
 
 AUDIT_RECOVERY_LOG = env(
     "AUDIT_RECOVERY_LOG",
