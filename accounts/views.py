@@ -520,21 +520,29 @@ def register_invite(request, code):
             organization=request.organization,
         )
         if form.is_valid():
-            user = User.objects.create_user(
-                email=form.cleaned_data["email"],
-                organization=request.organization,
-                display_name=form.cleaned_data["display_name"],
-                password=form.cleaned_data["password"],
-                status="pending_totp",
-                marketing_email_opted_in=form.cleaned_data.get(
-                    "marketing_email_opted_in", False
-                ),
-            )
+            # select_for_update + atomic prevents two concurrent registrations
+            # from both passing is_valid() before either increments use_count,
+            # which would allow a max_uses=1 invite to create two accounts.
+            with transaction.atomic():
+                locked_invite = Invite.objects.select_for_update().get(pk=invite.pk)
+                if not locked_invite.is_valid():
+                    return render(request, "accounts/invite_invalid.html", status=410)
 
-            invite.use_count += 1
-            invite.consumed_by = user
-            invite.consumed_at = now()
-            invite.save(update_fields=["use_count", "consumed_by", "consumed_at"])
+                user = User.objects.create_user(
+                    email=form.cleaned_data["email"],
+                    organization=request.organization,
+                    display_name=form.cleaned_data["display_name"],
+                    password=form.cleaned_data["password"],
+                    status="pending_totp",
+                    marketing_email_opted_in=form.cleaned_data.get(
+                        "marketing_email_opted_in", False
+                    ),
+                )
+
+                locked_invite.use_count += 1
+                locked_invite.consumed_by = user
+                locked_invite.consumed_at = now()
+                locked_invite.save(update_fields=["use_count", "consumed_by", "consumed_at"])
 
             # Partially authenticate so totp_enroll can access request.user.
             login(request, user, backend="django.contrib.auth.backends.ModelBackend")
