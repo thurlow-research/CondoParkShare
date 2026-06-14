@@ -51,3 +51,6 @@ htmlcov/
 # mutmut mutation testing output
 mutants/
 .mutmut-cache
+
+# Runtime audit-recovery JSONL sink (AUDIT_RECOVERY_LOG)
+logs/

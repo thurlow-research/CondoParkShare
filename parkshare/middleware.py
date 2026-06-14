@@ -14,10 +14,13 @@ RatelimitMiddleware: converts Ratelimited exceptions (PermissionDenied
 subclass) raised by django-ratelimit block=True into proper HTTP 429 responses.
 """
 
+import json
 import logging
 import threading
+from datetime import timezone as dt_timezone
 
 logger = logging.getLogger(__name__)
+audit_recovery_logger = logging.getLogger("audit_recovery")
 
 _thread_locals = threading.local()
 
@@ -136,18 +139,29 @@ class ImpersonationMiddleware:
                             actor=real_operator,
                             on_behalf_of=impersonated,
                             action="impersonate_action",
+                            target_type="user",
+                            target_id=impersonated.pk,
                             notes=f"POST {request.path}",
                         )
                     except Exception:
-                        # Never block the impersonated request on an audit-log
-                        # failure, but a silently-lost impersonation audit record
-                        # is a security-observability gap — surface it in logs.
-                        logger.exception(
-                            "Failed to write impersonate_action AdminAuditLog "
-                            "(operator=%s on_behalf_of=%s path=%s)",
-                            getattr(real_operator, "pk", None),
-                            getattr(impersonated, "pk", None),
-                            request.path,
-                        )
+                        # Fail-open: never block the impersonated request because
+                        # the audit-log write failed. Emit a structured recovery
+                        # record with every field needed to reconstruct the row.
+                        from django.utils.timezone import now as django_now
+
+                        org = getattr(request, "organization", None)
+                        recovery_record = {
+                            "organization_id": getattr(org, "pk", None),
+                            "actor_id": getattr(real_operator, "pk", None),
+                            "on_behalf_of_id": getattr(impersonated, "pk", None),
+                            "action": "impersonate_action",
+                            "target_type": "user",
+                            "target_id": getattr(impersonated, "pk", None),
+                            "notes": f"POST {request.path}",
+                            "attempted_at": django_now()
+                            .astimezone(dt_timezone.utc)
+                            .isoformat(),
+                        }
+                        audit_recovery_logger.error(json.dumps(recovery_record))
 
         return self.get_response(request)

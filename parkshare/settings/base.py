@@ -251,6 +251,65 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 # frame-ancestors: 'none' is the authoritative clickjacking control (CSP Level 3).
 # XFrameOptionsMiddleware and X_FRAME_OPTIONS are omitted — redundant with frame-ancestors.
 
+# ---------------------------------------------------------------------------
+# Audit-recovery logging
+# ---------------------------------------------------------------------------
+# AUDIT_RECOVERY_LOG — path for the JSONL recovery sink (one JSON object per
+# line). Override via the environment variable of the same name.
+#
+# PRODUCTION NOTE: this path MUST be on a persisted volume (e.g. a named
+# Docker volume or NAS-mounted path). A container restart will lose anything
+# written to ephemeral storage. Flag for infra review before going live.
+
+AUDIT_RECOVERY_LOG = env(
+    "AUDIT_RECOVERY_LOG",
+    default=str(BASE_DIR / "logs" / "audit-recovery.jsonl"),
+)
+
+# Create the parent directory so FileHandler(delay=True) can open the file on
+# first write without raising FileNotFoundError and silently discarding the record.
+try:
+    Path(AUDIT_RECOVERY_LOG).parent.mkdir(parents=True, exist_ok=True)
+except OSError:
+    # Read-only filesystem or permission error — fall through; the handler will
+    # fail gracefully on first write rather than crashing at startup.
+    pass
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "plain": {
+            # Raw JSONL — no prefix so the file is machine-parseable line-by-line.
+            "format": "%(message)s",
+        },
+        "console_audit": {
+            # Human-readable prefix for stderr/stdout so operators can see
+            # the severity and logger name at a glance.
+            "format": "%(levelname)s %(name)s %(message)s",
+        },
+    },
+    "handlers": {
+        "audit_recovery_file": {
+            "class": "logging.FileHandler",
+            "filename": AUDIT_RECOVERY_LOG,
+            "formatter": "plain",
+            "delay": True,
+        },
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "console_audit",
+        },
+    },
+    "loggers": {
+        "audit_recovery": {
+            "handlers": ["audit_recovery_file", "console"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+    },
+}
+
 CONTENT_SECURITY_POLICY = {
     "DIRECTIVES": {
         "default-src": ["'self'"],
