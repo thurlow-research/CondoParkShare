@@ -27,7 +27,8 @@ backstop for any edge-case partial write.
 """
 
 import json
-from datetime import datetime, timezone as dt_timezone
+from datetime import datetime
+from datetime import timezone as dt_timezone
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
