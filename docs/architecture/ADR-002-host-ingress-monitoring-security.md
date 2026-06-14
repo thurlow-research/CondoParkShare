@@ -25,6 +25,18 @@ The recommended MVP path below **rides the existing node_exporter via its textfi
 
 ---
 
+## Ratification amendments (2026-06-14, human decisions)
+
+The following human decisions during ratification override the noted parts of this ADR. All three **reduce surface area**; the core architecture (decisions A, C, E) is unchanged.
+
+1. **IPv4 only — drop all IPv6.** monitrix does **not** scrape over IPv6 (router static-IPv6 limitations); IPv4 was deliberately chosen. Remove every IPv6 element from this design: no `MONITRIX_SCRAPE_SRC_V6`, no `/64`, no `/128`. Decision B's fallback source is **`192.168.1.7/32` only**. (Moot under the recommended textfile ride regardless.)
+
+2. **PR #96 closed (not retained).** Its inbound `:9108` allow is obsolete under the textfile ride (decision A), and the Phase-2 Loki *outbound* rule is not yet scoped — keeping an unmerged PR for a future need adds surface area for no current benefit. **#96 is closed; the Phase-2 Loki firewall rule is re-filed, scoped to Phase 2, when the log-shipper is designed.** This **supersedes Decision D's "retain `scripts/setup_firewall.sh`"** — the script is not carried forward; it is re-created at Phase 2. The MVP-relevant `.env` additions (`WEB_BIND_IP`, `NODE_EXPORTER_TEXTFILE_DIR`) are introduced by the MVP build work, not by #96.
+
+3. **Pager specified: SMS, hosted on monitrix.** Decision F.8's "*an* independent pager" is now fixed as **SMS-based, on monitrix**. No solution exists today; a separate monitrix-side design/work item covers it (cloud-SMS vs self-hosted-GSM direction TBD). Alerts A2/A6 route to it.
+
+---
+
 ## Context
 
 The fail-open audit design (CPS#78) means impersonated operator actions proceed even when the `AdminAuditLog` DB write fails, leaving a JSONL recovery record as the only trace. That is only safe if (a) the recovery sink is durable and shipped off-box, and (b) on-call is **paged** when audit writes fail. monitrix (separate host) pulls metrics and receives shipped logs. The monitoring spec (CPS#87) defines the signals, exporter on `:9108`, and the firewall opening.
