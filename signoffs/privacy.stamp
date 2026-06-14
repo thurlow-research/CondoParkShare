@@ -1,6 +1,6 @@
 role: privacy
 agent: privacy-reviewer
 status: NOT_APPLICABLE
-signed_at: 2026-06-13T14:10:00Z          # informational
-head_at_signing: 6121d00
-note: Test-infrastructure changes only.
+signed_at: 2026-06-14T01:51:07Z          # informational — the gate uses the git commit time
+head_at_signing: 4310d93
+note: N/A: no PII handling change; aggregate elapsed-hours query, no new field/endpoint; not required by step-7 manifest

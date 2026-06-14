@@ -1,6 +1,6 @@
 role: ui
 agent: ui-reviewer
 status: NOT_APPLICABLE
-signed_at: 2026-06-13T14:10:00Z          # informational
-head_at_signing: 6121d00
-note: No template changes.
+signed_at: 2026-06-14T01:51:07Z          # informational — the gate uses the git commit time
+head_at_signing: 4310d93
+note: N/A: no templates touched (leaderboard UI deferred)
