@@ -108,6 +108,18 @@ ADDED_LINE_SIGNATURES: list[tuple[str, str]] = [
         r"(choices\s*=|TextChoices|IntegerChoices|models\.TextChoices|StateField|FSMField|"
         r"@transition|STATUS_[A-Z]|_STATES\b|enum\.Enum|new\s+state\b)",
     ),
+    (
+        # A telemetry retrofit instruments a previously-uninstrumented component
+        # without adding any other §2a signature, so ops-designer could under-
+        # classify it as additive (#84). High-confidence telemetry primitives only
+        # — deliberately NOT routine `logger.info(...)` or `collections.Counter(`,
+        # which would force spurious human gates (the #117 false-match lesson).
+        "new-observability-instrumentation",
+        r"(get_tracer|start_as_current_span|add_span_processor|TracerProvider|"
+        r"\.set_attribute\(|SpanKind|get_current_span|propagat|TraceContext|"
+        r"opentelemetry|\bOTLP\b|prometheus|statsd|push_to_gateway|"
+        r"structlog\.(get_logger|configure)|logging\.config|dictConfig|\bLOGGING\s*=)",
+    ),
 ]
 
 # Dependency manifests — an ADDED line here is a new external dependency.
@@ -122,6 +134,16 @@ DEP_LINE = re.compile(r"^[A-Za-z0-9_.\-\"']")
 
 # Templates added as NEW files are a new user-facing surface.
 TEMPLATE_FILE = re.compile(r"(templates/.*\.html$|\.(jsx|tsx|vue|svelte)$)")
+
+# The HOS framework tooling tree. The added-line signatures below describe
+# APPLICATION behavior (auth state, routes, user-facing state); the oversight
+# tooling's own source contains those very patterns as literal regex/string
+# definitions, so scanning it makes the classifier match ITSELF — phantom
+# structural signals whenever a framework file is in the diff (HOS#117).
+# Exempt the tooling tree from application-domain signature scanning only;
+# dependency-manifest and new-template signals still apply everywhere (a real
+# dep added to oversight requirements.txt IS structural).
+FRAMEWORK_TOOLING = re.compile(r"(^|/)scripts/(oversight|framework)/.*\.py$")
 
 
 def _git(args: list[str]) -> str:
@@ -230,9 +252,14 @@ def detect_structural(name_status, added) -> list[dict]:
             )
 
     # Added-line signatures — permission/auth, route/flow, state enums.
+    # Skip the framework tooling tree: these application-domain patterns appear
+    # there only as the classifier's own literal definitions, not as real app
+    # behavior, so scanning it self-matches (HOS#117).
     for name, rx in ADDED_LINE_SIGNATURES:
         crx = re.compile(rx)
         for f, lines in added.items():
+            if FRAMEWORK_TOOLING.search(f):
+                continue
             for ln in lines:
                 if crx.search(ln):
                     signals.append({"signal": name, "file": f, "evidence": ln.strip()[:120]})

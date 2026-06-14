@@ -6,6 +6,7 @@ agent reads these without knowing which validator produced them.
 """
 
 from __future__ import annotations
+
 from typing import Any
 
 

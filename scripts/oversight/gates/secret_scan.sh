@@ -17,6 +17,12 @@ _GATES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$_GATES_DIR/check_suspension.sh"
 is_suspended "secrets" && { print_suspended "secrets"; exit 0; }
 
+# detect-secrets and PyYAML live in the oversight venv, not on the bare PATH.
+# Without this, `command -v detect-secrets` fails on a clean machine and the gate
+# silently downgrades to the weak grep fallback. (HOS#102)
+# shellcheck source=scripts/oversight/ensure_venv.sh
+source "$_GATES_DIR/../ensure_venv.sh"
+
 FILES=()
 CHECK_STAGED=false
 
@@ -37,24 +43,35 @@ ERRORS=0
 GATE_TIMEOUT="${GATE_TIMEOUT:-60}"
 GATE_RETRIES="${GATE_RETRIES:-2}"
 
-if command -v detect-secrets &>/dev/null; then
+# Resolve detect-secrets: prefer the oversight venv, fall back to PATH. Same for
+# the JSON-parsing interpreter ($OVERSIGHT_PYTHON has stdlib json; bare python3
+# may not exist or may be PEP-668-empty). (HOS#102)
+DETECT_SECRETS=""
+if [[ -x "$VENV_BIN/detect-secrets" ]]; then
+    DETECT_SECRETS="$VENV_BIN/detect-secrets"
+elif command -v detect-secrets &>/dev/null; then
+    DETECT_SECRETS="$(command -v detect-secrets)"
+fi
+PARSE_PY="${OVERSIGHT_PYTHON:-python3}"
+
+if [[ -n "$DETECT_SECRETS" ]]; then
     echo "=== detect-secrets ==="
     if [[ ${#FILES[@]} -gt 0 ]]; then
         DS_TMP=$(mktemp /tmp/detect_secrets_XXXXXX)
         # Unit of work: detect-secrets under the configured timeout, capture to temp.
-        _run_detect_secrets() { with_timeout "$GATE_TIMEOUT" detect-secrets scan "${FILES[@]}" > "$DS_TMP" 2>/dev/null; }
+        _run_detect_secrets() { with_timeout "$GATE_TIMEOUT" "$DETECT_SECRETS" scan "${FILES[@]}" > "$DS_TMP" 2>/dev/null; }
         if ! run_with_retry "detect-secrets" "$GATE_RETRIES" "true" _run_detect_secrets; then
             echo "GATE FAIL: detect-secrets did not complete after retries"
             rm -f "$DS_TMP"
             exit 1
         fi
         BASELINE=$(cat "$DS_TMP"); rm -f "$DS_TMP"
-        SECRET_COUNT=$(echo "$BASELINE" | PYTHONSAFEPATH=1 python3 -c \
+        SECRET_COUNT=$(echo "$BASELINE" | PYTHONSAFEPATH=1 "$PARSE_PY" -c \
             "import json,sys; d=json.load(sys.stdin); \
              total=sum(len(v) for v in d.get('results',{}).values()); print(total)" 2>/dev/null || echo "0")
         if [[ "$SECRET_COUNT" -gt 0 ]]; then
             echo "GATE FAIL: $SECRET_COUNT potential secret(s) detected:"
-            echo "$BASELINE" | PYTHONSAFEPATH=1 python3 -c \
+            echo "$BASELINE" | PYTHONSAFEPATH=1 "$PARSE_PY" -c \
                 "import json,sys
 d=json.load(sys.stdin)
 for fpath, findings in d.get('results',{}).items():

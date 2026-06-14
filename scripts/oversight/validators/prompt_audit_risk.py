@@ -27,18 +27,20 @@ Usage:
 """
 
 from __future__ import annotations
+
 import json
+import pathlib as _hos_pl
 import re
 import subprocess
-import sys
-from pathlib import Path
 
 # self-bootstrap: ensure this file's dir (with schema.py) is importable
 # regardless of caller cwd/PYTHONPATH (run_validators, run_panel, direct).
+import sys
 import sys as _hos_sys
-import pathlib as _hos_pl
+from pathlib import Path
+
 _hos_sys.path.insert(0, str(_hos_pl.Path(__file__).resolve().parent))
-from schema import make_result, normalize, WEIGHTS  # noqa: E402
+from schema import WEIGHTS, make_result, normalize  # noqa: E402
 
 # ── Ambiguity signals ─────────────────────────────────────────────────────────
 
@@ -230,7 +232,7 @@ def analyse_files(
     prompts_dir: str = "prompts",
     step: str | None = None,
 ) -> dict:
-    from schema import make_result, make_finding, WEIGHTS
+    from schema import WEIGHTS, make_finding, make_result
 
     all_ambiguity_signals: list[str] = []
     all_fidelity_signals: list[str] = []

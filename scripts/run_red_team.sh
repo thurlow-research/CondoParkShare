@@ -219,7 +219,7 @@ Return JSON with BOTH exploitable findings AND explicit not-exploitable attestat
 }"
 
 if ! $DRY_RUN && command -v codex &>/dev/null; then
-    CODEX_OUT=$(echo "$CODEX_PROMPT" | codex --quiet 2>/dev/null || \
+    CODEX_OUT=$(codex exec "$CODEX_PROMPT" 2>/dev/null || \
         echo '{"reviewer":"codex","error":"invocation failed","exploitable_findings":[],"not_exploitable_attestations":[],"summary":"error"}')
 else
     CODEX_OUT='{"reviewer":"codex","skipped":true,"exploitable_findings":[],"not_exploitable_attestations":[],"summary":"dry-run or codex unavailable"}'
