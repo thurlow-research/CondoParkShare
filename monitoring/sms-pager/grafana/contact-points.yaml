@@ -1,0 +1,59 @@
+# Grafana file-provisioning — contact points
+# apiVersion: 1 (Grafana 9+)
+#
+# Deploy path: /etc/grafana/provisioning/alerting/sms-pager-contact-points.yaml
+# After placing, restart or reload Grafana.
+#
+# Two contact points are defined here:
+#   sms-pager      — webhook to the localhost relay (→ Twilio SMS)
+#   email-fallback — SMTP email to the on-call inbox
+#
+# The webhook URL and SMTP settings contain no Twilio secrets.
+# The relay's shared secret is injected via Grafana's env-substitution
+# syntax ($__env{VAR}) so it is read from Grafana's own environment and
+# never stored in this file or in exported JSON.
+#
+# To make $__env{WEBHOOK_SHARED_SECRET} available to Grafana, load it
+# via EnvironmentFile in the grafana-server systemd override (see the
+# runbook Step S4 and monitoring/sms-pager/grafana-server.env.example).
+# Do NOT use inline Environment= lines — those files are world-readable
+# (0644) and expose secrets to all local users via `systemctl cat`.
+#
+# Refs: CPS#98, ADR-002 §F.8, docs/runbooks/MONITRIX-SMS-PAGER-SETUP.md
+
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: sms-pager
+    receivers:
+      - uid: sms-pager-webhook
+        type: webhook
+        settings:
+          url: "http://127.0.0.1:9876/alert"
+          httpMethod: POST
+          # The relay requires this header to reject requests from anything
+          # other than local Grafana.  Value is env-substituted by Grafana
+          # at runtime — never hardcoded here.
+          authorization_scheme: ""
+          authorization_credentials: ""
+          # Custom header carrying the shared secret.
+          # Grafana webhook contact point supports extra headers via
+          # the `headers` map (Grafana 10.1+).  On older versions wire
+          # the secret through the `message` template instead and check
+          # it in the relay, or use basicAuth with a dummy username.
+          headers:
+            X-Relay-Secret: "$__env{WEBHOOK_SHARED_SECRET}"
+        disableResolveMessage: false
+
+  - orgId: 1
+    name: email-fallback
+    receivers:
+      - uid: email-fallback-smtp
+        type: email
+        settings:
+          # On-call inbox.  Must not share the app's SMTP infrastructure —
+          # use a transactional provider independent of the CPS Postgres stack.
+          addresses: "$__env{SMTP_TO}"
+          singleEmail: false
+        disableResolveMessage: false

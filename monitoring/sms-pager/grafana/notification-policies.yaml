@@ -1,0 +1,53 @@
+# Grafana file-provisioning — notification policies
+# apiVersion: 1 (Grafana 9+)
+#
+# Deploy path: /etc/grafana/provisioning/alerting/sms-pager-notification-policies.yaml
+# After placing, restart or reload Grafana.
+#
+# Policy structure (per design — MONITRIX-SMS-PAGER.md §2):
+#
+#   Root policy    → email-fallback  (catch-all: nothing ever goes unrouted)
+#   └─ Nested      → sms-pager, continue=true  (matched by pager=sms)
+#                    Because continue=true, the alert ALSO falls through to the
+#                    root (email-fallback).  Result: every paged alert reaches
+#                    both SMS and email in parallel.
+#
+# Grouping / dedup / anti-storm:
+#   group_by:         [alertname]     — A6 and A2 group separately
+#   group_wait:       30s             — brief coalesce before first SMS
+#   group_interval:   5m              — follow-up cadence for new-joiners
+#   repeat_interval:  1h              — re-pages a still-firing group ≤ hourly
+#
+# The repeat_interval=1h is the primary SMS-storm guard.  A multi-hour outage
+# costs at most ~1 SMS/hour per alert (≤ ~2 SMS/hour for A6+A2 both firing).
+#
+# Alert rule definitions (A6 liveness, A2 backlog) are a separate build item
+# (CPS#87 §5.1) and are NOT in this file.  Only contact points + routing here.
+#
+# Refs: CPS#98, ADR-002 §F.8, docs/runbooks/MONITRIX-SMS-PAGER-SETUP.md
+
+apiVersion: 1
+
+policies:
+  - orgId: 1
+    receiver: email-fallback
+    group_by:
+      - alertname
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 1h
+    routes:
+      # Nested policy: route pager=sms to the SMS relay.
+      # continue=true means Grafana does NOT stop here — the alert also
+      # falls through to the root email-fallback contact point.
+      - receiver: sms-pager
+        matchers:
+          - name: pager
+            value: sms
+            matchType: "="
+        continue: true
+        group_by:
+          - alertname
+        group_wait: 30s
+        group_interval: 5m
+        repeat_interval: 1h
