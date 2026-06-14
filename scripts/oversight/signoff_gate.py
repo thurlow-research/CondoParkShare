@@ -43,8 +43,20 @@ from pathlib import Path
 try:
     import yaml
 except ImportError:  # pragma: no cover - surfaced as an env error
+    # Auto-detect the oversight venv before giving up.  On macOS Homebrew Python
+    # 3.14+ and Ubuntu 24.04+ (PEP 668), the system Python has no user packages,
+    # so bare `python3 signoff_gate.py` fails.  The oversight venv always has
+    # PyYAML; os.execv replaces this process with the venv Python running the
+    # same script — argv, cwd, and exit code all propagate naturally.
+    import os
+
+    _venv_py = Path(__file__).parent / ".venv" / "bin" / "python3"
+    if _venv_py.exists():
+        os.execv(str(_venv_py), [str(_venv_py)] + sys.argv)
     sys.stderr.write(
-        "signoff_gate: PyYAML is required (pip install pyyaml).\n"
+        "signoff_gate: PyYAML is required.\n"
+        "  Install:     pip install pyyaml\n"
+        f"  Or run via:  {_venv_py} {__file__}\n"
     )
     sys.exit(2)
 
