@@ -354,3 +354,47 @@ def test_leaderboard_annotates_elapsed_hours():
     assert owner_entry.elapsed_hours == timedelta(
         hours=24
     ), f"elapsed_hours should be timedelta(24h); got {owner_entry.elapsed_hours}"
+
+
+@pytest.mark.django_db
+def test_leaderboard_org_guard_excludes_cross_org_windows():
+    """Org guard: hours from a spot belonging to a different org must not count.
+
+    Bypasses the spot-owner-same-org invariant via QuerySet.update() to exercise
+    the defense-in-depth Q(owned_spots__organization=organization) clause.
+    Removing that clause lets the 24h window count for user_a; test asserts 0/None.
+    """
+    from freezegun import freeze_time
+
+    from parking.leaderboard import get_leaderboard
+    from parking.models import AvailabilityWindow, ParkingSpot
+
+    frozen_now = _utc(2027, 6, 1, 12)
+    with freeze_time(frozen_now):
+        org_a = OrganizationFactory()
+        org_b = OrganizationFactory()
+        user_a = UserFactory(organization=org_a)
+
+        # Create spot in org_a (satisfies FK), then reassign org to org_b via update()
+        spot = ParkingSpotFactory(organization=org_a, owner=user_a, status="active")
+        ParkingSpot.objects.filter(pk=spot.pk).update(organization=org_b)
+
+        # Fully-elapsed 24h window in the metric window, on the now-org_b spot
+        window_end = frozen_now - timedelta(hours=1)
+        window_start_w = window_end - timedelta(hours=24)
+        AvailabilityWindow.objects.create(
+            organization=org_b,
+            spot=spot,
+            time_range=DateTimeTZRange(window_start_w, window_end),
+        )
+
+        result = list(get_leaderboard(org_a, limit=20))
+
+    user_entry = next((u for u in result if u.pk == user_a.pk), None)
+    assert user_entry is not None
+    assert user_entry.elapsed_hours is None or user_entry.elapsed_hours == timedelta(
+        0
+    ), (
+        "Hours from a spot belonging to org_b must not count toward org_a leaderboard; "
+        f"got {user_entry.elapsed_hours}"
+    )
