@@ -128,6 +128,26 @@ docker compose -f docker-compose.yml exec -T web python manage.py migrate --no-i
 echo "==> Collecting static files..."
 docker compose -f docker-compose.yml exec -T web python manage.py collectstatic --no-input --clear
 
+# ── Firewall: open monitrix scrape + Loki paths ───────────────────────────────
+# setup_firewall.sh is idempotent and safe to re-run on every deploy.
+# It requires root; deploy.sh itself does not require root — sudo is invoked
+# only for this step.  Operators who run deploy.sh as root can omit sudo by
+# setting FIREWALL_SUDO="" in the environment.
+echo ""
+echo "==> Applying host firewall rules (monitrix integration)..."
+# FIREWALL_SUDO defaults to "sudo". Set to "" when deploy.sh already runs as root.
+FIREWALL_SUDO="${FIREWALL_SUDO:-sudo}"
+_fw_cmd=("$SCRIPT_DIR/setup_firewall.sh")
+[[ -n "$FIREWALL_SUDO" ]] && _fw_cmd=("$FIREWALL_SUDO" "${_fw_cmd[@]}")
+if "${_fw_cmd[@]}"; then
+    echo "==> Firewall rules applied."
+else
+    echo ""
+    echo "WARNING: setup_firewall.sh exited non-zero — firewall rules may be incomplete." >&2
+    echo "         Run 'sudo scripts/setup_firewall.sh' manually and verify 'ufw status'." >&2
+    echo "         Continuing deploy (stack is up); fix firewall before exposing metrics." >&2
+fi
+
 echo ""
 echo "Deploy to $ENV_LABEL ($TARGET_HOST) complete — commit $(git rev-parse --short HEAD)."
 echo "  Stack status: docker compose -f $REPO_ROOT/docker-compose.yml ps"
