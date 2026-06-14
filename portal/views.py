@@ -7,6 +7,7 @@ All views require @login_required + @hoa_admin_required.
 PII-displaying views log a 'pii_access' AdminAuditLog entry on every access.
 """
 
+import logging
 import secrets
 
 from django.contrib.auth import get_user_model
@@ -22,6 +23,7 @@ from parking.models import Booking, ParkingSpot
 from portal.forms import InviteCreateForm
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -363,11 +365,16 @@ def portal_booking_cancel(request, pk):
         )
 
         # Notify both parties (fail-safe: catch all errors so the cancel
-        # still commits even if email delivery fails)
+        # still commits even if email delivery fails) — but log the failure
+        # rather than swallowing it silently, so dropped notifications are visible.
         try:
             notify("booking_cancelled_by_admin", booking)
         except Exception:
-            pass
+            logger.warning(
+                "booking_cancelled_by_admin notification failed for booking %s",
+                booking.pk,
+                exc_info=True,
+            )
 
     return redirect("portal_bookings")
 

@@ -14,7 +14,10 @@ RatelimitMiddleware: converts Ratelimited exceptions (PermissionDenied
 subclass) raised by django-ratelimit block=True into proper HTTP 429 responses.
 """
 
+import logging
 import threading
+
+logger = logging.getLogger(__name__)
 
 _thread_locals = threading.local()
 
@@ -136,6 +139,15 @@ class ImpersonationMiddleware:
                             notes=f"POST {request.path}",
                         )
                     except Exception:
-                        pass
+                        # Never block the impersonated request on an audit-log
+                        # failure, but a silently-lost impersonation audit record
+                        # is a security-observability gap — surface it in logs.
+                        logger.exception(
+                            "Failed to write impersonate_action AdminAuditLog "
+                            "(operator=%s on_behalf_of=%s path=%s)",
+                            getattr(real_operator, "pk", None),
+                            getattr(impersonated, "pk", None),
+                            request.path,
+                        )
 
         return self.get_response(request)
