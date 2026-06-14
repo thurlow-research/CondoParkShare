@@ -32,6 +32,7 @@ from datetime import timezone as dt_timezone
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
+from django.db import transaction
 from django.utils.timezone import make_aware
 
 _ALLOWED_ACTIONS = {"impersonate_action"}
@@ -193,18 +194,21 @@ class Command(BaseCommand):
                 except Organization.DoesNotExist:
                     pass
 
-            obj = AdminAuditLog.objects.create(
-                organization=organization,
-                actor=actor,
-                on_behalf_of=on_behalf_of,
-                action=action,
-                target_type=target_type,
-                target_id=target_id,
-                notes=backfill_notes,
-            )
-            # created_at is auto_now_add so create() cannot set it; use update()
-            # to backdate the row to the original incident time.
-            AdminAuditLog.objects.filter(pk=obj.pk).update(created_at=attempted_at)
+            with transaction.atomic():
+                obj = AdminAuditLog.objects.create(
+                    organization=organization,
+                    actor=actor,
+                    on_behalf_of=on_behalf_of,
+                    action=action,
+                    target_type=target_type,
+                    target_id=target_id,
+                    notes=backfill_notes,
+                )
+                # created_at is auto_now_add so create() cannot set it; use update()
+                # to backdate the row to the original incident time.  The atomic
+                # block ensures a crash between create() and update() cannot leave
+                # a row with the wrong (auto_now_add) timestamp.
+                AdminAuditLog.objects.filter(pk=obj.pk).update(created_at=attempted_at)
             created_count += 1
 
         self.stdout.write(

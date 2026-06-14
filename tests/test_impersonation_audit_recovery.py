@@ -231,6 +231,56 @@ def test_live_audit_create_includes_target_fields():
 
 
 # ---------------------------------------------------------------------------
+# Test 1d: double-fault fail-open — recovery emit itself raises
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_impersonation_audit_double_fault_still_fail_open():
+    """
+    If both the primary AdminAuditLog.objects.create AND the recovery-record
+    emit raise, the request must still succeed (fail-open).  Neither the
+    audit-log failure nor the recovery-emit failure may propagate out of
+    ImpersonationMiddleware.__call__ and cause a 500.
+    """
+    from parkshare.middleware import ImpersonationMiddleware
+
+    org = _make_org("DoubleFaultOrg", "doublefaultorg.example.com")
+    operator = _make_user(org, "df_op@doublefaultorg.example.com", is_superuser=True)
+    target = _make_user(org, "df_tgt@doublefaultorg.example.com", is_superuser=False)
+
+    response_called = []
+
+    def fake_view(request):
+        response_called.append(True)
+        from django.http import HttpResponse
+
+        return HttpResponse("ok")
+
+    rf = RequestFactory()
+    request = rf.post("/double-fault/")
+    request.user = operator
+    request.organization = org
+    request.session = {"impersonating": target.pk}
+
+    middleware = ImpersonationMiddleware(fake_view)
+
+    with patch("accounts.models.AdminAuditLog.objects.create") as mock_create:
+        mock_create.side_effect = Exception("primary DB failure")
+        # Force the recovery emit (json.dumps) to also raise, simulating a
+        # second fault inside the except handler.
+        with patch("json.dumps", side_effect=Exception("json serialisation error")):
+            response = middleware(request)
+
+    # The view must still have been called and must return 200.
+    assert len(response_called) == 1, (
+        "get_response must be called even when both the audit-log write "
+        "and the recovery emit raise"
+    )
+    assert response.status_code == 200
+
+
+# ---------------------------------------------------------------------------
 # Test 2: backfill reconstructs the row (created_at == attempted_at)
 # ---------------------------------------------------------------------------
 

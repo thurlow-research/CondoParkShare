@@ -291,7 +291,10 @@ LOGGING = {
     },
     "handlers": {
         "audit_recovery_file": {
-            "class": "logging.FileHandler",
+            # WatchedFileHandler re-opens the file when it detects that
+            # logrotate has renamed/replaced it, so recovery records are
+            # never silently lost to an orphaned file descriptor.
+            "class": "logging.handlers.WatchedFileHandler",
             "filename": AUDIT_RECOVERY_LOG,
             "formatter": "plain",
             "delay": True,

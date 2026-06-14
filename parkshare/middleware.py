@@ -147,21 +147,36 @@ class ImpersonationMiddleware:
                         # Fail-open: never block the impersonated request because
                         # the audit-log write failed. Emit a structured recovery
                         # record with every field needed to reconstruct the row.
-                        from django.utils.timezone import now as django_now
+                        # The emit itself is wrapped in a second except so that
+                        # any failure inside (json.dumps error, FileHandler unable
+                        # to open path, disk full) cannot propagate out of __call__
+                        # and break the fail-open guarantee.
+                        try:
+                            from django.utils.timezone import now as django_now
 
-                        org = getattr(request, "organization", None)
-                        recovery_record = {
-                            "organization_id": getattr(org, "pk", None),
-                            "actor_id": getattr(real_operator, "pk", None),
-                            "on_behalf_of_id": getattr(impersonated, "pk", None),
-                            "action": "impersonate_action",
-                            "target_type": "user",
-                            "target_id": getattr(impersonated, "pk", None),
-                            "notes": f"POST {request.path}",
-                            "attempted_at": django_now()
-                            .astimezone(dt_timezone.utc)
-                            .isoformat(),
-                        }
-                        audit_recovery_logger.error(json.dumps(recovery_record))
+                            org = getattr(request, "organization", None)
+                            recovery_record = {
+                                "organization_id": getattr(org, "pk", None),
+                                "actor_id": getattr(real_operator, "pk", None),
+                                "on_behalf_of_id": getattr(impersonated, "pk", None),
+                                "action": "impersonate_action",
+                                "target_type": "user",
+                                "target_id": getattr(impersonated, "pk", None),
+                                "notes": f"POST {request.path}",
+                                "attempted_at": django_now()
+                                .astimezone(dt_timezone.utc)
+                                .isoformat(),
+                            }
+                            audit_recovery_logger.error(json.dumps(recovery_record))
+                        except Exception:
+                            # Last resort: recovery emit itself failed. Swallow so
+                            # the request always proceeds to get_response.
+                            logger.warning(
+                                "audit recovery emit failed "
+                                "(operator=%s on_behalf_of=%s path=%s)",
+                                getattr(real_operator, "pk", None),
+                                getattr(impersonated, "pk", None),
+                                request.path,
+                            )
 
         return self.get_response(request)

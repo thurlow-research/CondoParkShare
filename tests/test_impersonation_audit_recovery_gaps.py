@@ -625,3 +625,62 @@ def test_backfill_creates_row_when_organization_not_found():
     assert entry.organization is None, (
         f"Expected organization=None when org not found; got {entry.organization}"
     )
+
+
+# ===========================================================================
+# backfill_audit_log — atomic create+update preserves idempotency
+# ===========================================================================
+
+
+@pytest.mark.django_db
+def test_atomic_backfill_insert_is_idempotent():
+    """
+    The create()+update() pair is now wrapped in transaction.atomic().
+    Confirm that idempotency still holds: running the command twice on the
+    same JSONL produces created=1 skipped=0 on the first run and
+    created=0 skipped=1 on the second, with exactly one row in the DB.
+    """
+    from accounts.models import AdminAuditLog
+    from django.core.management import call_command
+
+    org = _make_org("AtomicIdempotentOrg", "atomicidempotent.example.com")
+    operator = _make_user(org, "ai_op@atomicidempotent.example.com", is_superuser=True)
+    target = _make_user(org, "ai_tgt@atomicidempotent.example.com", is_superuser=False)
+
+    record = {
+        "organization_id": org.pk,
+        "actor_id": operator.pk,
+        "on_behalf_of_id": target.pk,
+        "action": "impersonate_action",
+        "target_type": "user",
+        "target_id": target.pk,
+        "notes": "POST /atomic-test/",
+        "attempted_at": "2026-06-14T14:00:00+00:00",
+    }
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
+        f.write(json.dumps(record) + "\n")
+        tmp_path = f.name
+
+    stdout1 = StringIO()
+    call_command("backfill_audit_log", file=tmp_path, stdout=stdout1)
+    assert "created=1" in stdout1.getvalue()
+    assert "skipped=0" in stdout1.getvalue()
+
+    count_after_first = AdminAuditLog.objects.filter(
+        actor=operator, action="impersonate_action"
+    ).count()
+    assert count_after_first == 1
+
+    stdout2 = StringIO()
+    call_command("backfill_audit_log", file=tmp_path, stdout=stdout2)
+    output2 = stdout2.getvalue()
+    assert "created=0" in output2, f"Expected created=0 on second run; got: {output2}"
+    assert "skipped=1" in output2, f"Expected skipped=1 on second run; got: {output2}"
+
+    count_after_second = AdminAuditLog.objects.filter(
+        actor=operator, action="impersonate_action"
+    ).count()
+    assert count_after_second == count_after_first, (
+        "Atomic wrap must not break idempotency: second run must not add rows"
+    )
