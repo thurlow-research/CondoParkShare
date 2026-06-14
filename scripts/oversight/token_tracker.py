@@ -34,20 +34,17 @@ Subscription awareness:
 from __future__ import annotations
 import argparse
 import json
-import os
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
-
 
 CHARS_PER_TOKEN = 4.0
 USAGE_LOG = Path(".claudetmp/oversight/token-usage.jsonl")
 
 # Rough monthly quota estimates (conservative — actual quotas vary)
 MONTHLY_QUOTA_ESTIMATES = {
-    "agy-20":    {"tokens": 2_000_000, "label": "Gemini $20/mo"},
-    "agy-100":   {"tokens": 10_000_000, "label": "Gemini $100/mo"},
-    "codex-20":  {"tokens": 500_000, "label": "ChatGPT Pro $20/mo (~25 large calls)"},
+    "agy-20": {"tokens": 2_000_000, "label": "Gemini $20/mo"},
+    "agy-100": {"tokens": 10_000_000, "label": "Gemini $100/mo"},
+    "codex-20": {"tokens": 500_000, "label": "ChatGPT Pro $20/mo (~25 large calls)"},
 }
 
 
@@ -78,8 +75,10 @@ def record(args: argparse.Namespace) -> None:
         f.write(json.dumps(entry) + "\n")
 
     flag = " [estimated]" if estimated else " [actual]"
-    print(f"  Token usage recorded: {args.vendor} {args.stage} "
-          f"step={args.step} total={total_tokens:,}{flag}")
+    print(
+        f"  Token usage recorded: {args.vendor} {args.stage} "
+        f"step={args.step} total={total_tokens:,}{flag}"
+    )
 
 
 def report(args: argparse.Namespace) -> None:
@@ -141,9 +140,11 @@ def report(args: argparse.Namespace) -> None:
     print("By vendor:")
     for vendor, data in sorted(by_vendor.items()):
         est_note = f"  ({data['estimated']}/{data['calls']} estimated)" if data["estimated"] else ""
-        print(f"  {vendor:<12}  {data['total']:>8,} tokens  "
-              f"({data['calls']} calls, {data['prompt']:,} in / {data['output']:,} out)"
-              f"{est_note}")
+        print(
+            f"  {vendor:<12}  {data['total']:>8,} tokens  "
+            f"({data['calls']} calls, {data['prompt']:,} in / {data['output']:,} out)"
+            f"{est_note}"
+        )
 
     print("")
     print("By pipeline stage:")
@@ -170,8 +171,10 @@ def report(args: argparse.Namespace) -> None:
         if agy_total > 0:
             pct_20 = round(agy_total / MONTHLY_QUOTA_ESTIMATES["agy-20"]["tokens"] * 100, 1)
             pct_100 = round(agy_total / MONTHLY_QUOTA_ESTIMATES["agy-100"]["tokens"] * 100, 1)
-            print(f"  agy (Gemini):   ~{agy_total:,} tokens  "
-                  f"= ~{pct_20}% of $20/mo | ~{pct_100}% of $100/mo")
+            print(
+                f"  agy (Gemini):   ~{agy_total:,} tokens  "
+                f"= ~{pct_20}% of $20/mo | ~{pct_100}% of $100/mo"
+            )
             if pct_20 > 50:
                 print("    ⚠ Consider $100/mo upgrade if nearing quota")
         if codex_total > 0:

@@ -22,28 +22,58 @@ Usage:
 """
 
 from __future__ import annotations
-import ast
 import json
 import re
 import subprocess
 import sys
 import urllib.request
 from pathlib import Path
-from typing import Any
 
-from schema import make_result, make_finding, normalize, WEIGHTS
+# self-bootstrap: ensure this file's dir (with schema.py) is importable
+# regardless of caller cwd/PYTHONPATH (run_validators, run_panel, direct).
+import sys as _hos_sys
+import pathlib as _hos_pl
+_hos_sys.path.insert(0, str(_hos_pl.Path(__file__).resolve().parent))
+from schema import make_result, make_finding, WEIGHTS  # noqa: E402
 
 # ── License classification ────────────────────────────────────────────────────
 
-COPYLEFT = {"GPL", "GPL-2.0", "GPL-3.0", "AGPL", "AGPL-3.0", "LGPL", "LGPL-2.1",
-            "LGPL-3.0", "EUPL", "OSL", "MPL", "CDDL", "EPL", "SSPL"}
-PERMISSIVE = {"MIT", "Apache", "Apache-2.0", "BSD", "ISC", "Artistic", "WTFPL",
-              "Unlicense", "CC0", "PSF", "Python-2.0", "Zlib"}
+COPYLEFT = {
+    "GPL",
+    "GPL-2.0",
+    "GPL-3.0",
+    "AGPL",
+    "AGPL-3.0",
+    "LGPL",
+    "LGPL-2.1",
+    "LGPL-3.0",
+    "EUPL",
+    "OSL",
+    "MPL",
+    "CDDL",
+    "EPL",
+    "SSPL",
+}
+PERMISSIVE = {
+    "MIT",
+    "Apache",
+    "Apache-2.0",
+    "BSD",
+    "ISC",
+    "Artistic",
+    "WTFPL",
+    "Unlicense",
+    "CC0",
+    "PSF",
+    "Python-2.0",
+    "Zlib",
+}
 UNKNOWN_MARKERS = {"", "UNKNOWN", "Proprietary", "Commercial", "See", "Other", None}
 
 _COPYLEFT_SCORE = 0.90
-_UNKNOWN_SCORE  = 0.55
+_UNKNOWN_SCORE = 0.55
 _PERMISSIVE_SCORE = 0.10  # still log — needs attribution notices
+
 
 def classify_license(lic: str | None) -> tuple[str, float]:
     if not lic or lic.strip() in UNKNOWN_MARKERS:
@@ -68,7 +98,9 @@ def _scancode_license(file_path: str) -> str | None:
     try:
         result = subprocess.run(
             ["scancode", "--license", "--json-pp", "-", file_path],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
         data = json.loads(result.stdout)
         files = data.get("files", [])
@@ -104,11 +136,10 @@ def _npm_license(package: str) -> str | None:
 
 def _check_scancode_available() -> bool:
     try:
-        return subprocess.run(
-            ["scancode", "--version"], capture_output=True
-        ).returncode == 0
+        return subprocess.run(["scancode", "--version"], capture_output=True).returncode == 0
     except FileNotFoundError:
         return False
+
 
 _SCANCODE_AVAILABLE = _check_scancode_available()
 
@@ -128,23 +159,24 @@ def check_dependency_licenses(file_paths: list[str]) -> list[dict]:
         added_packages: list[tuple[str, str]] = []  # (name, version_spec)
 
         # Python — requirements.txt / requirements-*.txt / pyproject.toml
-        if re.search(r'requirements.*\.txt$', p.name, re.I):
+        if re.search(r"requirements.*\.txt$", p.name, re.I):
             for line in p.read_text(encoding="utf-8").splitlines():
                 line = line.strip()
                 if not line or line.startswith("#"):
                     continue
                 # Parse: package[extras]>=version ; marker
-                m = re.match(r'^([A-Za-z0-9_.-]+)', line)
+                m = re.match(r"^([A-Za-z0-9_.-]+)", line)
                 if m:
                     added_packages.append((m.group(1), line))
 
         elif p.name in ("pyproject.toml",):
             try:
                 import tomllib  # Python 3.11+
+
                 data = tomllib.loads(p.read_text())
                 deps = data.get("project", {}).get("dependencies", [])
                 for d in deps:
-                    m = re.match(r'^([A-Za-z0-9_.-]+)', d)
+                    m = re.match(r"^([A-Za-z0-9_.-]+)", d)
                     if m:
                         added_packages.append((m.group(1), d))
             except ImportError:
@@ -171,39 +203,52 @@ def check_dependency_licenses(file_paths: list[str]) -> list[dict]:
             is_node = p.name == "package.json"
 
             # Prefer ScanCode (full text comparison) over API lookup
-            lic = (_scancode_license(fp) if _SCANCODE_AVAILABLE else None) or \
-                  (_pypi_license(pkg_name) if is_python else
-                   _npm_license(pkg_name) if is_node else None)
+            lic = (_scancode_license(fp) if _SCANCODE_AVAILABLE else None) or (
+                _pypi_license(pkg_name)
+                if is_python
+                else _npm_license(pkg_name) if is_node else None
+            )
 
             category, score = classify_license(lic)
 
             if category in ("copyleft", "unknown"):
                 sev = "high" if category == "copyleft" else "medium"
-                findings.append({
-                    "file": fp,
-                    "package": pkg_name,
-                    "spec": spec,
-                    "license": lic or "UNKNOWN",
-                    "category": category,
-                    "score": score,
-                    "severity": sev,
-                    "message": (
-                        f"{pkg_name} ({lic or 'UNKNOWN license'}) — "
-                        f"{'copyleft license may require source disclosure' if category == 'copyleft' else 'license unknown — legal review required'}"
-                    ),
-                })
+                findings.append(
+                    {
+                        "file": fp,
+                        "package": pkg_name,
+                        "spec": spec,
+                        "license": lic or "UNKNOWN",
+                        "category": category,
+                        "score": score,
+                        "severity": sev,
+                        "message": (
+                            f"{pkg_name} ({lic or 'UNKNOWN license'}) — "
+                            + (
+                                "copyleft license may require source disclosure"
+                                if category == "copyleft"
+                                else "license unknown — legal review required"
+                            )
+                        ),
+                    }
+                )
             elif category == "permissive":
                 # Log permissive licenses — attribution notices required
-                findings.append({
-                    "file": fp,
-                    "package": pkg_name,
-                    "spec": spec,
-                    "license": lic,
-                    "category": "permissive",
-                    "score": score,
-                    "severity": "low",
-                    "message": f"{pkg_name} ({lic}) — permissive; verify attribution notice is preserved",
-                })
+                findings.append(
+                    {
+                        "file": fp,
+                        "package": pkg_name,
+                        "spec": spec,
+                        "license": lic,
+                        "category": "permissive",
+                        "score": score,
+                        "severity": "low",
+                        "message": (
+                            f"{pkg_name} ({lic}) — permissive; "
+                            "verify attribution notice is preserved"
+                        ),
+                    }
+                )
 
     return findings
 
@@ -212,18 +257,28 @@ def check_dependency_licenses(file_paths: list[str]) -> list[dict]:
 
 # Phrases that indicate the prompt referenced external code, requiring attribution review
 _ATTRIBUTION_TRIGGERS = [
-    r'\bcopy(?:ing)? from\b', r'\bbased on\b', r'\bport(?:ed)? from\b',
-    r'\bfork(?:ed)? from\b', r'\btaken from\b', r'\blifted from\b',
-    r'\bborrowed from\b', r'\buse the.*implementation\b',
-    r'\bsame as\b.*\b(library|code|pattern|function)\b',
-    r'\bfollowing.*example\b', r'\bverbatim\b', r'\bexact(ly)?\b.*copy',
+    r"\bcopy(?:ing)? from\b",
+    r"\bbased on\b",
+    r"\bport(?:ed)? from\b",
+    r"\bfork(?:ed)? from\b",
+    r"\btaken from\b",
+    r"\blifted from\b",
+    r"\bborrowed from\b",
+    r"\buse the.*implementation\b",
+    r"\bsame as\b.*\b(library|code|pattern|function)\b",
+    r"\bfollowing.*example\b",
+    r"\bverbatim\b",
+    r"\bexact(ly)?\b.*copy",
 ]
 
 # Phrases that suggest spec-only sourcing (clean-room positive signals)
 _CLEANROOM_SIGNALS = [
-    r'\baccording to\s+(spec|rfc|standard|requirement|design)\b',
-    r'\bper spec\b', r'\bfrom scratch\b', r'\bspec[–-]compliant\b',
-    r'\bspec section\b', r'\bimplements?\s+\w+\s+as defined\b',
+    r"\baccording to\s+(spec|rfc|standard|requirement|design)\b",
+    r"\bper spec\b",
+    r"\bfrom scratch\b",
+    r"\bspec[–-]compliant\b",
+    r"\bspec section\b",
+    r"\bimplements?\s+\w+\s+as defined\b",
 ]
 
 
@@ -253,7 +308,9 @@ def check_prompt_cleanroom(prompts_dir: str, changed_files: list[str]) -> list[d
         try:
             trailer_out = subprocess.run(
                 ["git", "log", "-10", "--format=%B", "--", src_file],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             ).stdout
             for line in trailer_out.splitlines():
                 if line.startswith("Prompt-Artifact:"):
@@ -277,41 +334,43 @@ def check_prompt_cleanroom(prompts_dir: str, changed_files: list[str]) -> list[d
         for pattern in _ATTRIBUTION_TRIGGERS:
             m = re.search(pattern, prompt_text, re.I)
             if m:
-                findings.append({
-                    "file": src_file,
-                    "prompt_artifact": prompt_path,
-                    "trigger": m.group(0),
-                    "severity": "medium",
-                    "category": "attribution-trigger",
-                    "message": (
-                        f"Prompt references external code ('{m.group(0)}'). "
-                        f"Verify attribution obligations are met and license is compatible."
-                    ),
-                })
+                findings.append(
+                    {
+                        "file": src_file,
+                        "prompt_artifact": prompt_path,
+                        "trigger": m.group(0),
+                        "severity": "medium",
+                        "category": "attribution-trigger",
+                        "message": (
+                            f"Prompt references external code ('{m.group(0)}'). "
+                            f"Verify attribution obligations are met and license is compatible."
+                        ),
+                    }
+                )
                 break  # one finding per file
 
         # Clean-room signal count (positive evidence — included in output for auditors)
-        cleanroom_count = sum(
-            1 for pat in _CLEANROOM_SIGNALS
-            if re.search(pat, prompt_text, re.I)
-        )
+        cleanroom_count = sum(1 for pat in _CLEANROOM_SIGNALS if re.search(pat, prompt_text, re.I))
         if cleanroom_count >= 2 and not any(f["file"] == src_file for f in findings):
-            findings.append({
-                "file": src_file,
-                "prompt_artifact": prompt_path,
-                "cleanroom_signals": cleanroom_count,
-                "severity": "info",
-                "category": "cleanroom-positive",
-                "message": (
-                    f"Prompt shows {cleanroom_count} clean-room signal(s) "
-                    f"(spec-only sourcing). Good provenance."
-                ),
-            })
+            findings.append(
+                {
+                    "file": src_file,
+                    "prompt_artifact": prompt_path,
+                    "cleanroom_signals": cleanroom_count,
+                    "severity": "info",
+                    "category": "cleanroom-positive",
+                    "message": (
+                        f"Prompt shows {cleanroom_count} clean-room signal(s) "
+                        f"(spec-only sourcing). Good provenance."
+                    ),
+                }
+            )
 
     return findings
 
 
 # ── Regurgitation lens stub ───────────────────────────────────────────────────
+
 
 def check_regurgitation_stub(file_paths: list[str]) -> dict:
     """
@@ -344,19 +403,28 @@ def check_regurgitation_stub(file_paths: list[str]) -> dict:
     return {
         "stub": True,
         "integration_active": False,
-        "planned_tool": "ai-gen-code-search (AboutCode) REST API — LSH snippet matching against FOSS index",
+        "planned_tool": (
+            "ai-gen-code-search (AboutCode) REST API — LSH snippet matching against FOSS index"
+        ),
         "status": "awaiting API access from AboutCode (hello@aboutcode.org)",
         "files_checked": len(file_paths),
         "ip_regurgitation_enabled_env": enabled,
         "message": (
             "Regurgitation lens (Level 3) is NOT YET ACTIVE — requires AboutCode API access. "
             "A clean result here is NOT evidence against code regurgitation. "
-            f"ScanCode is {'available (Level 1 active)' if _SCANCODE_AVAILABLE else 'not installed — Level 1 using API fallback'}."
+            "ScanCode is "
+            + (
+                "available (Level 1 active)"
+                if _SCANCODE_AVAILABLE
+                else "not installed — Level 1 using API fallback"
+            )
+            + "."
         ),
     }
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
+
 
 def analyse_files(
     file_paths: list[str],
@@ -371,7 +439,9 @@ def analyse_files(
 
     # Score: worst-case license issue dominates
     dep_score = max((f["score"] for f in dep_findings), default=0.0)
-    attr_score = 0.6 if any(f["category"] == "attribution-trigger" for f in prompt_findings) else 0.0
+    attr_score = (
+        0.6 if any(f["category"] == "attribution-trigger" for f in prompt_findings) else 0.0
+    )
     score = max(dep_score, attr_score)
 
     high_count = sum(1 for f in all_findings if f["severity"] == "high")
@@ -379,7 +449,8 @@ def analyse_files(
 
     evidence = [
         make_finding(
-            f.get("file", "?"), 0,
+            f.get("file", "?"),
+            0,
             f["message"],
             f["severity"] if f["severity"] in ("high", "medium", "low") else "low",
         )
@@ -391,7 +462,8 @@ def analyse_files(
         if f["category"] == "copyleft":
             checklist.append(
                 f"⚖️ {f['package']} ({f['license']}): copyleft — "
-                "confirm source-disclosure obligations are met, or replace with compatible alternative"
+                "confirm source-disclosure obligations are met, "
+                "or replace with compatible alternative"
             )
         elif f["category"] == "unknown":
             checklist.append(
@@ -437,16 +509,22 @@ def main() -> None:
     if "--prompts-dir" in args:
         idx = args.index("--prompts-dir")
         prompts_dir = args[idx + 1]
-        args = args[:idx] + args[idx + 2:]
+        args = args[:idx] + args[idx + 2 :]
 
     files = [f for f in args if Path(f).exists()]
     if not files:
-        print(json.dumps(make_result(
-            "ip_check", 0.0,
-            {"error": "no input files"},
-            weight=WEIGHTS.get("ip_check", 0.10),
-            error="no input files",
-        ), indent=2))
+        print(
+            json.dumps(
+                make_result(
+                    "ip_check",
+                    0.0,
+                    {"error": "no input files"},
+                    weight=WEIGHTS.get("ip_check", 0.10),
+                    error="no input files",
+                ),
+                indent=2,
+            )
+        )
         return
 
     print(json.dumps(analyse_files(files, prompts_dir=prompts_dir), indent=2))

@@ -1,3 +1,11 @@
+<!--
+AI AGENTS: If this PR was created by an AI agent (not a human), you MUST:
+1. Set the title to: [AI: agent-name] Brief description
+2. Replace the section below with the full ## 🤖 AI-Submitted Pull Request block
+   (see docs/AGENTS.md for the required format)
+Omitting the disclosure is a protocol violation caught by oversight-evaluator.
+-->
+
 ## Summary
 
 <!-- What does this PR do? One paragraph. -->
@@ -6,6 +14,23 @@
 
 - [ ] No AI-generated code in this PR
 - [ ] AI-generated code present — risk level: **LOW / MEDIUM / HIGH / CRITICAL** *(delete as applicable)*
+
+<!-- AI-SUBMITTED PR? Replace the checkbox above with the full disclosure block:
+
+## 🤖 AI-Submitted Pull Request
+
+This PR was **created and submitted by an AI agent**. A human did not manually write or submit this PR.
+
+| | |
+|---|---|
+| **Agent** | `[agent-name]` |
+| **Model** | `[model-id]` |
+| **Submitted** | [YYYY-MM-DD] |
+| **Step / context** | [build step N or session description] |
+
+Human approval is required before merge.
+
+-->
 
 ## Prompt Artifacts
 

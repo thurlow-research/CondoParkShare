@@ -24,16 +24,19 @@ import ast
 import json
 import sys
 from pathlib import Path
-from typing import Any
-
-from schema import make_result, make_finding, normalize, WEIGHTS
+# self-bootstrap: ensure this file's dir (with schema.py) is importable
+# regardless of caller cwd/PYTHONPATH (run_validators, run_panel, direct).
+import sys as _hos_sys
+import pathlib as _hos_pl
+_hos_sys.path.insert(0, str(_hos_pl.Path(__file__).resolve().parent))
+from schema import make_result, make_finding, normalize, WEIGHTS  # noqa: E402
 
 # Nesting increment table from Dai's case study regression.
 # Key: nesting depth (0 = outermost flow-break in function).
 # Override by setting environment variable OVERSIGHT_NESTING_COEFFS=w,b
 # to use linear formula I_nesting(d) = w*d + b.
 _NESTING_TABLE: dict[int, float] = {
-    0: 0.0,   # outermost — no nesting penalty
+    0: 0.0,  # outermost — no nesting penalty
     1: 1.0,
     2: 3.0,
     3: 4.8,
@@ -101,12 +104,14 @@ class _FunctionRNVisitor(ast.NodeVisitor):
     def _record(self, node: ast.AST, rn: float) -> None:
         lineno = getattr(node, "lineno", 0)
         self.total_rn += rn
-        self.statements.append({
-            "line": lineno,
-            "type": type(node).__name__,
-            "rn": rn,
-            "nesting_depth": self.depth,
-        })
+        self.statements.append(
+            {
+                "line": lineno,
+                "type": type(node).__name__,
+                "rn": rn,
+                "nesting_depth": self.depth,
+            }
+        )
 
     def _visit_flow_break_body(self, node: ast.AST, body: list) -> None:
         """Compute RN for a flow-break node, then recurse into its body."""
@@ -182,13 +187,15 @@ def _collect_functions(tree: ast.Module, filename: str) -> list[dict]:
             visitor = _FunctionRNVisitor(filename, node.name, node.lineno)
             for stmt in node.body:
                 visitor.visit(stmt)
-            results.append({
-                "name": node.name,
-                "file": filename,
-                "start_line": node.lineno,
-                "risk_number": round(visitor.total_rn, 1),
-                "statements": visitor.statements,
-            })
+            results.append(
+                {
+                    "name": node.name,
+                    "file": filename,
+                    "start_line": node.lineno,
+                    "risk_number": round(visitor.total_rn, 1),
+                    "statements": visitor.statements,
+                }
+            )
             # Use generic_visit so the NodeVisitor machinery handles recursion.
             # ast.walk would yield grandchildren before _visit_func returns,
             # causing depth-3+ nested functions to be appended twice.
@@ -212,21 +219,26 @@ def _checklist_items(func: dict) -> list[str]:
         line = s["line"]
         fn = func["name"]
         if node_type == "If":
-            items.append(
-                f"{fn}:{line} — can this condition be both true and false as expected?"
-            )
-            items.append(
-                f"{fn}:{line} — are all branches (including implicit else) handled?"
-            )
+            items.append(f"{fn}:{line} — can this condition be both true and false as expected?")
+            items.append(f"{fn}:{line} — are all branches (including implicit else) handled?")
         elif node_type in ("For", "AsyncFor"):
             items.append(f"{fn}:{line} — is the loop bound correct and termination guaranteed?")
-            items.append(f"{fn}:{line} — is anything mutated inside the loop that affects the iterator?")
+            items.append(
+                f"{fn}:{line} — is anything mutated inside the loop that affects the iterator?"
+            )
         elif node_type == "While":
-            items.append(f"{fn}:{line} — can the while condition become False? Is the loop variable updated?")
+            items.append(
+                f"{fn}:{line} — can the while condition become False? Is the loop variable updated?"
+            )
         elif node_type == "ExceptHandler":
-            items.append(f"{fn}:{line} — is the exception caught at the right granularity (not bare `except`)?")
+            items.append(
+                f"{fn}:{line} — is the exception caught at the right granularity "
+                f"(not bare `except`)?"
+            )
         elif node_type in ("With", "AsyncWith"):
-            items.append(f"{fn}:{line} — does the context manager correctly release resources on exception?")
+            items.append(
+                f"{fn}:{line} — does the context manager correctly release resources on exception?"
+            )
     return items
 
 
@@ -250,7 +262,9 @@ def analyse_files(file_paths: list[str]) -> dict:
 
     if not all_functions:
         return make_result(
-            "risk_number", 0.0, {"functions": [], "parse_errors": parse_errors},
+            "risk_number",
+            0.0,
+            {"functions": [], "parse_errors": parse_errors},
             weight=WEIGHTS["risk_number"],
             error=("; ".join(parse_errors) if parse_errors else None),
         )
@@ -262,9 +276,12 @@ def analyse_files(file_paths: list[str]) -> dict:
     score = normalize(max_rn, 0, _SCORE_HIGH_THRESHOLD)
 
     evidence = [
-        make_finding(f["file"], f["start_line"],
-                     f"RN={f['risk_number']} — {f['name']}()",
-                     severity="high" if f["risk_number"] >= 8 else "medium")
+        make_finding(
+            f["file"],
+            f["start_line"],
+            f"RN={f['risk_number']} — {f['name']}()",
+            severity="high" if f["risk_number"] >= 8 else "medium",
+        )
         for f in sorted(all_functions, key=lambda x: x["risk_number"], reverse=True)[:5]
     ]
 
@@ -302,14 +319,19 @@ def main() -> None:
     args = sys.argv[1:]
     if "--files" in args:
         idx = args.index("--files")
-        files = args[idx + 1:]
+        files = args[idx + 1 :]
     else:
         files = args
 
     files = [f for f in files if f.endswith(".py") and Path(f).exists()]
     if not files:
-        result = make_result("risk_number", 0.0, {"error": "no Python files provided"},
-                             weight=WEIGHTS["risk_number"], error="no input files")
+        result = make_result(
+            "risk_number",
+            0.0,
+            {"error": "no Python files provided"},
+            weight=WEIGHTS["risk_number"],
+            error="no input files",
+        )
     else:
         result = analyse_files(files)
 

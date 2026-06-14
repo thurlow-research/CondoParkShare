@@ -99,6 +99,10 @@ if $DRY_RUN; then
     warn "DRY RUN — no external CLI calls will be made"
 fi
 
+# ── Branch + PR context (stamped on every issue) ─────────────────────────────
+CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
+CURRENT_PR=$(gh pr view --json number,url --jq '"#\(.number) \(.url)"' 2>/dev/null || echo "none")
+
 # ── Load context ─────────────────────────────────────────────────────────────
 SPEC_CONTENT=""
 [[ -f "Specs/SPEC-1-pilot.md" ]] && SPEC_CONTENT=$(cat Specs/SPEC-1-pilot.md)
@@ -121,10 +125,10 @@ create_redteam_issues() {
     local reviewer="$1"
     local findings_json="$2"
 
-    python3 - "$reviewer" "$findings_json" "$MILESTONE" <<'PYEOF'
+    python3 - "$reviewer" "$findings_json" "$MILESTONE" "$CURRENT_BRANCH" "$CURRENT_PR" <<'PYEOF'
 import json, subprocess, sys
 
-reviewer, milestone = sys.argv[1], sys.argv[3]
+reviewer, milestone, branch, pr = sys.argv[1], sys.argv[3], sys.argv[4], sys.argv[5]
 
 try:
     data = json.loads(sys.argv[2])
@@ -137,18 +141,21 @@ for f in findings:
     if sev not in ("critical", "high"):
         continue
 
-    title = f"Red-team [{milestone}/{reviewer}]: {str(f.get('finding','?'))[:80]}"
+    title = f"[AI: red-team/{reviewer}] red-team-finding [{milestone}]: {str(f.get('finding','?'))[:70]}"
     body = "\n".join([
         f"**Milestone:** {milestone}",
         f"**Reviewer:** {reviewer}",
         f"**Severity:** {sev}",
+        f"**Branch:** {branch}",
+        f"**PR:** {pr}",
         f"**CWE:** {f.get('cwe','')}",
         f"**Attack chain:** {f.get('attack_chain', f.get('attack_scenario', ''))}",
         f"**Finding:** {f.get('finding', '')}",
         f"**Files involved:** {', '.join(f.get('files', []))}",
         f"**Remediation:** {f.get('remediation', f.get('suggestion', ''))}",
         "",
-        "*Created by run_red_team.sh — system-level checkpoint.*",
+        "---",
+        f"*🤖 Created by `red-team/{reviewer}` | Step: {milestone} | Branch: `{branch}` | PR: {pr}*",
     ])
 
     cmd = ["gh", "issue", "create", "--title", title, "--body", body,

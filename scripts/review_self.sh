@@ -292,11 +292,14 @@ if [[ "$HIGH_COUNT" -gt 0 ]] && command -v gh &>/dev/null; then
     echo ""
     warn "$HIGH_COUNT HIGH/CRITICAL finding(s) — creating GitHub issue..."
     gh issue create \
-        --title "Self-review findings: ${HIGH_COUNT} HIGH/CRITICAL (${REVIEWER}, ${TIMESTAMP})" \
-        --body "$(printf '**Reviewer:** %s\n**Report:** %s\n\nSee the full report file for details.\n\n## Summary\n%s' \
+        --title "[AI: ${REVIEWER}] design-concern: ${HIGH_COUNT} HIGH/CRITICAL self-review findings (${TIMESTAMP})" \
+        --body "$(printf '**Reviewer:** %s\n**Report:** %s\n\nSee the full report file for details.\n\n## Summary\n%s\n\n---\n*🤖 Created by `%s` | Step: session | Branch: `%s` | %s*' \
             "$REVIEWER_LABEL" \
             "$OUTFILE" \
-            "$(echo "$REVIEW_OUTPUT" | head -60)")" \
+            "$(echo "$REVIEW_OUTPUT" | head -60)" \
+            "$REVIEWER" \
+            "$(git branch --show-current 2>/dev/null || echo unknown)" \
+            "$(date +%Y-%m-%d)")" \
         --label "design-concern" \
         2>/dev/null && ok "Issue created" || warn "Issue creation failed (gh auth?)"
 fi

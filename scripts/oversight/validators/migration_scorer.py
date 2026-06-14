@@ -19,23 +19,28 @@ import json
 import sys
 from pathlib import Path
 
-from schema import make_result, make_finding, normalize, WEIGHTS
+# self-bootstrap: ensure this file's dir (with schema.py) is importable
+# regardless of caller cwd/PYTHONPATH (run_validators, run_panel, direct).
+import sys as _hos_sys
+import pathlib as _hos_pl
+_hos_sys.path.insert(0, str(_hos_pl.Path(__file__).resolve().parent))
+from schema import make_result, make_finding, WEIGHTS  # noqa: E402
 
 _OP_RISK: dict[str, tuple[str, str]] = {
     # (risk_level, reason)
-    "RunPython":            ("CRITICAL", "data migration — Python code runs on production data"),
-    "RunSQL":               ("HIGH",     "raw SQL — verify it's idempotent and reversible"),
-    "DeleteModel":          ("CRITICAL", "destroys table — irreversible data loss"),
-    "RemoveField":          ("HIGH",     "drops column — data loss if not already migrated"),
-    "RenameModel":          ("HIGH",     "renames table — breaks any raw SQL or external references"),
-    "RenameField":          ("HIGH",     "renames column — breaks queries not going through ORM"),
-    "AlterField":           ("HIGH",     "changes column definition — may truncate data or break constraints"),
-    "AlterUniqueTogether":  ("HIGH",     "modifying uniqueness constraints — data integrity risk"),
-    "AlterIndexTogether":   ("MEDIUM",   "index change — performance impact, verify on large tables"),
-    "AddField":             ("MEDIUM",   "new column — risk depends on nullable/default (checked below)"),
-    "AddIndex":             ("LOW",      "new index — safe, but CONCURRENT not used by default in Django"),
-    "CreateModel":          ("LOW",      "new table — generally safe"),
-    "AlterModelOptions":    ("LOW",      "metadata only — no schema change"),
+    "RunPython": ("CRITICAL", "data migration — Python code runs on production data"),
+    "RunSQL": ("HIGH", "raw SQL — verify it's idempotent and reversible"),
+    "DeleteModel": ("CRITICAL", "destroys table — irreversible data loss"),
+    "RemoveField": ("HIGH", "drops column — data loss if not already migrated"),
+    "RenameModel": ("HIGH", "renames table — breaks any raw SQL or external references"),
+    "RenameField": ("HIGH", "renames column — breaks queries not going through ORM"),
+    "AlterField": ("HIGH", "changes column definition — may truncate data or break constraints"),
+    "AlterUniqueTogether": ("HIGH", "modifying uniqueness constraints — data integrity risk"),
+    "AlterIndexTogether": ("MEDIUM", "index change — performance impact, verify on large tables"),
+    "AddField": ("MEDIUM", "new column — risk depends on nullable/default (checked below)"),
+    "AddIndex": ("LOW", "new index — safe, but CONCURRENT not used by default in Django"),
+    "CreateModel": ("LOW", "new table — generally safe"),
+    "AlterModelOptions": ("LOW", "metadata only — no schema change"),
     "SeparateDatabaseAndState": ("MEDIUM", "state-only migration — verify DB is already in sync"),
 }
 
@@ -62,20 +67,18 @@ def _check_add_field_nullable(source: str, op_name_line: int) -> bool:
     This is a rough approximation.
     """
     lines = source.splitlines()
-    context = "\n".join(lines[max(0, op_name_line - 1):op_name_line + 10])
+    context = "\n".join(lines[max(0, op_name_line - 1) : op_name_line + 10])
     return "null=True" not in context and "default=" not in context
 
 
 def analyse_files(file_paths: list[str]) -> dict:
     """Only analyse files that look like Django migration files."""
-    migration_files = [
-        p for p in file_paths
-        if "migration" in p.lower() and p.endswith(".py")
-    ]
+    migration_files = [p for p in file_paths if "migration" in p.lower() and p.endswith(".py")]
 
     if not migration_files:
         return make_result(
-            "migration_risk", 0.0,
+            "migration_risk",
+            0.0,
             {"note": "no migration files in changeset"},
             weight=WEIGHTS["migration_risk"],
         )
@@ -96,30 +99,43 @@ def analyse_files(file_paths: list[str]) -> dict:
                 # Upgrade AddField to HIGH if non-nullable without default
                 if op == "AddField" and _check_add_field_nullable(source, 0):
                     risk = "HIGH"
-                    reason = "AddField without null=True or default — Django will prompt for a default; risky on populated tables"
+                    reason = (
+                        "AddField without null=True or default — "
+                        "Django will prompt for a default; risky on populated tables"
+                    )
 
                 all_ops.append({"file": path, "op": op, "risk": risk, "reason": reason})
                 evidence.append(
-                    make_finding(path, 0, f"{op}: {reason}",
-                                 severity=risk.lower() if risk != "CRITICAL" else "high")
+                    make_finding(
+                        path,
+                        0,
+                        f"{op}: {reason}",
+                        severity=risk.lower() if risk != "CRITICAL" else "high",
+                    )
                 )
                 if risk in ("CRITICAL", "HIGH"):
                     checklist.append(f"{op} ({Path(path).name}): {reason}")
-                    checklist.append(f"  → Is there a reverse migration? Has this been tested on a copy of prod data?")
+                    checklist.append(
+                        "  → Is there a reverse migration? "
+                        "Has this been tested on a copy of prod data?"
+                    )
 
         except Exception as e:
             all_ops.append({"file": path, "error": str(e)})
 
     if not all_ops:
-        return make_result("migration_risk", 0.0, {"files": migration_files},
-                           weight=WEIGHTS["migration_risk"])
+        return make_result(
+            "migration_risk", 0.0, {"files": migration_files}, weight=WEIGHTS["migration_risk"]
+        )
 
     max_score = max(_TIER_SCORE.get(op.get("risk", "LOW"), 0.15) for op in all_ops)
     critical_ops = [op for op in all_ops if op.get("risk") == "CRITICAL"]
     high_ops = [op for op in all_ops if op.get("risk") == "HIGH"]
 
     if critical_ops:
-        checklist.insert(0, "⚠ CRITICAL migration operations present — requires human review before merge")
+        checklist.insert(
+            0, "⚠ CRITICAL migration operations present — requires human review before merge"
+        )
 
     return make_result(
         dimension="migration_risk",
@@ -139,8 +155,18 @@ def analyse_files(file_paths: list[str]) -> dict:
 def main() -> None:
     files = [f for f in sys.argv[1:] if Path(f).exists()]
     if not files:
-        print(json.dumps(make_result("migration_risk", 0.0, {"error": "no input"},
-                                     weight=WEIGHTS["migration_risk"], error="no input files"), indent=2))
+        print(
+            json.dumps(
+                make_result(
+                    "migration_risk",
+                    0.0,
+                    {"error": "no input"},
+                    weight=WEIGHTS["migration_risk"],
+                    error="no input files",
+                ),
+                indent=2,
+            )
+        )
         return
     print(json.dumps(analyse_files(files), indent=2))
 

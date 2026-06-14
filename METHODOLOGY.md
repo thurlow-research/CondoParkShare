@@ -24,15 +24,27 @@ This repo is both the **tool** and the **experiment** — it bootstraps that met
 
 ---
 
-## 2. Two Layers of Oversight
+## 2. Three Layers of Oversight
 
 ### Layer 1 — Self-flagging (single agent) ✅ Implemented
 The authoring AI flags its *own* work, per **[`AGENTS.md`](AGENTS.md)**: every non-trivial change gets a risk classification, human-review flags, a confidence declaration, hallucination warnings, and a blast-radius note for destructive operations. This is "a senior engineer who flags their own work," not a code dispenser.
 
-### Layer 2 — Independent review (multiple agents) 🔧 Built, not yet exercised
-Self-flagging has a blind spot: an AI is bad at catching its *own* class of mistakes. So a second layer brings in **independent reviewers from different vendors** to check the author's work, scaled by risk, culminating in a human gate. This is the multi-agent "panel" (§6), implemented in [`scripts/run_panel.sh`](scripts/run_panel.sh) (triage → cross-vendor reviewers → arbiter → posts threads to the PR) — built, awaiting its first run on a live PR.
+### Layer 2 — Independent review (multiple agents) 🔧 Built, not yet exercised at full scale
+Self-flagging has a blind spot: an AI is bad at catching its *own* class of mistakes. So a second layer brings in **independent reviewers from different vendors** to check the author's work, scaled by risk, culminating in a human gate. This is the multi-agent "panel" (§6), implemented in [`scripts/run_panel.sh`](scripts/run_panel.sh) (reads `panel-context.md` only → cross-vendor reviewers → arbiter → posts threads to the PR) — built, awaiting its first run on a live PR at full scale.
 
-The two layers compose: the author self-flags (Layer 1), then independent reviewers scrutinize (Layer 2), then the human decides.
+### Layer 3 — Risk-stratified human gates ✅ Implemented
+Human attention is finite and degrades on low-signal repetitive tasks. Layer 3 routes that attention by risk tier rather than applying it uniformly:
+
+| Risk | Gate |
+|---|---|
+| LOW | Automated CI gates + statistical spot-check audit |
+| MEDIUM | ≥1 cross-vendor reviewer; human reviews flagged items |
+| HIGH | Security adversary always-on; human reviews line-by-line |
+| CRITICAL | Blast radius required; human approval mandatory before merge |
+
+The spot-check on LOW-tier changes is not theater — it provides an ongoing escaped-defect rate, the primary feedback signal for calibrating tier thresholds over time.
+
+The three layers compose: the author self-flags (Layer 1), independent reviewers scrutinize (Layer 2), and risk-stratified gates ensure human attention lands where it matters most (Layer 3).
 
 ---
 
@@ -40,18 +52,18 @@ The two layers compose: the author self-flags (Layer 1), then independent review
 
 We deliberately use **multiple vendors and model tiers** — the whole point is *decorrelated* judgment. An AI reviewing its own family tends to ratify its own mistakes.
 
-| AI | Subscription | Driven via | Role |
-|---|---|---|---|
-| **Claude** (Opus / Sonnet / Haiku) | Claude Max (20×) | `claude` CLI | Author (Opus), triage & cheap review (Haiku), arbiter (Sonnet) |
-| **OpenAI** | ChatGPT Pro | `codex` CLI (`codex exec`) | Independent reviewer / adversary (high risk) |
-| **Google** | Gemini Pro | `agy` (Antigravity CLI) | Independent cross-vendor reviewer; architecture/whole-repo lens |
-| **GitHub Copilot** | Copilot Pro | GitHub-native PR review | **Baseline reviewer on _every_ PR** (automatic, in CI) |
+| AI | Driven via | Role |
+|---|---|---|
+| **Claude** (Opus / Sonnet / Haiku) | `claude` CLI | Author (Opus), triage & cheap review (Haiku), arbiter (Sonnet) |
+| **OpenAI** | `codex` CLI (`codex exec`) | Independent reviewer / adversary (high risk) |
+| **Google** | `agy` (Antigravity CLI) | Independent cross-vendor reviewer; architecture/whole-repo lens |
+| **GitHub Copilot** | GitHub-native PR review | **Baseline reviewer on _every_ PR** (automatic, in CI) |
 
 **Key constraints that shape the design:**
-- These are **app/CLI subscriptions, not API keys.** To use the quota you pay for, each reviewer runs through its subscription-authenticated CLI — *not* a metered API. (Why the panel runs **locally**, not in CI — see §6.)
+- **CLI-authenticated, not API-keyed.** Each reviewer runs through its own authenticated CLI rather than a metered API. This shapes several design decisions — most importantly why the panel runs locally, not in CI (see §6).
 - **Opus is the author**, so Opus may never review its own output. At the highest risk, the *independent* votes must be **cross-vendor** (Google/OpenAI); same-vendor Claude tiers can assist but don't count as the independent check.
-- **Copilot is the always-on floor, the cross-vendor panel is the escalation.** Copilot runs automatically on **every** PR (GitHub-native, in CI) — including LOW changes the local panel skips — so there is an AI review on everything without spending subscription quota. The cross-vendor panel (`agy`/`codex`) then layers on by risk. (Copilot Pro required; see [`DECISIONS.md` D16](DECISIONS.md) for quota and metering details.)
-- **Quota-aware allocation:** spend the abundant Claude Max quota on high-frequency roles (author, triage, arbiter); reserve scarce ChatGPT Pro reasoning for high-risk review and adversarial passes; use Antigravity's large context for breadth.
+- **Copilot is the always-on floor, the cross-vendor panel is the escalation.** Copilot runs automatically on **every** PR (GitHub-native, in CI) — including LOW changes the local panel skips — so there is baseline AI coverage on everything without the cost of the full cross-vendor panel. The cross-vendor panel (`agy`/`codex`) then layers on by risk.
+- **Strategic model allocation:** match model capability to task stakes and frequency. High-frequency, lower-stakes work (author triage, cheap review) uses efficient models; high-capability reasoning is reserved for high-risk review and adversarial passes where the cost of a missed finding is highest. Running the most capable model on every task regardless of stakes is wasteful and unnecessary — the goal is appropriate coverage, not maximum spend.
 - **Why no Claude in the reviewer seat:** Opus is the author, so no Claude model casts an independent review — same-vendor judgement correlates errors. Sonnet is the **arbiter** (synthesis), never an independent reviewer; the independent votes are cross-vendor (`agy`/`codex`).
 
 > Google is retiring the Gemini CLI (consumer shutoff **2026-06-18**) in favor of the **Antigravity CLI (`agy`)**, which is what the tooling now installs.
@@ -89,13 +101,51 @@ Risk classification (from [`AGENTS.md`](AGENTS.md)) is the dial that controls ho
 
 This is the research hypothesis in action: **risk-stratified flagging** routes 100% review to CRITICAL and spot-checks LOW — oversight that scales.
 
+### How the composite score is computed
+
+Each build step runs a set of deterministic validator scripts (`scripts/oversight/run_validators.sh`). Every validator produces a score in [0.0, 1.0] and a weight. The composite is a weighted average across all validators that ran without error — validators that fail to execute are excluded rather than zeroing the score, so a misconfigured tool degrades coverage gracefully rather than suppressing the signal entirely.
+
+```
+composite = Σ(score_i × weight_i) / Σ(weight_i)   [over validators without error]
+```
+
+The composite then maps to a tier via fixed thresholds:
+
+| Composite score | Tier |
+|---|---|
+| < 0.30 | LOW |
+| 0.30 – 0.54 | MEDIUM |
+| 0.55 – 0.77 | HIGH |
+| ≥ 0.78 | CRITICAL |
+
+**The validator dimensions and their weights:**
+
+| Dimension | Weight | What it measures |
+|---|---|---|
+| **Risk Number** (Dai et al.) | 0.18 | Per-statement nesting increment (empirically calibrated from bug data) + judgment increment (+1 per flow-break, +1 per logical operator). The heaviest weight — the only metric derived from regression on actual bug-nesting relationships. |
+| **Static analysis** | 0.15 | Bandit MEDIUM security findings. HIGH findings are a blocking gate and never reach the composite; MEDIUM findings are scored as risk signal. Optionally augmented with semgrep Django rules. |
+| **Migration risk** | 0.12 | Django migration operation classification: CRITICAL (RunPython, DeleteModel, RemoveField), HIGH (AlterField type/nullability, RenameField), MEDIUM (AddField nullable, RunSQL read-only), LOW (AddIndex, CreateModel). |
+| **Historical density** | 0.12 | Bug density per file from GitHub issues (`bug`, `security-finding`, `escaped-defect` labels) and git churn. Starts empty; accumulates signal as issues are filed — the loop that makes the scorer improve over time. |
+| **Cyclomatic complexity** | 0.08 | McCabe metric: number of independent execution paths. Measures testability — how many test cases are needed for full path coverage. |
+| **Cognitive complexity** | 0.08 | Campbell (2018) metric: how hard the code is to read and understand. Independent of cyclomatic — code can be testable but unreadable, or readable but hard to test. |
+| **N+1 query detection** | 0.08 | Heuristic for Django ORM calls inside loops — a common performance and correctness hazard in AI-generated Django code. |
+| **IP / provenance** | 0.08 | License gate (ScanCode / PyPI / npm API) + prompt clean-room verification. Orthogonal to correctness risk — surfaces legal exposure independently of code quality. |
+| **Function metrics** | 0.07 | Function length, parameter count, return path count. Proxies for review difficulty and likelihood of specification drift. |
+| **Prompt ambiguity** | 0.07 | Ambiguity score of the captured prompt artifact: question density, hedging language, TBDs, implicit assumptions. High ambiguity → higher probability the generated code diverges from intent. |
+| **Hallucination surface** | 0.06 | Version-sensitive API usage: imports and attribute accesses flagged against a known list of renamed, removed, or breaking-changed APIs across major library versions. |
+| **Portability** | 0.06 | Stack-specific portability signals (e.g. hardcoded paths, environment assumptions, platform-specific calls). |
+
+**The score is a floor, not a ceiling.** The deterministic floor rules (path globs, operation types) can raise the tier independently of the composite score. A migration touching `auth/**` may be forced to HIGH regardless of its composite. The composite can only raise the author's declared tier further — neither the composite nor the floor rules can lower it. The final tier is the maximum across: author declaration, floor rules, and composite score.
+
 **Random red-team audit (Statistical Quality Control).** The adversary/red-team pass is *always-on at HIGH+*; below that, a *salted-random sample* of LOWER-tier PRs (LOW/MEDIUM) gets one too — so red-team coverage is **guaranteed at HIGH+ and probabilistic below**. This audits the auto-pass lane — catching changes that were mis-triaged as low — and yields an **escaped-defect rate**: an empirical measure of how many defects survive in the population we chose not to scrutinize, which is the signal for whether the tier thresholds are calibrated. Selection is a salted deterministic hash of the PR's head SHA (reproducible and auditable, non-gameable without the secret salt); production rates are LOW 5% / MEDIUM 15% (elevated during the pilot so it visibly fires). See [`DECISIONS.md` D17](DECISIONS.md).
 
 ---
 
 ## 6. The Pipeline (Steps)
 
-The pipeline has two tiers with different cadences: an **inner development loop** that repeats with every incremental prompt, and an **outer merge pipeline** that runs once per logical feature or fix. Conflating them is the most common source of accumulated technical debt in AI-assisted development.
+The pipeline has three tiers with different cadences: an **inner development loop** that repeats with every incremental prompt, a **transition phase** that runs once per feature before the PR opens, and an **outer loop** that runs once per PR. Conflating them is the most common source of accumulated technical debt in AI-assisted development.
+
+> **Theoretical model vs. current implementation.** This section describes the pipeline as designed — the invariants that must hold and the logical sequence in which they should be enforced. In the ideal implementation, each step runs inside a controlled pipeline that gates the next step automatically. See the [implementation note](#implementation-note) at the end of this section for how the current implementation approximates those invariants today.
 
 ### Inner development loop (repeats N times per feature)
 
@@ -114,16 +164,28 @@ Each prompt-to-verify cycle must leave the codebase in a working state before th
 │                     confidence, warns on hallucination.     │
 │                     [Layer 1 ✅]                            │
 │                                                             │
-│  3. VERIFY          Run cheap gates LOCALLY before          │
-│                     accepting the change:                   │
-│                     lint · type-check · unit tests in scope │
-│                     secret scan                             │
-│                     If any gate fails: fix before           │
-│                     issuing the next prompt. Do not         │
+│  3. BLOCKING GATES  lint · type-check · secret scan ·       │
+│                     security-HIGH. If any gate fails: fix   │
+│                     before the next prompt. Do not          │
 │                     accumulate failures across prompts.     │
-│                     [per-project, run by developer or CI]  │
+│                     [✅ scripts/oversight/gates/]           │
 │                                                             │
-│  4. CAPTURE         For MEDIUM+: capture_prompt.sh records  │
+│  4. RISK SCORING    Nine validators score the change:       │
+│                     complexity, N+1 queries, migration      │
+│                     risk, IP/provenance, prompt fidelity,   │
+│                     hallucination surface, and others.      │
+│                     risk-assessor agent synthesizes a       │
+│                     composite score + inspection brief.     │
+│                     [✅ scripts/oversight/run_validators.sh]│
+│                                                             │
+│  5. INTERNAL REVIEW Review panel runs in parallel; each     │
+│                     agent appends a structured sign-off     │
+│                     to the shared register. Register is     │
+│                     machine-readable and checked for        │
+│                     completeness before step advances.      │
+│                     [Layer 2 🔧 at full scale]              │
+│                                                             │
+│  6. CAPTURE         For MEDIUM+: capture_prompt.sh records  │
 │                     the prompt artifact. [✅]               │
 │                                                             │
 │  └──────── back to 1 for next incremental change ──────────┘
@@ -131,57 +193,105 @@ Each prompt-to-verify cycle must leave the codebase in a working state before th
 
 > **Why the inner loop matters:** AI agents have no memory of the codebase state from one prompt to the next beyond what is in the current context. An agent asked to "add X" on a tree where Y is already broken will produce code that looks correct but depends on a broken foundation. By the time CI runs (after the PR opens), the failure stack may span five prompts and require significant archaeology to untangle. Local verification after each prompt is the only reliable way to keep the codebase in a known-good state throughout development.
 
-### Outer merge pipeline (runs once per logical change set)
+### Transition phase (runs once per feature, pre-PR)
 
-Once the inner loop produces a complete, verified working state, the change moves through the outer pipeline:
+Once the inner loop produces a complete verified working state, a transition phase runs before the PR opens. This phase is distinct from the outer loop: it has access to the full internal review record and produces a curated output for the panel that deliberately withholds that record.
 
 ```
-5. COMMIT            Commit the verified working state with provenance
+7. COMMIT            Commit verified working state with provenance
                      trailers: Prompt-Artifact / AI-Model / AI-Risk.
                      Provenance is queryable via prompt_audit.sh.        [✅]
 
-6. PR                Open a PR. main is protected: ≥1 approval + all
-                     review threads must be resolved before merge.        [✅]
+8. SYSTEM TESTS      e2e/system tests, coverage, mutation testing
+                     gated by risk tier.                                 [🔧 per-project]
 
-7. CHEAP GATES       (CI) lint, types, build, unit tests, secret scan,
-                     npm audit. These are a safety net — if the inner
-                     loop ran correctly, CI should be green. A CI
-                     failure here is a signal the inner loop was skipped. [🔧 per-project]
+9. SECOND REVIEW     Cross-vendor review of the full change set:
+                     agy at MEDIUM+, codex at HIGH+. Produces a
+                     machine-readable verdict header.
+                     Fail-closed when agy unavailable at MEDIUM+.       [✅ run_second_review.sh]
 
-8. TRIAGE            Determine final risk level (§5).                     [🔧 run_panel.sh]
+10. OVERSIGHT-EVAL   Phase 1 — compliance: did all required sign-offs
+                     happen? prompt artifacts captured? human auth
+                     present where required?
+                     Phase 2 — quality: convergence failures, unresolved
+                     critical findings, confidence gaps.
+                     Produces: PROCEED / CONDITIONAL_PROCEED / ESCALATE. [✅ oversight-evaluator]
 
-9. EXPENSIVE GATES   Gated by risk: e2e/system tests, coverage,
-                     mutation testing.                                     [🔧]
-
-10. AI PANEL         Independent reviewers (by risk) run LOCALLY via
-                     subscription CLIs, each with a lens; adversary at
-                     HIGH/CRITICAL. Findings posted to the PR as
-                     line-level threads.                                   [🔧 run_panel.sh]
-
-11. ARBITER          Synthesizes reviews → verdict; requests changes
-                     or escalates.                                         [🔧 run_panel.sh]
-
-12. HUMAN GATE       Mandatory at HIGH/CRITICAL; PR conversation-
-                     resolution forces each finding to be addressed
-                     before merge.                                         [✅ gate / 🔧 panel]
-
-13. MERGE → ARCHIVE  Raw review/turn logs archived; summaries
-                     regenerable (§7).                                     [🔧]
+11. ORCHESTRATE      Acts on evaluator recommendation.
+                     Writes two separate outputs:
+                       panel-context.md  — structural signals only,
+                                          no internal findings
+                       handoff.md        — full picture for human/PR
+                     PROCEED/CONDITIONAL → opens PR.
+                     ESCALATE → surfaces bounded questions to human;
+                                does NOT open the PR.                   [✅ oversight-orchestrator]
 ```
 
-**Why the panel runs locally, not in CI:** the subscription CLIs authenticate interactively (browser OAuth that lives on your machine); CI runners can't hold that session. So CI handles the deterministic gates + Copilot's native PR review, while the cross-vendor AI panel runs from a local command and **posts its findings to the PR**. The PR stays the auditable record.
+**Why `panel-context.md` withholds internal findings:** if the outer panel could read the internal reviewers' conclusions, it would tend to converge on the same findings rather than produce a genuinely independent signal. The isolation is an anchoring-prevention mechanism — the same principle as blind peer review. The panel sees structural signals (risk tier, blast radius, provenance) but forms its own judgments.
+
+### Outer loop (runs once per PR)
+
+```
+12. PR               Opened by oversight-orchestrator (or human on
+                     ESCALATE). main is protected: ≥1 approval + all
+                     review threads resolved before merge.              [✅]
+
+13. CI CHEAP GATES   lint, types, build, unit tests, secret scan.
+                     If CI fails on a gate the inner loop should have
+                     caught, that is a process health signal — the
+                     inner loop was skipped or incomplete.              [🔧 per-project]
+
+14. AI PANEL         Reads panel-context.md only. Cross-vendor
+                     reviewers each apply a lens; adversary at
+                     HIGH/CRITICAL. Findings posted as PR review
+                     threads. Runs locally via authenticated CLIs.     [🔧 run_panel.sh]
+
+15. HUMAN GATE       Each PR thread requires a human decision, not
+                     just acknowledgment. Mandatory review at
+                     HIGH/CRITICAL.                                     [✅ gate / 🔧 panel]
+
+16. MERGE → AUDIT    Resolved trail committed to
+                     audit/oversight-log.jsonl (append-only).          [✅]
+```
+
+**Why the panel runs locally, not in CI:** the CLIs authenticate interactively (browser OAuth that lives on your machine); CI runners can't hold that session. So CI handles the deterministic gates + Copilot's native PR review, while the cross-vendor AI panel runs from a local command and **posts its findings to the PR**. The PR stays the auditable record.
 
 **CI cheap gates as a diagnostic signal:** if CI fails on a gate that the inner loop should have caught (lint, type errors, unit tests), that is evidence the inner loop was skipped or the verify step was incomplete. Track CI-caught-but-inner-loop-missed failures as a process health metric — a rising rate indicates the verify step is being skipped under time pressure.
+
+### Implementation note
+
+The pipeline above describes the invariants — what must be true before each step can advance. The current implementation enforces those invariants differently from how an ideal in-pipeline system would.
+
+**How it actually works today:**
+- The inner loop gates and validators (`run_validators.sh`, the review agents) are invoked by the developer locally, outside of any automated pipeline. They are not triggered by a CI system watching commits.
+- Each step produces a **sign-off artifact** — a structured file written to the register when the step completes. The sign-off is the proof that the step ran.
+- The PR check does not re-run the gates. It checks that sign-off artifacts **exist** for all required steps at the correct risk tier. If they are absent, the PR is blocked.
+
+**The gap this creates:** sign-off existence proves the scripts were run, but not necessarily in the right order or against the right version of the code. A sign-off from a previous session could satisfy the check even if the code changed since.
+
+**The ideal implementation** would close this gap with a file-timestamp ordering check: sign-off files carry a timestamp, and the PR check verifies that each sign-off's timestamp is newer than the last commit touching the files it covers. This proves the gate ran *after* the relevant change, not before it. This mechanism is designed but not yet implemented — it is the target state toward which the current sign-off-existence check is a stepping stone.
 
 ---
 
 ## 7. Prompts as Source Code
 
-A defining principle: **prompts are treated as source code.**
+A defining principle: **prompts and their summaries are treated as source code artifacts**, version-controlled alongside the code they produce.
 
-- The prompt is the **"C source"**; the generated code is the **"compiled artifact"** (object/binary). In principle you should be able to *regenerate* the code from the prompt.
-- Unlike a normal build (where you'd gitignore the binary), here **both** the prompts and the generated code are committed and versioned. The compiler analogy is the mental model for *provenance and authority*, not the version-control policy.
-- `prompts/` holds the curated, cleaned prompt artifacts (one per MEDIUM+ file, mirroring `src/`). 🔧 A finer-grained **append-only raw log** of each turn, plus periodic regenerable **summaries** and a **watermark** (so a session can stop/restart without losing context), is designed but not yet built — think incremental compilation: only re-summarize what changed since the last watermark.
+**The compiler analogy.** The prompt is the **"C source"**; the generated code is the **"compiled artifact"** (object/binary). In principle you should be able to *regenerate* the code from the prompt. Unlike a normal build (where you'd gitignore the binary), here **both** the prompts and the generated code are committed and versioned. The compiler analogy is the mental model for *provenance and authority*, not the version-control policy.
+
+**Prompt summaries as first-class artifacts.** A raw turn log is too verbose to review directly. Periodic, regenerable summaries serve two distinct purposes:
+
+1. **Human comprehension.** A summary lets a human reviewer grok the outcome of a session — what intent was expressed, what decisions were made, what was deferred, what tradeoffs were accepted — without replaying every turn. This is the oversight purpose: a human should be able to read the summary and form a genuine judgment about whether the session did what it was supposed to do.
+
+2. **Expedited rerun.** A well-formed summary doubles as a one-shot prompt: a distillation of the session's intent precise enough that re-issuing it should reproduce the session's outputs. This makes AI-generated work reproducible and auditable in the same way that source code is — the summary is the "source" that regenerates the session, not just a record that it happened.
+
+These summaries are themselves versioned and subject to the same sign-off requirements as the code they describe. A summary that diverges from the actual generated code is a provenance failure, not a documentation gap. 🔧 The summary/watermark pipeline is designed but not yet fully built: think incremental compilation — only re-summarize turns since the last watermark, keeping the artifact current without replaying the full session history.
+
+**What lives where.**
+- `prompts/` — curated, cleaned prompt artifacts (one per MEDIUM+ change, mirroring `src/`). ✅
+- Turn-level raw log — append-only per-session record (`capture_session.sh --log`). ✅
+- Session summaries + watermarks — generated by `capture_session.sh --summarize` (requires agy or codex); `--watermark` marks last summarized position so incremental re-summarization only covers new turns. ✅ mechanism built. 🔧 the *expedited-rerun* claim (that a summary can reproduce the session) is **unvalidated** — the structural pipeline exists but rerun fidelity has not been empirically tested.
+- Git commit trailers (`Prompt-Artifact`, `AI-Model`, `AI-Risk`) — lightweight provenance on every commit, queryable via `prompt_audit.sh`. ✅
 
 See [`AGENTS.md` → Prompts-as-Artifact Discipline](AGENTS.md) for the authoritative rules.
 
@@ -191,16 +301,22 @@ See [`AGENTS.md` → Prompts-as-Artifact Discipline](AGENTS.md) for the authorit
 
 | Tool | Purpose | Status |
 |---|---|---|
-| **`scripts/setup_clis.sh`** | Repo-independent **machine** bootstrap: installs Node 22 + `claude`/`codex`/`agy`/`gh`, drives browser sign-in, smoke-tests each (`install`/`auth`/`smoke`/`doctor`). Installs ONLY oversight tooling — never project libraries. | ✅ |
-| **`scripts/setup_oversight.sh`** | Bootstraps the protocol **into a repo**: AGENTS.md, CODEOWNERS, PR template, `.claude/settings.json`, capture/audit scripts, `prompts/`, branch protection. | ✅ |
+| **`bootstrap/setup_clis.sh`** | Repo-independent **machine** bootstrap: installs Node 22 + `claude`/`codex`/`agy`/`gh`, drives browser sign-in, smoke-tests each (`install`/`auth`/`smoke`/`doctor`). Installs ONLY oversight tooling — never project libraries. | ✅ |
+| **`scripts/setup_oversight.sh`** | *Legacy* project installer (AGENTS.md, CODEOWNERS, PR template, `.claude/settings.json`, capture/audit scripts, `prompts/`, branch protection). **Superseded by `bootstrap/hos_install.sh`** (release-pinned install); reconciliation tracked in #87. | ✅ |
 | **`scripts/capture_prompt.sh`** | Scaffolds a prompt artifact in `prompts/`, with versioning and a reproducibility check. | ✅ |
+| **`scripts/capture_session.sh`** | Session turn log, summary, and watermark management. `--log FILE MSG` appends a turn entry; `--summarize` generates a session summary via agy/codex covering human comprehension + expedited rerun; `--watermark` marks the last summarized position for incremental re-summarization; `--status` shows current state. Summaries written to `prompts/sessions/`. | ✅ mechanism / 🔧 rerun-fidelity unvalidated |
 | **`scripts/prompt_audit.sh`** | Queries the provenance trail: `--stats`, `--pending`, `--risk LEVEL`. | ✅ |
 | **`.claude/settings.json`** | Risk-tiered permission policy: auto-allow reads/safe writes/commits; prompt on push/config; **block** `git push --force`, `rm -rf`, `.env` writes, `sudo`, `curl \| bash`. | ✅ |
 | **`.github/CODEOWNERS` + PR template + branch protection** | Owner approval on all files; PR checklist tied to the protocol; `main` requires approval + conversation resolution. | ✅ |
-| **`install.sh`** | Platform-aware unified installer (macOS brew / Ubuntu apt / Fedora dnf / yum / pacman). Installs Python 3.10+, ScanCode Toolkit (with system deps), gh CLI, pip analysis packages, agent CLIs guidance. Scaffolds full project structure including `audit/`. | ✅ |
+| **`bootstrap/hos_bootstrap.sh`** | MACHINE bootstrap (macOS brew / Ubuntu apt / Fedora dnf / yum / pacman): Python 3.10+, ScanCode Toolkit (with system deps), gh CLI, pip analysis packages, and (via `setup_clis.sh`) the agent CLIs. Run once per machine. | ✅ |
+| **`bootstrap/hos_install.sh`** | PROJECT installer: fetches a validated **release** (`--release <tag>` / `--local`) and scaffolds it into a target repo including `audit/`. No sudo; checks prerequisites. Records the installed tag at `.hos-release`. | ✅ |
 | **`scripts/run_panel.sh`** | The local multi-agent review orchestrator (§6 steps 7–10): triage (Haiku) → cross-vendor reviewers (`agy`/`codex`) → arbiter (Sonnet) → posts per-finding line threads + a summary to the PR. Loads `step{N}-panel-context.md` only (structural signals, no internal findings). IP agent (`ip_check.py`) runs Level 1+2. | 🔧 built, not yet exercised on a live PR |
 | **`scripts/run_second_review.sh`** | Pre-PR cross-vendor second review. agy fires at MEDIUM+ (conditional screening); codex fires at HIGH+ (reserve adversarial). Writes machine-readable verdict header. Fail-closed when agy unavailable at MEDIUM+. | ✅ |
 | **`scripts/run_red_team.sh`** | Checkpoint system-level adversarial red-team (after steps 3, 6, 10, 11). Uses both codex (attack chains) and agy (spec vs. implementation gap). Requires "not exploitable" attestations — a clean finding list without them is not a valid report. | ✅ |
+| **`scripts/run_redteam_sample.sh`** | Statistical sampling red-team. Draws N recent LOW-tier commits (default 20, last 30 days), red-teams each diff independently, computes escaped-defect rate. The empirical signal for calibrating tier thresholds — the Cleanroom/SQC mechanism. Options: `--n`, `--days`, `--dry-run`. Appends `sampling-audit` to `audit/oversight-log.jsonl`. | ✅ |
+| **`scripts/oversight/sign_off.sh`** | Writes a committed sign-off stamp (`signoffs/<role>.stamp`) for a validation-suite role. Validates the role against `step-manifest.yaml` via the oversight venv Python (PEP 668-safe). The CI-enforcement complement to the markdown sign-off register. | ✅ |
+| **`scripts/oversight/signoff_gate.py`** | Sign-off gate. Fails unless every required role (union of `required_signoffs` across steps) has a committed stamp no older than the newest changed file, by git commit timestamp. `--base REF` (PR/CI) or `--all` (deploy). Self-execs into the oversight venv if the system Python lacks PyYAML. | ✅ |
+| **`scripts/oversight/suspension_manager.py`** | Manages `contract/gate-suspension.md`. `--census` (active count + `review-by` warnings + `suspension-census` event), `--check` (run auto-checkable script gates, record pass-history), `--auto-remove` (re-enable pure script gates that pass N consecutive checks unless `[pinned]`). Ratchet-safe: only ever removes suspensions, never adds. Emits `gate-auto-reenabled`. | ✅ |
 | **`scripts/oversight/validators/ip_check.py`** | IP/provenance validator. Level 1: dependency license gate (ScanCode Toolkit, PyPI/npm API fallback). Level 2: prompt artifact clean-room verification. Level 3: regurgitation stub (references ai-gen-code-search). | Level 1+2 ✅ / Level 3 🔧 |
 | **`scripts/oversight/validators/prompt_audit_risk.py`** | Prompt ambiguity scoring (question density, hedging language, TBDs, implicit assumptions) + fidelity surface (code/prompt ratio, unmentioned functions). Reads `Prompt-Artifact:` git trailers. | ✅ |
 | **`audit/oversight-log.jsonl`** | Append-only structured event log committed to the current branch. Covers risk assessments, sign-offs, evaluator decisions, second reviews, panel runs, human authorizations, merges. Queryable with `jq`. | ✅ |
@@ -210,6 +326,9 @@ See [`AGENTS.md` → Prompts-as-Artifact Discipline](AGENTS.md) for the authorit
 | **`scripts/framework/validate_docs.sh`** | AI-powered documentation coverage validator. Catches the omission class of doc bug: agent file says X and Y, doc says only X. Reads `doc-patterns.md` (known bug patterns) and `decisions.md` (verification criteria). | ✅ |
 | **`scripts/framework/validate_spec_compliance.sh`** | Governance requirements compliance checker. Verifies the pipeline satisfies METHODOLOGY.md and AGENTS.md: cross-vendor independence, risk-tiered thresholds, human gates, model tier assignments, loop exit conditions, mandatory self-flagging behaviors. Also checks `decisions.md` verification criteria. | ✅ |
 | **`scripts/framework/run_framework_validation.sh`** | Top-level runner for all 4 framework validation phases. The single command to run before committing any framework change. | ✅ |
+| **`ops-designer` agent** | Observability authority (optional). Invoked at project start (after `architect` ADR) to produce `docs/ops/TELEMETRY-SPEC.md`. Architect validates. Reactive during build when `ops-reviewer` escalates gaps. N/A for projects without background jobs, external integrations, or multi-service architecture. | ✅ |
+| **`ops-reviewer` agent** | Telemetry spec enforcer (optional). Inner-loop reviewer, parallel with security/privacy. Enforces `TELEMETRY-SPEC.md` per PR. Escalates spec gaps to `ops-designer`; 2-cycle loop exit to architect. | ✅ |
+| **`reliability-reviewer` agent** | Resilience reviewer (optional — projects with external connections). Inner-loop reviewer. Reviews timeouts on outbound connections, retry with backoff, graceful degradation, no unbounded waits. No spec file required — best practices are universal. N/A for projects without DB, HTTP, or queue calls. | ✅ |
 | **`scripts/framework/decisions.md`** | Durable record of architectural decisions made during development sessions. Each entry has a verification criterion checked by `validate_spec_compliance.sh`. Replaces chat history as session-to-session memory. | ✅ |
 | **`scripts/framework/doc-patterns.md`** | Known documentation omission patterns discovered during sessions. Read by `validate_docs.sh` so previously-discovered bug classes are actively checked for recurrence. | ✅ |
 

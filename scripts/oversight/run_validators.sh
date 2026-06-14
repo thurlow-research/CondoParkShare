@@ -28,6 +28,14 @@ OUT_DIR=".claudetmp/oversight/validators"
 source "$SCRIPT_DIR/ensure_venv.sh"
 PYTHON="${PYTHON:-$OVERSIGHT_PYTHON}"
 
+# shellcheck source=scripts/oversight/run_with_retry.sh
+source "$SCRIPT_DIR/run_with_retry.sh"
+
+# Configurable defaults (override via env)
+VALIDATOR_TIMEOUT="${VALIDATOR_TIMEOUT:-60}"       # seconds per attempt
+VALIDATOR_RETRIES="${VALIDATOR_RETRIES:-2}"        # retries after first attempt
+NETWORK_TIMEOUT="${NETWORK_TIMEOUT:-30}"           # shorter for network-dependent validators
+
 FILES=()
 STEP=""
 
@@ -81,63 +89,106 @@ echo ""
 
 RESULTS=()
 
+# Counters for summary line
+VALIDATOR_SUCCEEDED=0
+VALIDATOR_SKIPPED=0
+VALIDATOR_FAILED=0
+
 run_validator() {
     local name="$1"
     local script="$2"
-    shift 2
+    local timeout="${3:-$VALIDATOR_TIMEOUT}"
+    local required="${4:-false}"
+    shift 4
     local args=("$@")
 
-    printf "  %-30s" "$name"
     local outfile="$OUT_DIR/${name}.json"
 
     if [[ ! -f "$script" ]]; then
-        echo "SKIP (not found)"
+        printf "  \033[33m⏸\033[0m  %-28s SKIP (script not found)\n" "$name"
+        VALIDATOR_SKIPPED=$(( VALIDATOR_SKIPPED + 1 ))
         return
     fi
 
-    if OUTPUT=$("$PYTHON" "$script" "${args[@]}" 2>/dev/null); then
+    local tmpout
+    tmpout=$(mktemp /tmp/validator_XXXXXX)
+
+    # Unit of work — one attempt. Sees name/script/args/timeout/tmpout via bash
+    # dynamic scope (it is called from run_with_retry, which we call from here).
+    # PYTHONPATH includes the validators dir so `from schema import` works.
+    # with_timeout (from run_with_retry.sh) returns 124 on timeout.
+    _validator_unit() {
+        PYTHONPATH="$VALIDATORS_DIR${PYTHONPATH:+:$PYTHONPATH}" \
+            with_timeout "$timeout" "$PYTHON" "$script" "${args[@]}" > "$tmpout" 2>/dev/null
+    }
+
+    local rc=0
+    run_with_retry "$name" "$VALIDATOR_RETRIES" "$required" _validator_unit && rc=0 || rc=$?
+
+    if [[ $rc -eq 0 ]]; then
+        local OUTPUT
+        OUTPUT=$(cat "$tmpout")
         echo "$OUTPUT" > "$outfile"
+        local SCORE
         SCORE=$(echo "$OUTPUT" | PYTHONSAFEPATH=1 "$PYTHON" -c \
             "import json,sys; d=json.load(sys.stdin); print(f\"{d.get('score',0):.2f}\")" 2>/dev/null || echo "?")
-        echo "score=$SCORE"
+        printf "  %-30s score=%s\n" "$name" "$SCORE"
         RESULTS+=("$name")
+        VALIDATOR_SUCCEEDED=$(( VALIDATOR_SUCCEEDED + 1 ))
     else
-        echo "ERROR"
-        echo '{"dimension":"'"$name"'","score":0,"error":"validator failed"}' > "$outfile"
+        # run_with_retry already printed the ✘/⏸ line and emitted the audit event.
+        echo '{"dimension":"'"$name"'","score":0,"error":"validator exhausted retries"}' > "$outfile"
+        if [[ $rc -eq 1 ]]; then
+            VALIDATOR_FAILED=$(( VALIDATOR_FAILED + 1 ))
+        else
+            VALIDATOR_SKIPPED=$(( VALIDATOR_SKIPPED + 1 ))
+        fi
     fi
+    rm -f "$tmpout"
 }
 
 # Run all validators
+#   Signature: run_validator NAME SCRIPT TIMEOUT_SEC REQUIRED [args...]
+#   REQUIRED=false: timeout/crash → SKIP (optional); all validators are optional individually
+#   Network-dependent validators get shorter timeout; heavy ones get longer
+
 if [[ ${#PY_FILES[@]} -gt 0 ]]; then
-    run_validator "risk_number"         "$VALIDATORS_DIR/rn_calculator.py"       "${PY_FILES[@]}"
-    run_validator "complexity"          "$VALIDATORS_DIR/complexity_metrics.py"  "${PY_FILES[@]}"
-    run_validator "function_metrics"    "$VALIDATORS_DIR/function_metrics.py"    "${PY_FILES[@]}"
-    run_validator "n1_queries"          "$VALIDATORS_DIR/n1_detector.py"         "${PY_FILES[@]}"
-    run_validator "static_analysis"     "$VALIDATORS_DIR/static_analysis.py"     "${PY_FILES[@]}"
-    run_validator "hallucination"       "$VALIDATORS_DIR/hallucination_surface.py" "${PY_FILES[@]}"
+    run_validator "risk_number"      "$VALIDATORS_DIR/rn_calculator.py"         60 false "${PY_FILES[@]}"
+    run_validator "complexity"       "$VALIDATORS_DIR/complexity_metrics.py"    60 false "${PY_FILES[@]}"
+    run_validator "function_metrics" "$VALIDATORS_DIR/function_metrics.py"      60 false "${PY_FILES[@]}"
+    run_validator "n1_queries"       "$VALIDATORS_DIR/n1_detector.py"           60 false "${PY_FILES[@]}"
+    run_validator "static_analysis"  "$VALIDATORS_DIR/static_analysis.py"      120 false "${PY_FILES[@]}"
+    run_validator "hallucination"    "$VALIDATORS_DIR/hallucination_surface.py" 60 false "${PY_FILES[@]}"
 fi
 
-# Migration scorer — all files (not just .py filter applied above, though it checks internally)
-run_validator "migration_risk"      "$VALIDATORS_DIR/migration_scorer.py"    "${ALL_FILES[@]}"
+# Migration scorer — all files
+run_validator "migration_risk"   "$VALIDATORS_DIR/migration_scorer.py"         60 false "${ALL_FILES[@]}"
 
-# Historical density — uses git + gh, works on any file type
-run_validator "historical_density"  "$VALIDATORS_DIR/issue_query.py"         "${ALL_FILES[@]}"
+# Historical density — network-dependent (calls gh + git); shorter timeout
+run_validator "historical_density" "$VALIDATORS_DIR/issue_query.py"   \
+    "$NETWORK_TIMEOUT" false "${ALL_FILES[@]}"
 
-# IP / provenance — license gate + prompt clean-room (all file types; levels 1-2 active)
-run_validator "ip_check"            "$VALIDATORS_DIR/ip_check.py" \
-    --prompts-dir "prompts"         "${ALL_FILES[@]}"
+# IP / provenance — calls ScanCode/PyPI; heavy, longer timeout
+run_validator "ip_check"         "$VALIDATORS_DIR/ip_check.py"                120 false \
+    --prompts-dir "prompts" "${ALL_FILES[@]}"
 
-# Portability — hardcoded absolute paths, spec_from_file_location workarounds
+# Portability check
 if [[ ${#PY_FILES[@]} -gt 0 ]]; then
-    run_validator "portability"         "$VALIDATORS_DIR/portability_check.py"  "${PY_FILES[@]}"
+    run_validator "portability"    "$VALIDATORS_DIR/portability_check.py"       60 false "${PY_FILES[@]}"
 fi
 
-# Prompt audit — ambiguity score + fidelity surface (Python files + prompt artifacts)
+# Prompt audit — network-dependent (calls gh for spec-gap count)
 if [[ ${#PY_FILES[@]} -gt 0 ]]; then
-    run_validator "prompt_ambiguity"    "$VALIDATORS_DIR/prompt_audit_risk.py" \
-        --prompts-dir "prompts" --step "${STEP:-}"  "${PY_FILES[@]}"
+    run_validator "prompt_ambiguity" "$VALIDATORS_DIR/prompt_audit_risk.py"  \
+        "$NETWORK_TIMEOUT" false \
+        --prompts-dir "prompts" --step "${STEP:-}" "${PY_FILES[@]}"
 fi
 
+echo ""
+echo "  Validators: ${VALIDATOR_SUCCEEDED} succeeded, ${VALIDATOR_SKIPPED} skipped (optional), ${VALIDATOR_FAILED} failed (required)"
+if [[ $VALIDATOR_FAILED -gt 0 ]]; then
+    echo "  ✘ Required validator(s) failed — composite score set to CRITICAL (fail-closed)"
+fi
 echo ""
 
 # Aggregate into summary.json

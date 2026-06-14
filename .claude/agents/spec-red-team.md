@@ -79,8 +79,8 @@ Focus your review on the following aspects for this build step:
    - Create a GitHub issue:
    ```bash
    gh issue create \
-     --title "Spec gap: [topic] — [one-line description]" \
-     --body "**Build step:** [N]\n**Type:** [gaming-vector|contradiction|implicit-assumption|missing-edge-case]\n**Finding:** [specific description]\n**Impact:** [what goes wrong if not addressed]\n**Suggested spec addition:** [draft text or question for PM]" \
+     --title "[AI: spec-red-team] spec-gap: [topic] — [one-line description]" \
+     --body "**Build step:** [N]\n**Type:** [gaming-vector|contradiction|implicit-assumption|missing-edge-case]\n**Finding:** [specific description]\n**Impact:** [what goes wrong if not addressed]\n**Suggested spec addition:** [draft text or question for PM]\n\n---\n*🤖 Created by \`spec-red-team\` | Step: [N] | Branch: \`$(git branch --show-current 2>/dev/null || echo unknown)\` | $(date +%Y-%m-%d)*" \
      --label "spec-gap"
    ```
 
@@ -99,6 +99,20 @@ Recommendation: [safe to proceed | spec should be updated before coding]
 ```
 
 If findings require pm-agent response before coding can proceed, say so explicitly. The coder should not start until spec gaps are resolved.
+
+**Required fields on every spec-gap issue body:**
+```
+**Gap type:** [ambiguity | missing requirement | contradiction | implicit assumption]
+**Spec section:** §N.N (or "no section — implicit")
+**Finding:** [what is unclear or missing]
+**Impact:** [what could go wrong if coding proceeds without resolving this]
+**Resolution required:** [what pm-agent must decide or clarify]
+**Change classification:** [clarifying | additive | structural]
+**Human approval needed:** [yes (structural) | no]
+**Ready for coder:** [will be set to YES by pm-agent after resolution]
+```
+
+pm-agent resolves the issue by: updating the spec, setting `Ready for coder: YES`, and noting the change classification. Structural changes require a human approval link before `Ready for coder` can be set.
 
 ---
 
