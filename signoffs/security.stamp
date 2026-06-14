@@ -1,6 +1,6 @@
 role: security
 agent: security-reviewer
 status: APPROVED
-signed_at: 2026-06-14T02:16:23Z          # informational — the gate uses the git commit time
-head_at_signing: 304e0a4
-note: APPROVED; gaming-vector + isolation verified
+signed_at: 2026-06-14T17:57:24Z          # informational — the gate uses the git commit time
+head_at_signing: 5be0826
+note: iter3; absolute fail-open + atomic + WatchedFileHandler; 1 accepted LOW residual

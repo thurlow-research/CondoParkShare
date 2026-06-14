@@ -1,6 +1,6 @@
 role: process
 agent: pm-agent
 status: APPROVED
-signed_at: 2026-06-14T02:16:23Z          # informational — the gate uses the git commit time
-head_at_signing: 304e0a4
-note: APPROVED; §78 conformance; tier LOW per human override
+signed_at: 2026-06-14T17:57:24Z          # informational — the gate uses the git commit time
+head_at_signing: 5be0826
+note: faithful to CPS#78; RC-1 volume + RC-2 #87 release conditions
