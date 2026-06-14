@@ -1,6 +1,6 @@
 role: process
 agent: pm-agent
 status: APPROVED
-signed_at: 2026-06-14T01:51:07Z          # informational — the gate uses the git commit time
-head_at_signing: 4310d93
-note: Pure conformance bugfix to SPEC-1 §78; no spec amendment; #51 doc lag non-blocking
+signed_at: 2026-06-14T02:08:20Z          # informational — the gate uses the git commit time
+head_at_signing: 8dd4fb2
+note: Conformance bugfix to SPEC-1 §78; tier LOW per human override; #51 doc lag non-blocking

@@ -1,6 +1,6 @@
 role: code-review
 agent: code-reviewer
 status: APPROVED
-signed_at: 2026-06-14T01:51:06Z          # informational — the gate uses the git commit time
-head_at_signing: 4310d93
-note: Step 7 leaderboard basis fix; clamping equivalence + isolation verified
+signed_at: 2026-06-14T02:08:20Z          # informational — the gate uses the git commit time
+head_at_signing: 8dd4fb2
+note: iter2: leaderboard basis + nulls_last ordering fix; all priorities resolved

@@ -1,6 +1,6 @@
 role: test-system
 agent: system-test
 status: NOT_APPLICABLE
-signed_at: 2026-06-14T01:51:07Z          # informational — the gate uses the git commit time
-head_at_signing: 4310d93
-note: N/A: leaderboard UI deferred; get_leaderboard has no view/URL/template — no e2e flow to exercise
+signed_at: 2026-06-14T02:08:21Z          # informational — the gate uses the git commit time
+head_at_signing: 8dd4fb2
+note: N/A: leaderboard UI deferred; no view/URL/template — no e2e flow
