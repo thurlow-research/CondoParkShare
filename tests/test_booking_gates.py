@@ -988,3 +988,43 @@ def test_confirm_expired_tentative():
     assert (
         booking.status == "cancelled_admin"
     ), f"Expired tentative should be set to 'cancelled_admin', got {booking.status!r}"
+
+
+@pytest.mark.django_db
+def test_confirm_rejects_non_borrower():
+    """confirm_booking raises PermissionError if the actor is not the borrower.
+
+    Defense-in-depth / consistency with cancel_booking and release_booking,
+    which both authorize their actor argument. The booking's own borrower must
+    still succeed.
+    """
+    from parking.booking import confirm_booking
+
+    frozen_now = _utc(2028, 5, 3, 10)
+    org = OrganizationFactory()
+    owner = UserFactory(organization=org)
+    borrower = UserFactory(organization=org)
+    intruder = UserFactory(organization=org)
+    spot = ParkingSpotFactory(organization=org, owner=owner, status="active")
+
+    tr = DateTimeTZRange(_utc(2028, 5, 10, 10), _utc(2028, 5, 10, 14))
+    booking = BookingFactory(
+        organization=org,
+        spot=spot,
+        borrower=borrower,
+        time_range=tr,
+        status="tentative",
+        tentative_expires_at=frozen_now + timedelta(minutes=5),
+    )
+
+    with freeze_time(frozen_now):
+        with pytest.raises(PermissionError):
+            confirm_booking(booking, intruder)
+        # Booking is untouched by the rejected attempt
+        booking.refresh_from_db()
+        assert booking.status == "tentative"
+        # Rightful borrower still succeeds
+        result = confirm_booking(booking, borrower)
+
+    result.refresh_from_db()
+    assert result.status == "confirmed"
