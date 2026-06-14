@@ -398,3 +398,42 @@ def test_leaderboard_org_guard_excludes_cross_org_windows():
         "Hours from a spot belonging to org_b must not count toward org_a leaderboard; "
         f"got {user_entry.elapsed_hours}"
     )
+
+
+@pytest.mark.django_db
+def test_leaderboard_zero_hour_users_rank_last():
+    """Users with no listed hours rank BELOW users with listed hours.
+
+    Regression test (found by cross-vendor second review): a user with no
+    availability windows annotates elapsed_hours to NULL. Under a bare
+    .order_by("-elapsed_hours"), PostgreSQL sorts NULLS FIRST for DESC, which
+    incorrectly placed zero-listing users at the TOP. The query uses
+    F("elapsed_hours").desc(nulls_last=True) to rank them last.
+    """
+    from freezegun import freeze_time
+
+    from parking.leaderboard import get_leaderboard
+    from parking.models import AvailabilityWindow
+
+    frozen_now = _utc(2027, 6, 1, 12)
+    with freeze_time(frozen_now):
+        org = OrganizationFactory(tier_metric_window_days=180)
+
+        has_hours = UserFactory(organization=org)
+        no_hours = UserFactory(organization=org)
+
+        spot = ParkingSpotFactory(organization=org, owner=has_hours, status="active")
+        ws = _utc(2027, 5, 1, 0)
+        AvailabilityWindow.objects.create(
+            organization=org,
+            spot=spot,
+            time_range=DateTimeTZRange(ws, ws + timedelta(hours=24)),
+        )
+
+        result = list(get_leaderboard(org, limit=20))
+
+    pks = [u.pk for u in result if u.pk in (has_hours.pk, no_hours.pk)]
+    assert pks[0] == has_hours.pk and pks[-1] == no_hours.pk, (
+        "User with 24h listed must rank above the zero-hour user; "
+        f"order was {pks} (has_hours={has_hours.pk}, no_hours={no_hours.pk})"
+    )
