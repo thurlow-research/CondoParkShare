@@ -105,11 +105,18 @@ def assign_spot(organization, borrower, requested_start, requested_end):
 def confirm_booking(booking, borrower):
     """Confirm a tentative booking.
 
+    Raises PermissionError if *borrower* is not the booking's borrower.
     Raises ValueError if the booking is not tentative or if the 5-minute
     tentative hold has expired.  On expiry the booking is also marked
     cancelled_admin so a subsequent cleanup run does not re-process it.
     """
     from django.utils.timezone import now
+
+    # Authorize the actor (defense-in-depth + consistency with cancel_booking
+    # and release_booking, which both validate their actor argument). Only the
+    # booking's own borrower may confirm it.
+    if booking.borrower != borrower:
+        raise PermissionError("Not your booking")
 
     if booking.status != "tentative":
         raise ValueError("Booking is not tentative")
