@@ -22,12 +22,19 @@ services:
       # Nexus (front Caddy) terminates TLS and reverse-proxies to this host on :8001.
       # 8001 is free on both opus and faberix (8000 is taken on faberix by an MCP server).
       - "8001:8000"
+    volumes:
+      # audit_logs is a named volume so the JSONL recovery sink (AUDIT_RECOVERY_LOG)
+      # survives container restart/replacement. It is the only copy of audit records
+      # that failed to reach the DB — ephemeral storage would silently lose them.
+      - audit_logs:/app/logs
     networks:
       - internal   # reach db
       - external   # host-published :8001 routes via this (non-internal) network
 
 volumes:
   pgdata:
+  # Persisted sink for AUDIT_RECOVERY_LOG (JSONL). Must outlive the web container.
+  audit_logs:
 
 networks:
   internal:
