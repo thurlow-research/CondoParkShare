@@ -740,6 +740,98 @@ def test_self_registration_blocked_invite_only(rf):
     ).exists(), "No user should be created for a blocked self-registration"
 
 
+@pytest.mark.django_db
+def test_invite_single_use_invariant_happy_path(rf):
+    """
+    A valid max_uses=1 invite creates a user and increments use_count to 1.
+    Verifies the locked consume path still completes the happy path correctly.
+    """
+    from unittest.mock import patch
+
+    from accounts.views import register_invite
+
+    org = OrganizationFactory(registration_mode="invite_only")
+    admin_user = UserFactory(organization=org, status="active")
+    invite = InviteFactory(
+        organization=org,
+        issued_by=admin_user,
+        max_uses=1,
+        use_count=0,
+    )
+
+    request = rf.post(
+        f"/accounts/register/{invite.code}/",
+        {
+            "email": "resident.a@example.com",
+            "display_name": "Resident A",
+            "password": "SecurePass123!",
+            "password_confirm": "SecurePass123!",
+        },
+    )
+    request.organization = org
+    request.session = _make_django_session()
+
+    with patch("django.contrib.auth.login"):
+        response = register_invite(request, code=invite.code)
+
+    assert response.status_code == 302
+
+    from accounts.models import User
+
+    created = User.objects.get(email="resident.a@example.com", organization=org)
+    assert created.status == "pending_totp"
+
+    invite.refresh_from_db()
+    assert invite.use_count == 1
+    assert invite.consumed_by_id == created.pk
+    assert invite.consumed_at is not None
+
+
+@pytest.mark.django_db
+def test_invite_single_use_invariant_exhausted_invite_rejected(rf):
+    """
+    An already-exhausted invite (use_count >= max_uses) is rejected by the
+    locked path inside the transaction — no second account is created.
+    """
+    from accounts.views import register_invite
+
+    org = OrganizationFactory(registration_mode="invite_only")
+    admin_user = UserFactory(organization=org, status="active")
+    # Simulate an invite that has already been fully consumed
+    invite = InviteFactory(
+        organization=org,
+        issued_by=admin_user,
+        max_uses=1,
+        use_count=1,  # already at the limit
+    )
+
+    request = rf.post(
+        f"/accounts/register/{invite.code}/",
+        {
+            "email": "resident.b@example.com",
+            "display_name": "Resident B",
+            "password": "SecurePass123!",
+            "password_confirm": "SecurePass123!",
+        },
+    )
+    request.organization = org
+    request.session = _make_django_session()
+
+    response = register_invite(request, code=invite.code)
+
+    # The pre-transaction guard returns 410; the locked path also returns 410
+    assert response.status_code == 410
+
+    from accounts.models import User
+
+    assert not User.objects.filter(
+        email="resident.b@example.com", organization=org
+    ).exists(), "No account must be created when invite is exhausted"
+
+    invite.refresh_from_db()
+    assert invite.use_count == 1, "use_count must not increase beyond max_uses"
+
+
 # ---------------------------------------------------------------------------
 # User model
 # ---------------------------------------------------------------------------
