@@ -14,17 +14,19 @@ Usage: python n1_detector.py file.py [file2.py ...]
 """
 
 from __future__ import annotations
+
 import ast
 import json
-import sys
-from pathlib import Path
+import pathlib as _hos_pl
 
 # self-bootstrap: ensure this file's dir (with schema.py) is importable
 # regardless of caller cwd/PYTHONPATH (run_validators, run_panel, direct).
+import sys
 import sys as _hos_sys
-import pathlib as _hos_pl
+from pathlib import Path
+
 _hos_sys.path.insert(0, str(_hos_pl.Path(__file__).resolve().parent))
-from schema import make_result, make_finding, normalize, WEIGHTS  # noqa: E402
+from schema import WEIGHTS, make_finding, make_result, normalize  # noqa: E402
 
 # ORM method names that indicate a queryset operation (database hit)
 _ORM_METHODS = frozenset(

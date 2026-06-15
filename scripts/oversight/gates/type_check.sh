@@ -31,7 +31,11 @@ for arg in "$@"; do
 done
 
 if $CHECK_ALL; then
-    mapfile -t FILES < <(find . -name "*.py" -not -path "./.venv/*" \
+    # bash 3.2 (macOS default) has no `mapfile` — use a portable read loop.
+    FILES=()
+    while IFS= read -r _f; do
+        [[ -n "$_f" ]] && FILES+=("$_f")
+    done < <(find . -name "*.py" -not -path "./.venv/*" \
         -not -path "*/migrations/*" -not -path "./.git/*")
 fi
 

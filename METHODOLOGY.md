@@ -46,6 +46,17 @@ The spot-check on LOW-tier changes is not theater — it provides an ongoing esc
 
 The three layers compose: the author self-flags (Layer 1), independent reviewers scrutinize (Layer 2), and risk-stratified gates ensure human attention lands where it matters most (Layer 3).
 
+**How the human is routed — a flagged queue, not a scan (Jidoka in practice).** The human does not watch every change go by. The system *pulls* a human only where a decision is genuinely needed, and it does so through two explicit, durable channels:
+
+- **GitHub issues labeled [`needs-human`](https://github.com/ScottThurlow/HumanOversightSystem/labels)** — the escalations an agent cannot resolve on its own: spec gaps, design concerns, tier-floor disputes, structural-authorization and CRITICAL-step authorizations, suspension/loosening requests. The label *is* the human's inbox: "requires human attention or decision before it can proceed."
+- **Blocking PR review threads** — each panel finding posts a thread that blocks merge until a human resolves it with a *decision* (not just an acknowledgment).
+
+So the human's job is bounded and legible: **keep the `needs-human` issue queue and the open PR threads empty.** Everything not flagged flowed through the automated gates by design — that is the line running normally; a flag is the line stopping (jidoka) to pull a human to the one spot that needs them. This is why "scales human oversight" is not a slogan: the human's workload is the size of the *flagged* set, not the size of the change stream.
+
+**The return path (human → HOS).** When the human decides, the issue moves from the human's inbox back to HOS's: the human **removes `needs-human`, adds [`needs-ai`](https://github.com/ScottThurlow/HumanOversightSystem/labels)**, and writes the decision in a comment with a parseable opener — `Decision: <choice>` (optionally `Action:` / `Disposition:`). HOS (the agentic loop / the standing daily job, #131) scans `needs-ai` issues, reads the `Decision:`, acts on it, and **closes** the issue — or swaps it back to `needs-human` if it needs more input. The result is a clean two-state handoff, `needs-human` ⇄ `needs-ai` → closed, where each side's queue is exactly one label, so neither the human nor HOS has to guess whether the ball is in their court.
+
+> **⚠ Threat-model limitation — the human gate is currently *behavioral*, not *mechanical*.** Every artifact that *loosens* oversight — `human-authorization.md`, `gate-suspension.md`, `human-tier-override.md` — is "human only," and the evaluator robustly re-derives whether a *covering* artifact must exist (anti-gaming, conditions 9–10). But AI and human commits share one git identity, so the OS/git layer cannot tell an agent-authored authorization from a human one — **the agent can fabricate the very artifact it is forbidden to create.** The anti-gaming check verifies a file *exists*, not that a *human* wrote it. So the human-authority guarantee does not yet *prevent* a self-authorization. **Pilot state (#127):** the gate is now **accountable and tamper-evident** — on verifying an authorization the evaluator commits a content-hashed `human-authorization` record to the append-only `audit/oversight-log.jsonl`, pinning *what* was authorized, *when*, and the claimed authorizer into permanent history (the prior gap, per the #127 thread, was that the artifact lived untracked in `.claudetmp/` with no record at all). This makes a self-authorization *detectable and undeniable after the fact* — but it does **not** make it *impossible*: an agent running on the human's account can still write the file. **True forge-proofing is a deliberate, deferred backfill** — and crucially, signed commits do **not** solve it here, because the agent shares the human's git *and* GitHub identity, so a signature also resolves to the human. The viable forge-proof path is an **out-of-band human proof** (a hardware-key touch or a phone TOTP) verified **in CI**, where the local agent cannot reach the verifying secret — tracked as a future enhancement. This boundary is stated plainly because it bounds every claim the system makes about human authority: in the pilot the gate is *auditable*, not *unforgeable*.
+
 ---
 
 ## 3. The AIs
@@ -101,9 +112,16 @@ Risk classification (from [`AGENTS.md`](AGENTS.md)) is the dial that controls ho
 
 This is the research hypothesis in action: **risk-stratified flagging** routes 100% review to CRITICAL and spot-checks LOW — oversight that scales.
 
+**Signals vs. oversight — what the research is actually about.** HOS is a two-layer pipeline, and the distinction matters:
+
+- **Signal layer** — the validators and reviewers *measure or detect* something about the AI-generated code and emit a signal: complexity, N+1, coverage, reliability (quality signals); security, correctness, IP/provenance, prompt-fidelity, hallucination (other signals).
+- **Oversight layer** — *acts* on those signals: aggregates them into the composite score, stratifies into tiers, routes human attention, gates merges, escalates, ratchets, audits.
+
+**The research subject is the oversight layer** — how signals become *scaled human oversight*. The signal generators are inputs. Several of them — cyclomatic/cognitive complexity, N+1, function metrics, portability — are ordinary **software-quality** checks, so running them also makes the product better; that improvement is a **byproduct, a benefit — not the research claim**. The contribution is the *routing of human attention over aggregated signals*, not the individual metrics, which are cheap, replaceable proxies. The signal set is **extensible**: a project can register its own signal generators (see #80) and the oversight layer consumes them unchanged.
+
 ### How the composite score is computed
 
-Each build step runs a set of deterministic validator scripts (`scripts/oversight/run_validators.sh`). Every validator produces a score in [0.0, 1.0] and a weight. The composite is a weighted average across all validators that ran without error — validators that fail to execute are excluded rather than zeroing the score, so a misconfigured tool degrades coverage gracefully rather than suppressing the signal entirely.
+Each build step runs a set of deterministic validator scripts (`scripts/oversight/run_validators.sh`). **Eleven validator scripts produce the twelve scored dimensions** tabulated below — `complexity_metrics.py` emits two (cyclomatic and cognitive); the rest emit one each. Every dimension produces a score in [0.0, 1.0] and a weight. The composite is a weighted average across all validators that ran without error — validators that fail to execute are excluded rather than zeroing the score, so a misconfigured tool degrades coverage gracefully rather than suppressing the signal entirely.
 
 ```
 composite = Σ(score_i × weight_i) / Σ(weight_i)   [over validators without error]
@@ -118,22 +136,24 @@ The composite then maps to a tier via fixed thresholds:
 | 0.55 – 0.77 | HIGH |
 | ≥ 0.78 | CRITICAL |
 
-**The validator dimensions and their weights:**
+**The validator dimensions and their weights.** The **Signal type** column tags *what each generator detects*. The `quality` signals (cyclomatic/cognitive complexity, N+1, function metrics, portability) are ordinary software-quality measures — running them improves the product, which is a benefit, but they are signal *sources*, not the research subject. The `correctness / security / provenance / fidelity / hallucination` signals are the AI-code-specific risk axes; `oversight-loop` is a signal the oversight layer feeds back to itself (escape-rate calibration). All twelve are **inputs** the oversight layer aggregates — the aggregation-and-routing is the contribution, not any individual metric.
 
-| Dimension | Weight | What it measures |
-|---|---|---|
-| **Risk Number** (Dai et al.) | 0.18 | Per-statement nesting increment (empirically calibrated from bug data) + judgment increment (+1 per flow-break, +1 per logical operator). The heaviest weight — the only metric derived from regression on actual bug-nesting relationships. |
-| **Static analysis** | 0.15 | Bandit MEDIUM security findings. HIGH findings are a blocking gate and never reach the composite; MEDIUM findings are scored as risk signal. Optionally augmented with semgrep Django rules. |
-| **Migration risk** | 0.12 | Django migration operation classification: CRITICAL (RunPython, DeleteModel, RemoveField), HIGH (AlterField type/nullability, RenameField), MEDIUM (AddField nullable, RunSQL read-only), LOW (AddIndex, CreateModel). |
-| **Historical density** | 0.12 | Bug density per file from GitHub issues (`bug`, `security-finding`, `escaped-defect` labels) and git churn. Starts empty; accumulates signal as issues are filed — the loop that makes the scorer improve over time. |
-| **Cyclomatic complexity** | 0.08 | McCabe metric: number of independent execution paths. Measures testability — how many test cases are needed for full path coverage. |
-| **Cognitive complexity** | 0.08 | Campbell (2018) metric: how hard the code is to read and understand. Independent of cyclomatic — code can be testable but unreadable, or readable but hard to test. |
-| **N+1 query detection** | 0.08 | Heuristic for Django ORM calls inside loops — a common performance and correctness hazard in AI-generated Django code. |
-| **IP / provenance** | 0.08 | License gate (ScanCode / PyPI / npm API) + prompt clean-room verification. Orthogonal to correctness risk — surfaces legal exposure independently of code quality. |
-| **Function metrics** | 0.07 | Function length, parameter count, return path count. Proxies for review difficulty and likelihood of specification drift. |
-| **Prompt ambiguity** | 0.07 | Ambiguity score of the captured prompt artifact: question density, hedging language, TBDs, implicit assumptions. High ambiguity → higher probability the generated code diverges from intent. |
-| **Hallucination surface** | 0.06 | Version-sensitive API usage: imports and attribute accesses flagged against a known list of renamed, removed, or breaking-changed APIs across major library versions. |
-| **Portability** | 0.06 | Stack-specific portability signals (e.g. hardcoded paths, environment assumptions, platform-specific calls). |
+| Dimension | Weight | Signal type | What it measures |
+|---|---|---|---|
+| **Risk Number** (Dai et al.) | 0.18 | correctness | Per-statement nesting increment (empirically calibrated from bug data) + judgment increment (+1 per flow-break, +1 per logical operator). The heaviest weight — the only metric derived from regression on actual bug-nesting relationships. |
+| **Static analysis** | 0.15 | security | Bandit MEDIUM security findings. HIGH findings are a blocking gate and never reach the composite; MEDIUM findings are scored as risk signal. Optionally augmented with semgrep Django rules. |
+| **Migration risk** | 0.12 | correctness | Django migration operation classification: CRITICAL (RunPython, DeleteModel, RemoveField), HIGH (AlterField type/nullability, RenameField), MEDIUM (AddField nullable, RunSQL read-only), LOW (AddIndex, CreateModel). |
+| **Historical density** | 0.12 | oversight-loop | Bug density per file from GitHub issues (`bug`, `security-finding`, `escaped-defect` labels) and git churn. Starts empty; accumulates signal as issues are filed — the loop that makes the scorer improve over time. |
+| **Cyclomatic complexity** | 0.08 | quality | McCabe metric: number of independent execution paths. Measures testability — how many test cases are needed for full path coverage. |
+| **Cognitive complexity** | 0.08 | quality | Campbell (2018) metric: how hard the code is to read and understand. Independent of cyclomatic — code can be testable but unreadable, or readable but hard to test. |
+| **N+1 query detection** | 0.08 | quality | Heuristic for Django ORM calls inside loops — a common performance and correctness hazard in AI-generated Django code. |
+| **IP / provenance** | 0.08 | provenance | License gate (ScanCode / PyPI / npm API) + prompt clean-room verification. Orthogonal to correctness risk — surfaces legal exposure independently of code quality. |
+| **Function metrics** | 0.07 | quality | Function length, parameter count, return path count. Proxies for review difficulty and likelihood of specification drift. |
+| **Prompt ambiguity** | 0.07 | fidelity | Ambiguity score of the captured prompt artifact: question density, hedging language, TBDs, implicit assumptions. High ambiguity → higher probability the generated code diverges from intent. |
+| **Hallucination surface** | 0.06 | hallucination | Version-sensitive API usage: imports and attribute accesses flagged against a known list of renamed, removed, or breaking-changed APIs across major library versions. |
+| **Portability** | 0.06 | quality | Stack-specific portability signals (e.g. hardcoded paths, environment assumptions, platform-specific calls). |
+
+> **Quality signals are a benefit and a signal source — not the research subject.** Five of the twelve dimensions (`quality`) are conventional software-quality checks. They earn their place by *feeding the oversight layer* a cheap proxy for review difficulty and defect-proneness, and as a side effect they make the generated code better. The research claim does **not** rest on them: swap cyclomatic complexity for any other quality proxy and the oversight contribution — aggregate, stratify, route human attention, gate, ratchet, audit — is unchanged. This is why the signal set is **extensible** (#80): a project registers its own quality (or domain) signals and the oversight layer consumes them without modification.
 
 **The score is a floor, not a ceiling.** The deterministic floor rules (path globs, operation types) can raise the tier independently of the composite score. A migration touching `auth/**` may be forced to HIGH regardless of its composite. The composite can only raise the author's declared tier further — neither the composite nor the floor rules can lower it. The final tier is the maximum across: author declaration, floor rules, and composite score.
 
@@ -170,12 +190,13 @@ Each prompt-to-verify cycle must leave the codebase in a working state before th
 │                     accumulate failures across prompts.     │
 │                     [✅ scripts/oversight/gates/]           │
 │                                                             │
-│  4. RISK SCORING    Nine validators score the change:       │
-│                     complexity, N+1 queries, migration      │
+│  4. RISK SCORING    Twelve signal dimensions score the      │
+│                     change: complexity, N+1, migration      │
 │                     risk, IP/provenance, prompt fidelity,   │
 │                     hallucination surface, and others.      │
-│                     risk-assessor agent synthesizes a       │
-│                     composite score + inspection brief.     │
+│                     The oversight layer (risk-assessor)     │
+│                     aggregates them into a composite        │
+│                     score + inspection brief.               │
 │                     [✅ scripts/oversight/run_validators.sh]│
 │                                                             │
 │  5. INTERNAL REVIEW Review panel runs in parallel; each     │
@@ -229,6 +250,19 @@ Once the inner loop produces a complete verified working state, a transition pha
 
 **Why `panel-context.md` withholds internal findings:** if the outer panel could read the internal reviewers' conclusions, it would tend to converge on the same findings rather than produce a genuinely independent signal. The isolation is an anchoring-prevention mechanism — the same principle as blind peer review. The panel sees structural signals (risk tier, blast radius, provenance) but forms its own judgments.
 
+### Convergence by disposition — triage/accept, not fix-everything (#133)
+
+An adversarial self-review on a rich governance corpus **never says "nothing left."** Treating every `blocking` finding as fix-or-file has two costs: **churn-induced regressions** (editing a dense governance file to fix a minor finding re-enters it into the changed set, the reviewer surfaces the *next* subtlety, and the edit itself can introduce a worse problem — fixing can cost more than the finding) and **non-termination** (each fix spawns new findings). So convergence is defined by **disposition, not repair**: every finding is routed to exactly one of —
+
+| Disposition | When |
+|---|---|
+| **fix** | clear, safe, low-churn fix AND the finding is non-trivial |
+| **filed** | real design/foundational issue → tracked as an issue, no churn now |
+| **residual (accept)** | minor in practice AND fix-churn-risk > finding-severity → record + move on |
+| **noise** | false positive / non-reproducing |
+
+**Stopping rule:** once dispositioned (any of the four), a finding is deduped in the convergence ledger and never re-gates. **Convergence = "every finding dispositioned," not "every finding fixed."** **Anti-gaming guardrail:** `residual` accepts a *real* finding as not-worth-fixing — a **human** (or an explicit confidence/severity threshold) decides residual-vs-fix; the AI must **not** silently downgrade a real finding to `residual` to unblock itself (the agent cannot mark its own homework done). The ledger is `scripts/framework/validate_agents.sh --record FILES CLASS DISPOSITION`. This is the same triage discipline the consumer-facing `docs/HANDLING-FINDINGS.md` teaches (fix / accept-with-rationale / scanner-fp) and that Faberix R1 applies to validator debt (#167).
+
 ### Outer loop (runs once per PR)
 
 ```
@@ -246,9 +280,13 @@ Once the inner loop produces a complete verified working state, a transition pha
                      HIGH/CRITICAL. Findings posted as PR review
                      threads. Runs locally via authenticated CLIs.     [🔧 run_panel.sh]
 
-15. HUMAN GATE       Each PR thread requires a human decision, not
-                     just acknowledgment. Mandatory review at
-                     HIGH/CRITICAL.                                     [✅ gate / 🔧 panel]
+15. HUMAN GATE       Risk-stratified, NOT every PR (Jidoka): the
+                     human is pulled in only where needed —
+                     HIGH/CRITICAL get mandatory human review;
+                     LOW/MEDIUM auto-pass (SQC spot-check audit).
+                     WHERE a panel raises a review thread, that
+                     thread needs a human decision to resolve —
+                     not just an acknowledgment.                       [✅ gate / 🔧 panel]
 
 16. MERGE → AUDIT    Resolved trail committed to
                      audit/oversight-log.jsonl (append-only).          [✅]
@@ -299,6 +337,10 @@ See [`AGENTS.md` → Prompts-as-Artifact Discipline](AGENTS.md) for the authorit
 
 ## 8. The Tooling
 
+> **Two tool families — only one ships to consumers.** (1) The **per-step oversight pipeline** — gates, `run_validators.sh`, `run_second_review.sh`, `run_panel.sh`, the validators under `scripts/oversight/`, the agents under `.claude/agents/` — is what a consumer project runs on every build step, and `hos_install.sh` installs it. As of v0.3.0 this includes both the oversight layer and the **canonical 16-agent base development team** (pm-agent, architect, technical-design, coder, 8 reviewers, unit-test, system-test, ops-designer, ux-designer); consumers no longer hand-roll the base team. (2) The **framework-development harness** under `scripts/framework/` — `run_framework_validation.sh`, `validate_self.sh`, `validate_agents.sh`, `validate_docs.sh`, `validate_spec_compliance.sh`, `check_agents_static.sh`, `cut_release.sh` — validates and releases the *framework itself* and is run **from the HOS source repo**, by framework maintainers, when changing HOS's own agents/docs. It is **NOT installed into consumer projects** (and the installer does not copy it). A consumer never runs `run_framework_validation.sh`; their equivalent is the per-step pipeline above. (HOS#139)
+>
+> **Why a consumer doesn't need it — the customization contract.** Agent files are **layered**: **CORE** (HOS-owned generic behavior, validated at release), **PACK:\<name\>** (HOS-owned stack depth from `packs/<name>/`, selected via `--pack <name>` at install and recorded as `PACK=` in `config.sh`), and **PROJECT** (consumer-owned project-specific additions). CORE and PACK regions are HOS-owned and taken from HOS on every upgrade (hard-stop on drift unless `--squash`). PROJECT regions are consumer-owned and never overwritten. Consumers also configure via the **declared manifest**: the placeholders in `scripts/framework/placeholders.manifest` → `config.sh` (`PROJECT_NAME`, `SPEC_FILE`, `DESIGN_PACK_DIR`, `ADR_FILE`), plus the one sanctioned structural override (`dep-mapper`, intended to be stack-specific). Because a consumer's CORE/PACK regions are always "the HOS-validated set," there is nothing for them to *re*-validate — which is why the framework-validation harness stays at the source. A project that needs to edit CORE or PACK agent *logic* has forked — and a fork clones the HOS source and owns its own validation. The framework's core guarantee — *"this pipeline was validated"* — holds precisely because CORE/PACK customization is gated by HOS.
+
 | Tool | Purpose | Status |
 |---|---|---|
 | **`bootstrap/setup_clis.sh`** | Repo-independent **machine** bootstrap: installs Node 22 + `claude`/`codex`/`agy`/`gh`, drives browser sign-in, smoke-tests each (`install`/`auth`/`smoke`/`doctor`). Installs ONLY oversight tooling — never project libraries. | ✅ |
@@ -325,7 +367,7 @@ See [`AGENTS.md` → Prompts-as-Artifact Discipline](AGENTS.md) for the authorit
 | **`scripts/framework/validate_agents.sh`** | AI-powered semantic review of agent definitions and docs. agy lens: consistency and completeness (loops, dead ends, cross-file mismatches). codex lens: adversarial gap-finding (scope-creep vectors, human-gate bypasses, missing exit conditions). Project-agnostic via `config.sh`. | ✅ |
 | **`scripts/framework/validate_docs.sh`** | AI-powered documentation coverage validator. Catches the omission class of doc bug: agent file says X and Y, doc says only X. Reads `doc-patterns.md` (known bug patterns) and `decisions.md` (verification criteria). | ✅ |
 | **`scripts/framework/validate_spec_compliance.sh`** | Governance requirements compliance checker. Verifies the pipeline satisfies METHODOLOGY.md and AGENTS.md: cross-vendor independence, risk-tiered thresholds, human gates, model tier assignments, loop exit conditions, mandatory self-flagging behaviors. Also checks `decisions.md` verification criteria. | ✅ |
-| **`scripts/framework/run_framework_validation.sh`** | Top-level runner for all 4 framework validation phases. The single command to run before committing any framework change. | ✅ |
+| **`scripts/framework/run_framework_validation.sh`** | Top-level runner for all 4 framework validation phases. The single command a **framework maintainer** runs **from the HOS source repo** before committing a change to the **framework itself** (HOS's own agents/docs). **Not installed into consumer projects** — see the two-families note above. | ✅ |
 | **`ops-designer` agent** | Observability authority (optional). Invoked at project start (after `architect` ADR) to produce `docs/ops/TELEMETRY-SPEC.md`. Architect validates. Reactive during build when `ops-reviewer` escalates gaps. N/A for projects without background jobs, external integrations, or multi-service architecture. | ✅ |
 | **`ops-reviewer` agent** | Telemetry spec enforcer (optional). Inner-loop reviewer, parallel with security/privacy. Enforces `TELEMETRY-SPEC.md` per PR. Escalates spec gaps to `ops-designer`; 2-cycle loop exit to architect. | ✅ |
 | **`reliability-reviewer` agent** | Resilience reviewer (optional — projects with external connections). Inner-loop reviewer. Reviews timeouts on outbound connections, retry with backoff, graceful degradation, no unbounded waits. No spec file required — best practices are universal. N/A for projects without DB, HTTP, or queue calls. | ✅ |
