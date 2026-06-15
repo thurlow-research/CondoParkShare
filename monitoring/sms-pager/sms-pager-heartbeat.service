@@ -1,0 +1,50 @@
+[Unit]
+Description=Monitrix SMS pager — daily synthetic heartbeat (one-shot)
+Documentation=https://github.com/sthurlow/CondoParkShare/blob/main/docs/runbooks/MONITRIX-SMS-PAGER-SETUP.md
+After=network.target sms-pager.service
+# The heartbeat uses the relay, so the relay should be up first.
+# If the relay is down the heartbeat will fail, which is itself a signal.
+Requires=sms-pager.service
+# No [Install] section: this unit is activated by sms-pager-heartbeat.timer,
+# not enabled directly.  `systemctl enable` on the timer is the right handle.
+
+[Service]
+Type=oneshot
+User=monitrix-pager
+Group=monitrix-pager
+
+EnvironmentFile=/etc/monitrix/sms-pager.env
+
+ExecStart=/usr/local/lib/monitrix/sms-pager/heartbeat.sh
+
+# ── systemd hardening ─────────────────────────────────────────────────────────
+NoNewPrivileges=yes
+ProtectSystem=strict
+# No ReadWritePaths= needed: the heartbeat only POSTs over the loopback; it
+# writes nothing to disk.  ProtectSystem=strict covers all filesystem paths.
+PrivateTmp=yes
+ProtectHome=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+PrivateDevices=yes
+ProtectHostname=yes
+ProtectClock=yes
+ProtectKernelLogs=yes
+UMask=0077
+InaccessiblePaths=/etc/grafana /etc/ssh /root /home
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sms-pager-heartbeat

@@ -1,0 +1,64 @@
+[Unit]
+Description=Monitrix SMS pager relay (Grafana webhook -> Twilio)
+Documentation=https://github.com/sthurlow/CondoParkShare/blob/main/docs/runbooks/MONITRIX-SMS-PAGER-SETUP.md
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=monitrix-pager
+Group=monitrix-pager
+
+# Load relay secrets from the protected env file.  This file carries only
+# Twilio credentials + the webhook shared secret — no SMTP credentials.
+# SMTP belongs in grafana.ini [smtp] (the relay never sends email).
+# /etc/monitrix/sms-pager.env must be chmod 600 owned by monitrix-pager.
+EnvironmentFile=/etc/monitrix/sms-pager.env
+
+ExecStart=/usr/local/lib/monitrix/sms-pager/venv/bin/python3 \
+    /usr/local/lib/monitrix/sms-pager/sms_relay.py
+
+# Restart on failure; the email fallback contact point covers the gap while
+# the relay is restarting.
+Restart=on-failure
+RestartSec=5s
+
+# ── systemd hardening ─────────────────────────────────────────────────────────
+NoNewPrivileges=yes
+# strict: filesystem is read-only except for explicitly allowed paths
+ProtectSystem=strict
+# No ReadWritePaths= needed: the relay writes nothing to disk.  All output
+# goes to stdout/stderr (journald).  ProtectSystem=strict covers everything.
+# relay writes nothing to disk; PrivateTmp gives an isolated /tmp if needed
+PrivateTmp=yes
+ProtectHome=yes
+# prevent the process from calling kernel modules or changing system time
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+# only loopback + inet needed to reach Twilio API and bind the webhook port
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# deny everything except the narrow set the relay actually calls
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+PrivateDevices=yes
+ProtectHostname=yes
+ProtectClock=yes
+ProtectKernelLogs=yes
+UMask=0077
+InaccessiblePaths=/etc/grafana /etc/ssh /root /home
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sms-pager
+
+[Install]
+WantedBy=multi-user.target

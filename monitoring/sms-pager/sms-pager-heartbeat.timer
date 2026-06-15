@@ -1,0 +1,21 @@
+[Unit]
+Description=Daily synthetic SMS heartbeat — fires sms-pager-heartbeat.service
+Documentation=https://github.com/sthurlow/CondoParkShare/blob/main/docs/runbooks/MONITRIX-SMS-PAGER-SETUP.md
+
+[Timer]
+# Explicit Unit= avoids any ambiguity if the unit file is renamed or if
+# systemd's implicit name-matching behaviour changes across versions.
+Unit=sms-pager-heartbeat.service
+# Fire once per day at 09:00 local time.
+# The exact time is not critical; 09:00 puts the daily check in business hours
+# so silence is quickly noticed.
+OnCalendar=*-*-* 09:00:00
+# RandomizedDelaySec is intentionally duplicated from the service comment so
+# both the timer definition and the runbook are self-contained references.
+# Randomise startup up to 5 minutes to avoid thundering-herd on a shared host.
+RandomizedDelaySec=300
+# If monitrix was offline at 09:00, fire as soon as it comes back up.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
