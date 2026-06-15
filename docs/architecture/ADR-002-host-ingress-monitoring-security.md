@@ -27,13 +27,15 @@ The recommended MVP path below **rides the existing node_exporter via its textfi
 
 ## Ratification amendments (2026-06-14, human decisions)
 
-The following human decisions during ratification override the noted parts of this ADR. All three **reduce surface area**; the core architecture (decisions A, C, E) is unchanged.
+The following human decisions during ratification refine or override the noted parts of this ADR. The core architecture (decisions A, C, E) is unchanged.
 
 1. **IPv4 only — drop all IPv6.** monitrix does **not** scrape over IPv6 (router static-IPv6 limitations); IPv4 was deliberately chosen. Remove every IPv6 element from this design: no `MONITRIX_SCRAPE_SRC_V6`, no `/64`, no `/128`. Decision B's fallback source is **`192.168.1.7/32` only**. (Moot under the recommended textfile ride regardless.)
 
 2. **PR #96 closed (not retained).** Its inbound `:9108` allow is obsolete under the textfile ride (decision A), and the Phase-2 Loki *outbound* rule is not yet scoped — keeping an unmerged PR for a future need adds surface area for no current benefit. **#96 is closed; the Phase-2 Loki firewall rule is re-filed, scoped to Phase 2, when the log-shipper is designed.** This **supersedes Decision D's "retain `scripts/setup_firewall.sh`"** — the script is not carried forward; it is re-created at Phase 2. The MVP-relevant `.env` additions (`WEB_BIND_IP`, `NODE_EXPORTER_TEXTFILE_DIR`) are introduced by the MVP build work, not by #96.
 
 3. **Pager specified: SMS, hosted on monitrix.** Decision F.8's "*an* independent pager" is now fixed as **SMS-based, on monitrix**. No solution exists today; a separate monitrix-side design/work item covers it (cloud-SMS vs self-hosted-GSM direction TBD). Alerts A2/A6 route to it.
+
+4. **Web ingress `:8001` (Decision C) refined per CPS#95.** The interface-bind is **dual-stack** — IPv4 `${WEB_BIND_IP}` + the `.1` IPv6 **ULA** `${WEB_BIND_ULA}` ("ULA for web access"). **Source policy:** direct `:8001` from `192.168.1.0/24` + its ULA (debugging); **public *and* `192.168.2.0/24` reach the app via Nexus only** (Nexus is dual-homed `192.168.1.5`/`192.168.2.5` + ULAs, and proxies to the app host from its `.1` interface, so its traffic is covered by the `.1` allow). Inter-subnet enforcement is **trusted to the router** (gateways at `.X.1`); the Nexus-`/32` `DOCKER-USER` tighten is **dropped, not deferred** — direct `/24` debug access is intended. Caveat (carried into the security record): interface-bind confines reachability to the private LAN *segment* — a destination/interface control, **not** a source-IP filter; the router owns the `.1`/`.2` boundary (accepted residual).
 
 ---
 
