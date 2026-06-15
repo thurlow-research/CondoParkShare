@@ -12,7 +12,7 @@
 | **Unattended boot** | TPM2 keyslot sealed to the VM's **vTPM** (`systemd-cryptenroll --tpm2-device=auto`) — auto-unlocks on *this* VM with no passphrase |
 | **Copied-VHDX-proof** | the TPM2 key is bound to the vTPM, which does **not** travel with a copied VHDX — so a stolen/exported disk won't unlock |
 | **Recoverable** | a **passphrase keyslot** (set at `luksFormat`) is the offline recovery key |
-| **Mounted at boot (not first-use)** | hard fstab mount (no `nofail`/`automount`) so the volume is present before Docker starts |
+| **Mounted before the app reads it** | `x-systemd.automount` + `RequiresMountsFor=` on `docker.service` — Docker triggers the mount before it starts (a plain boot-mount doesn't reliably fire for a late-unlocking LUKS device; see below) |
 
 **Threat model:** this protects the *offline* disk (copied/exported VHDX, stolen storage). It does **not** protect a running, compromised VM (the volume is decrypted while live) — that's access control + the `age` backup layer. Pairs with: host BitLocker on `nexus` (CPS#104), `age` backup encryption (CPS#91).
 
@@ -55,18 +55,23 @@ LUKS_UUID=$(sudo blkid -s UUID -o value /dev/sdb)
 [ -n "$LUKS_UUID" ] && echo "cps-data UUID=$LUKS_UUID none tpm2-device=auto,luks,discard" | sudo tee -a /etc/crypttab || echo "STOP: empty UUID — is /dev/sdb LUKS-formatted?"
 grep '^cps-data' /etc/crypttab                    # eyeball: UUID= has a REAL value, exactly ONE line
 
-# 6. fstab — MOUNT AT BOOT (no nofail, no automount); device-timeout bounds the wait
-echo '/dev/mapper/cps-data  /mnt/cps-data  ext4  defaults,x-systemd.device-timeout=30s  0  2' | sudo tee -a /etc/fstab
+# 6. fstab — x-systemd.automount (the PROVEN mechanism). A plain/hard fstab
+#    boot-mount AND an explicit .mount unit both fail to fire for a TPM2-LUKS
+#    device (it unlocks too late for local-fs.target; the mount is skipped and
+#    never retried). automount defers the mount to first access — same as the
+#    NAS shares. For Docker, RequiresMountsFor= (follow-up) triggers it before
+#    dockerd starts, so the data is present before the app reads it.
+echo '/dev/mapper/cps-data  /mnt/cps-data  ext4  nofail,x-systemd.automount  0  2' | sudo tee -a /etc/fstab
 grep cps-data /etc/fstab                          # exactly ONE line
 sudo systemctl daemon-reload
 
-# 6b. sanity-mount now (before trusting the reboot)
-sudo mount /mnt/cps-data && findmnt /mnt/cps-data && ls /mnt/cps-data   # expect ext4 + lost+found
+# 6b. trigger + verify now
+ls /mnt/cps-data && findmnt /mnt/cps-data         # expect: lost+found, + an ext4 line under an autofs line
 
-# 7. REBOOT — the real test (it should mount automatically, no ls/mount needed)
+# 7. REBOOT — confirm the automount re-establishes and mounts on access
 sudo reboot
 #    after it returns:
-findmnt /mnt/cps-data                             # expect: /dev/mapper/cps-data ext4 — mounted at boot
+ls /mnt/cps-data ; findmnt /mnt/cps-data          # ls triggers it; expect ext4 mounted
 sudo cryptsetup status cps-data                   # active (LUKS2)
 ```
 
@@ -76,9 +81,11 @@ sudo cryptsetup status cps-data                   # active (LUKS2)
 3. `systemd-cryptenroll /dev/sdb` shows **both** `0 password` and `1 tpm2` (the enroll can silently no-op).
 4. `crypttab`/`fstab` each have **exactly one** correct line (a blank `UUID=` or a duplicated line silently breaks the boot path; `nofail` masks it).
 
-### boot-mount vs automount
-- **opus/prod uses a hard mount** (`defaults`, no `nofail`/`automount`) so the encrypted volume is deterministically present during boot, before Docker. Trade-off: if the TPM unlock ever fails, boot drops to **emergency mode** — unlock with the passphrase at the console, then investigate.
-- faberix was first set up with `x-systemd.automount` (mounts on first access) during debugging; for **config parity** it should be switched to the same hard-mount line.
+### Mounting: automount, not boot-mount (lesson learned)
+A TPM2-unlocked LUKS device becomes available **late** in boot (after `local-fs.target`), so a plain fstab mount — *even without `nofail`* — and an explicit systemd `.mount` unit both **silently fail to fire**: the mount is attempted before the device exists and is never retried, and `nofail` then masks it. Validated on **both** hosts — the disk *unlocks* (`cryptsetup status` → `active`) but never *mounts* at boot.
+- **Use `x-systemd.automount`** (step 6) — it defers the mount to first access, the same mechanism that reliably mounts the NAS shares. `findmnt` shows `autofs` until something touches the path, then `ext4`.
+- **For the Docker data-root this is equivalent to boot-mount:** once `/var/lib/docker` lives here, `docker.service` gets `RequiresMountsFor=/mnt/cps-data` (follow-up) → Docker **triggers** the automount before it starts, so the encrypted data is guaranteed present before the app reads it — which is the real requirement. The boot-vs-first-use distinction becomes moot.
+- Both hosts (opus + faberix) use the **same** automount line — config parity.
 
 ---
 
