@@ -42,12 +42,15 @@ The app is built **multi-tenant from day one** (so other buildings can be added 
 
 ### Deployment
 - **Host:** Docker Compose on `opus` (Ubuntu VM, Hyper-V guest on `nexus`, KumaJyo homelab).
-- **Services:** `web` (gunicorn), `db` (Postgres, **named volume**, not host-published), `caddy` (reverse proxy + TLS); `restart: unless-stopped`; VM auto-start + Docker-at-boot.
-- **TLS/naming:** canonical `parkshare.kumajyo.com` via `*.kumajyo.com` wildcard (Caddy DNS-01). HOA alias (e.g. `parkshare.bellevuetowers.org`) = CNAME → canonical; Caddy auto-issues via HTTP-01 (needs :80). Both in `ALLOWED_HOSTS`. Canonical name stays constant so a later host move is a DNS repoint.
-- **Exposure:** CNAME → DDNS → router forward; app/db internal-only; VLAN isolation; tight UFW.
+- **Compose services:** `web` (gunicorn, publishes `:8001` interface-bound to the host's private-LAN IP) and `db` (Postgres, **named volume**, not host-published). `restart: unless-stopped`; VM auto-start + Docker-at-boot.
+- **TLS / ingress — Nexus front-proxy (external; not a compose service):** TLS terminates on `nexus` (Windows host, dual-homed to both LAN segments), which runs Caddy as a Windows host process. Nexus holds the TLS certificates and reverse-proxies public HTTPS traffic to `opus:8001`. There is **no `caddy` service in `docker-compose.yml`**. The authoritative design for this topology — including the `:8001` interface-bind, UFW posture, and the accepted residuals — is **ADR-002** (`docs/architecture/ADR-002-host-ingress-monitoring-security.md`).
+- **TLS/naming:** canonical `parkshare.kumajyo.com` via `*.kumajyo.com` wildcard (Caddy DNS-01, managed on Nexus). HOA alias (e.g. `parkshare.bellevuetowers.org`) = CNAME → canonical. Both in `ALLOWED_HOSTS`. Canonical name stays constant so a later host move is a DNS repoint.
+- **Exposure:** CNAME → DDNS → router forward → Nexus Caddy → `opus:8001`; `db` internal-only; VLAN isolation; UFW posture governed by ADR-002.
 - **At-rest encryption:** encrypted host volume/DB storage (LUKS on `opus`).
 - **Backups:** nightly `pg_dump` → NAS. Encryption keys backed up separately/securely.
-- **Portability:** `.env` config + named-volume Postgres + canonical CNAME ⇒ moving to a hosted VPS later (Hetzner EU recommended given the Sweden principal/GDPR) = stand up compose, restore `pg_dump`, repoint canonical CNAME.
+- **Portability:** `.env` config + named-volume Postgres + canonical CNAME covers the app-layer move (stand up compose, restore `pg_dump`, repoint canonical CNAME). A full host move also requires recreating the Nexus reverse-proxy configuration and certificates on the new host; a tested DR procedure for this step is **deferred post-pilot** (out of MVP scope). An alternate compose profile with a self-contained `caddy` service may be defined at that time to support VPS deployments without an external Windows front-proxy.
+
+*Amended 2026-06-14: accepted the Nexus external front-proxy topology (no compose `caddy`); reconciled §2 component list to match reality; cross-referenced ADR-002; noted that the host-portability / DR procedure for the reverse-proxy layer is deferred post-pilot. Closes CPS#47.*
 
 ## 3. Roles
 - **Resident** — books spots; may also own/list.
