@@ -18,6 +18,7 @@ env = environ.Env(
     DEBUG=(bool, False),
     ALLOWED_HOSTS=(list, []),
     EMAIL_BACKEND=(str, "anymail.backends.brevo.EmailBackend"),
+    DJANGO_ENV=(str, "unknown"),
 )
 
 # Read .env if it exists (dev convenience only — production uses real env vars)
@@ -252,6 +253,14 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 # XFrameOptionsMiddleware and X_FRAME_OPTIONS are omitted — redundant with frame-ancestors.
 
 # ---------------------------------------------------------------------------
+# Deployment environment identifier
+# ---------------------------------------------------------------------------
+# Used by audit_healthcheck to label Prometheus metrics.  Must match the
+# label regex ^[a-zA-Z0-9._-]{1,64}$ — audit_healthcheck validates at startup.
+# opus = prod, faberix = ppe.  Default "unknown" triggers a startup warning.
+ENVIRONMENT = env("DJANGO_ENV")
+
+# ---------------------------------------------------------------------------
 # Audit-recovery logging
 # ---------------------------------------------------------------------------
 # AUDIT_RECOVERY_LOG — path for the JSONL recovery sink (one JSON object per
@@ -262,17 +271,30 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 # survives container restart/replacement.  If you run outside Docker, override
 # this variable to a path on durable storage.
 #
-# AUDIT_LIVENESS_STATUS — future: heartbeat file written by the audit pipeline
-# monitor (not yet implemented). Reserve the path inside the same volume so
-# operators can locate both files in one place.
-# AUDIT_LIVENESS_STATUS = env(
-#     "AUDIT_LIVENESS_STATUS",
-#     default=str(BASE_DIR / "logs" / "audit-liveness.status"),
-# )
-
 AUDIT_RECOVERY_LOG = env(
     "AUDIT_RECOVERY_LOG",
     default=str(BASE_DIR / "logs" / "audit-recovery.jsonl"),
+)
+
+# AUDIT_LIVENESS_STATUS — one-line JSON appended by audit_healthcheck on each
+# probe run.  Must be on the audit_logs named volume (same dir as the recovery
+# log) so it survives container restarts.
+AUDIT_LIVENESS_STATUS = env(
+    "AUDIT_LIVENESS_STATUS",
+    default=str(BASE_DIR / "logs" / "audit-liveness.jsonl"),
+)
+
+# How often the host cron runs audit_healthcheck (seconds).  Informational only
+# for the command — the actual scheduler is a host cron or systemd timer.
+AUDIT_LIVENESS_INTERVAL_SECONDS = env.int("AUDIT_LIVENESS_INTERVAL_SECONDS", default=60)
+
+# node_exporter textfile-collector directory.  audit_healthcheck writes
+# parkshare_audit.prom here atomically so node_exporter picks up the gauges
+# on its next scrape without reading a partial file.
+# Must match the --collector.textfile.directory flag on node_exporter.
+NODE_EXPORTER_TEXTFILE_DIR = env(
+    "NODE_EXPORTER_TEXTFILE_DIR",
+    default="/var/lib/prometheus/node-exporter/",
 )
 
 # Create the parent directory so FileHandler(delay=True) can open the file on

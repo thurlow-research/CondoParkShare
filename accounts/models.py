@@ -147,6 +147,24 @@ class EmailOTP(models.Model):
         return f"EmailOTP user={self.user_id} consumed={self.consumed}"
 
 
+class AuditProbe(models.Model):
+    """
+    Synthetic probe rows written by audit_healthcheck to verify the DB write
+    path without polluting AdminAuditLog with non-real operator actions.
+
+    The command writes a row, reads it back, then deletes rows older than a
+    short TTL.  Only created_at is stored — no PII, no FKs, no operator data.
+    """
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"AuditProbe at {self.created_at}"
+
+
 class AdminAuditLog(models.Model):
     organization = models.ForeignKey(
         "parking.Organization",
