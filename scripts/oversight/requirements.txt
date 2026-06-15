@@ -10,15 +10,26 @@
 #                         https://github.com/aboutcode-org/ai-gen-code-search
 #                         Set IP_REGURGITATION_ENABLED=1 after installing + building index
 
+# Directly imported by sign_off.sh and signoff_gate.py to parse the step
+# manifest. PyYAML also arrives transitively via bandit/detect-secrets, but the
+# gate must not depend on that luck — if a transitive provider drops it the
+# oversight gate fails silently. Declare what we import. (CPS#73/#74, HOS#48/#49)
+PyYAML>=6.0
+
 radon>=5.1
 bandit>=1.7
 semgrep>=1.50
 detect-secrets>=1.4
 pip-audit>=2.6
-flake8>=7.0
+# Formatters are version-PINNED to a major series: black's "stable style" changes
+# by calendar-year major (24.x → 25.x → 26.x), so a floating `black>=24.0` let the
+# venv install black 26 and reformat code the repo formatted with an older black —
+# the lint gate then failed on pre-existing, untouched lines the author never wrote.
+# Pin the major so the gate is deterministic across machines and over time. (#103)
+flake8>=7.0,<8.0
 flake8-bugbear>=24.0
-black>=24.0
-isort>=5.13
+black>=24.0,<25.0
+isort>=5.13,<6.0
 mypy>=1.8
 
 # Testing

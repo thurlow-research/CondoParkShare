@@ -1,0 +1,128 @@
+# Dropped-line allowlist for agent: code-reviewer
+# HOS v0.1.0 -> v0.3.6 migration. Old flat agent split into
+# CORE (generic) + PACK:django + PROJECT (CPS-unique).
+# Each entry below is an old-flat line whose substance now lives in one of the
+# new layered regions (reworded below the auto-match threshold). FALSE POSITIVES.
+# Genuine CPS losses are NOT allowlisted — they are reported for lift into PROJECT.
+
+- line: "- Is the GiST exclusion constraint present in the migration — not just asserted in the model?"
+  covered_by: "PROJECT"
+  reason: "PROJECT 'Booking-gate correctness' overlap gate requires the tstzrange
+           GiST exclusion constraint to live in the migration, not only Meta.constraints
+           ('it must live in the migration (not only Meta.constraints)')."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Does the availability computation correctly subtract booked ranges from availability windows?"
+  covered_by: "PROJECT"
+  reason: "PROJECT 'Availability computation' requires availability = owner listing
+           windows minus existing bookings, and checks the range subtraction at the
+           boundaries — same substance, reworded."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Is the one-active-booking gate enforced correctly — at what point does a booking count as \"active\"?"
+  covered_by: "PROJECT"
+  reason: "PROJECT 'Booking-gate correctness' one-active-booking gate covers this:
+           'at most one active booking per borrower. Pin down when a booking counts
+           as active... a gate that checks the wrong lifecycle state lets a borrower hold two.'"
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "**Multi-tenancy:**"
+  covered_by: "PACK:django"
+  reason: "Section header; the multi-tenancy checks it introduced are reworded into
+           PACK:django 'Custom managers and scoped querysets' and PROJECT 'Tenancy shape'.
+           The header carries no standalone instruction."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Does every ORM query that touches tenant data go through the scoped manager?"
+  covered_by: "PACK:django"
+  reason: "PACK:django 'Custom managers and scoped querysets' requires a scoped
+           Manager subclass be the default manager and used consistently, and flags
+           '.all() bypassing a scoped manager' — same substance."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Is there any queryset that could return cross-tenant rows?"
+  covered_by: "PACK:django"
+  reason: "PACK:django 'ORM queryset correctness' flags unguarded .get(pk=...) /
+           .filter(pk=...) on tenant-scoped models ('returns any row in the table')
+           and manager-bypass — the cross-tenant-rows concern, reworded."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Are all Django admin views tenant-scoped where required?"
+  covered_by: "PACK:django"
+  reason: "PACK:django 'Custom managers and scoped querysets' requires
+           ModelAdmin.get_queryset(request) be overridden on every admin class that
+           exposes scoped models because Django Admin bypasses custom managers."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- `select_for_update()` around booking creation to serialize concurrent requests."
+  covered_by: "PACK:django"
+  reason: "PACK:django 'Transaction boundaries and select_for_update' requires
+           select_for_update() inside atomic() for concurrent-claim operations; PROJECT
+           overlap gate further requires it paired with the constraint for booking creation."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Signals used correctly (no circular imports, no blocking I/O in signal handlers)."
+  covered_by: "PACK:django"
+  reason: "PACK:django 'Signals' covers both named hazards: no synchronous blocking I/O
+           in handlers, and no module-level circular import of the sender model."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- HTMX responses return partials when `HX-Request` header is present."
+  covered_by: "PACK:django"
+  reason: "PACK:django 'HTMX partial responses' requires branching on the HX-Request
+           header and warns that returning a full-page response to an HTMX request
+           replaces the swap target with a full document — same substance."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- No premature abstractions (base classes invented for one use case)."
+  covered_by: "CORE"
+  reason: "CORE 'Generic quality floor': 'No premature abstraction — three similar
+           lines beat an over-engineered base class invented for one caller.'"
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- No hex colors in templates — only `var(--token)` references or the provided CSS classes."
+  covered_by: "PROJECT"
+  reason: "PROJECT 'Design-token check (note for ui-reviewer)': templates must reference
+           var(--token) / design-pack component classes, never hard-coded hex — same rule."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Security vulnerabilities (XSS, CSRF, session fixation, etc.) — that is security-reviewer."
+  covered_by: "CORE"
+  reason: "CORE 'What you do NOT cover (lane discipline)' names the security lane
+           (auth bypass, injection, broken authz, OWASP) routed to security-reviewer."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Privacy/GDPR compliance — that is privacy-reviewer."
+  covered_by: "CORE"
+  reason: "CORE 'What you do NOT cover (lane discipline)' names the privacy lane
+           (PII, encryption, erasure, retention) routed to privacy-reviewer."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "For each issue found:"
+  covered_by: "CORE"
+  reason: "CORE 'Review output format' uses the equivalent lead-in 'For each finding:'
+           introducing the same per-finding fields."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- **What is wrong** — specific, not generic (\"this queryset has no organization scope\" not \"add better scoping\")"
+  covered_by: "CORE"
+  reason: "CORE 'Review output format' field 'What is wrong — specific, not generic
+           (\"this query has no tenant scope at L84\", not \"improve scoping\")' — same
+           instruction with a reworded example."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"

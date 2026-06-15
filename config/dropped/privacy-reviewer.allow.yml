@@ -1,0 +1,69 @@
+- line: "## PII inventory for this application"
+  covered_by: "PROJECT"
+  reason: "Section header for the PII inventory; the inventory itself is preserved
+           as the 'CPS PII inventory' table in the PROJECT region with the full
+           in-scope field list."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Phone field is field-encrypted using the library/approach in the ADR — not just stored in volume-encrypted storage."
+  covered_by: "PROJECT"
+  reason: "Preserved in the PROJECT PII-inventory table (Phone = 'Field-encrypted
+           (reversible)') and the note that phone requires field-level encryption,
+           not disk-encryption alone."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Phone is marked optional in the form and model; not required for registration."
+  covered_by: "PROJECT"
+  reason: "Phone is marked optional in the PROJECT PII-inventory table; the generic
+           'spec-optional fields are genuinely optional in the form/model' check is
+           reworded into CORE data-minimization."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Registration flow includes a plain-language notice of what data is collected and why."
+  covered_by: "CORE"
+  reason: "Reworded into the CORE consent/lawful-basis check: a plain-language
+           notice of what is collected and why is shown before account creation."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- No PII in Django template context variable names that appear in error pages."
+  covered_by: "CORE"
+  reason: "Reworded into the CORE log-hygiene check: 'No PII in logs, print
+           statements, or error-page context.'"
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- `DEBUG = False` in production disables the Django error page (which can expose request data)."
+  covered_by: "PACK:django"
+  reason: "Django-specific error-page/request-data exposure is covered in the
+           django pack logging section (django.request META on 5xx, and ADMINS
+           tracebacks emailed on 500 when DEBUG = False)."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "If no blocking issues: \"Privacy review approved. All GDPR obligations in scope are met.\""
+  covered_by: "CORE"
+  reason: "Reworded into the CORE output-format instruction 'If no blocking issues,
+           state approval explicitly'; the exact approval string was genericized."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "--body \"**Category:** [Encryption/DataMinimization/Erasure/Consent/AuditLogging/LogHygiene]\\n**GDPR obligation:** [what was violated]\\n**Resolution:** [what was changed]\\n**Watch for:** [what future changes to this area should re-check]\" \\"
+  covered_by: "CORE"
+  reason: "Reworded into the CORE 'gh issue create' body template (Category /
+           Obligation / Resolution / Watch for); 'GDPR obligation' was genericized
+           to 'Obligation' and the category list updated."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "This records GDPR findings even when resolved pre-merge — used by the historical risk assessor and for compliance audit trail."
+  covered_by: "CORE"
+  reason: "The actionable behavior (file a resolved-in-review privacy-finding issue
+           before approving) is preserved in CORE; the dropped text is explanatory
+           rationale about the historical risk assessor and audit trail, not a
+           CPS-specific privacy obligation."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"

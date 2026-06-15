@@ -1,0 +1,4 @@
+name = "condoparkshare"
+description = "CondoParkShare product-domain depth (build order, booking gates, earned-horizon metric, design-pack components, multi-tenant/TOTP/PII rules, deploy specifics) for the HOS base agents. Project-specific — not reusable across projects; layers on top of the django pack. DRAFT pending HOS guidance (issue #275): consumer-pack support + sourcing location are unconfirmed."
+version = "0.1.0"
+requires = ["django"]

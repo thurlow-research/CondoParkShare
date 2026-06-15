@@ -1,0 +1,164 @@
+# Dropped-line allowlist for a11y-reviewer
+# All 26 UNACCOUNTED lines from the v0.1.0 before-snapshot are generic
+# accessibility-review content that was reworded into the v0.3.6 CORE region
+# (or the django pack / PROJECT region). No CPS-specific accessibility facts
+# were lost — the CPS token-contrast facts, named status components, view-by-view
+# audit list, 375px hotspots, TOTP/.mono readability, and the reduced-motion-tied-
+# to-tokens.css guard all survive in the PROJECT region (see the COVERED-REWORDED
+# matches in the coverage report).
+
+- line: "You are the accessibility reviewer for CondoParkShare. You audit the application for WCAG AA compliance and enforce the design pack's explicit quality floor requirements. Accessibility is non-negotiable per the design brief — treat every blocking finding as a build gate."
+  covered_by: "CORE"
+  reason: "Role identity and the 'non-negotiable, treat every blocking finding as a build gate' framing are reworded verbatim in the CORE intro; the CPS-specific quality-floor obligation is preserved in the PROJECT region."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "## Audit approach"
+  covered_by: "CORE"
+  reason: "Structural heading; the static-vs-live audit approach it introduced is now the CORE 'What you review' section (Static checks / Live checks)."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "**If the dev server is running**, use Chrome DevTools MCP tools:"
+  covered_by: "CORE"
+  reason: "CORE 'Live checks (run when a dev server is available; use Lighthouse / DevTools-style auditing where present)' preserves the conditional; the Chrome DevTools MCP tool naming is intentionally generalized."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "3. Manually tab through the page to verify keyboard navigation order and focus visibility."
+  covered_by: "CORE"
+  reason: "CORE live-check 'Tab order is logical and every interactive element is reachable; the focus ring is visible on every focused element and not overridden' covers manual tab-through and focus visibility."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "4. Check each status badge and availability state for non-color signals."
+  covered_by: "CORE"
+  reason: "CORE 'Status/state signals carry text or an icon — never color alone' covers this; the CPS-named badges (.badge-available/.badge-booked, lot grid) are enumerated in the PROJECT region."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "**Static template analysis (always run, regardless of server):**"
+  covered_by: "CORE"
+  reason: "Reworded as CORE 'Static checks (always run, regardless of whether a server is available)'."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Grep all templates for `<img` without `alt=`"
+  covered_by: "CORE"
+  reason: "CORE static check 'Images have alt (informative images describe; decorative images use alt=\"\")' preserves the check; the specific grep technique is an implementation detail, not a lost requirement."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Grep for `role=` misuse and missing `aria-label` on icon-only buttons"
+  covered_by: "CORE"
+  reason: "CORE static check 'Icon-only controls have an accessible name (aria-label or equivalent)' preserves this; django pack adds the {% icon %}-template enforcement detail."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Grep for color CSS inline styles (e.g. `style=\"color:`) — should be zero; tokens only"
+  covered_by: "PROJECT"
+  reason: "PROJECT 'No inline style=\"color:…\" anywhere — tokens only. An inline color bypass is a blocking finding' preserves this verbatim (also echoed in CORE's inline-color-only static check)."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Grep for `tabindex=\"-1\"` on interactive elements (removes them from tab order)"
+  covered_by: "CORE"
+  reason: "CORE static check 'No tabindex traps that remove interactive elements from a logical tab order' covers the tabindex=-1 trap; grep is just the technique."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "## What you check (checklist)"
+  covered_by: "CORE"
+  reason: "Structural heading; the checklist it introduced is now the CORE 'What you review' section."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "**Keyboard navigation:**"
+  covered_by: "CORE"
+  reason: "Sub-heading; keyboard-operability checks are consolidated into the CORE live-check on tab order and focus visibility."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- HTMX-loaded partials do not trap keyboard focus; after a partial update, focus moves to the updated content or stays logical."
+  covered_by: "PACK:django"
+  reason: "The django pack 'HTMX partial swaps and focus management' section covers post-swap focus movement in depth (autofocus / hx-on::after-swap / trigger retains focus)."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Modal dialogs (if any) trap focus inside while open and restore it on close."
+  covered_by: "PACK:django"
+  reason: "The django pack states 'Tab-trapped modals or dialogs loaded via HTMX must implement the modal focus-trap pattern (focus on first focusable element inside; Tab/Shift-Tab cycle within; Escape closes and restores focus to the trigger).'"
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Any text smaller than 18px (or 14px bold) must meet 4.5:1 ratio."
+  covered_by: "CORE"
+  reason: "CORE 'Contrast meets AA (4.5:1 for normal text, 3:1 for large text / UI components)' expresses the same WCAG rule; the 18px/14px-bold thresholds are the standard WCAG large-text boundary, not a CPS-specific fact."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- HTMX swap animations (if any) respect the motion preference."
+  covered_by: "PROJECT"
+  reason: "PROJECT reduced-motion guard explicitly includes 'any HTMX swap animation' and CORE adds 'Animations respect prefers-reduced-motion'."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "**Mobile responsiveness:**"
+  covered_by: "CORE"
+  reason: "Sub-heading; small-viewport/no-horizontal-scroll/touch-target checks are in the CORE live-check line and elaborated for CPS views in the PROJECT region."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "**Forms:**"
+  covered_by: "PACK:django"
+  reason: "Sub-heading; Django form a11y mechanics (label association, error association) are the django pack's form-rendering and error-message sections."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Required fields are marked with `aria-required=\"true\"` or `required` attribute plus a visible indicator."
+  covered_by: "CORE"
+  reason: "Generic WCAG required-field marking, allowlisted under the CORE/django labels-and-forms obligation; not a CPS-specific fact (so not liftable into PROJECT). FLAGGED as an ambiguity for human review — see triage report."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "**Images and icons:**"
+  covered_by: "CORE"
+  reason: "Sub-heading; the image-alt and icon-accessible-name checks under it are CORE static checks."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "## Review output format"
+  covered_by: "CORE"
+  reason: "Reworded as the CORE 'How you report' section."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "For each issue:"
+  covered_by: "CORE"
+  reason: "Reworded as CORE 'For each finding give:'."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- **View / template file**"
+  covered_by: "CORE"
+  reason: "CORE per-finding fields begin with 'view/file'."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- **WCAG criterion** (e.g. 1.4.3 Contrast, 2.1.1 Keyboard, 1.3.1 Info and Relationships)"
+  covered_by: "CORE"
+  reason: "CORE per-finding fields include 'WCAG criterion (e.g. 1.4.3, 2.1.1, 1.3.1)' — same criteria, abbreviated."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- **What must change** — specific HTML/CSS fix"
+  covered_by: "CORE"
+  reason: "CORE per-finding fields include 'the specific fix'."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "If no blocking issues: \"Accessibility review approved. WCAG AA requirements met.\""
+  covered_by: "CORE"
+  reason: "CORE 'State approval explicitly when clean' preserves the explicit-approval obligation; the exact approval string is not a load-bearing CPS fact."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"

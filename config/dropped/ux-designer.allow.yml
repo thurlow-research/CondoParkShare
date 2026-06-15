@@ -1,0 +1,225 @@
+# ux-designer dropped-line allowlist (HOS v0.1.0 -> v0.3.6 migration)
+# Triaged by ai-triage; PENDING HUMAN REVIEW before commit.
+# Every CPS brand/design specific (color firewall, medallion gradient, Spline
+# data-only, named component classes, design-pack paths, readiness doc, feature
+# inventory, brand-change escalation) is preserved in the PROJECT region or the
+# COVERED-REWORDED set; none landed in UNACCOUNTED. All 36 UNACCOUNTED lines
+# below are generic process / template-scaffolding that CORE or PACK:django now
+# expresses in reworded form (false positives), except the one generic
+# bookkeeping mechanic noted at the bottom.
+
+- line: "Always read these completely before acting:"
+  covered_by: "CORE"
+  reason: "Generic read-inputs-first preamble; CORE now instructs reading the full spec, confirmed-requirements doc, and design-pack files first before the audit."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "**Inputs (read all before acting):**"
+  covered_by: "CORE"
+  reason: "Generic inputs-header; CORE's initial-audit region enumerates the same inputs (spec, confirmed-requirements, design-pack files) to read first."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- All four design pack files"
+  covered_by: "CORE"
+  reason: "Generic reference to the design-pack file set; CORE states the agent may Read/Write/Edit the design-pack files and reads them first, and PROJECT enumerates the concrete CPS files."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Resident search results — spot card states: available, booked, listing-not-yet-available"
+  covered_by: "PROJECT"
+  reason: "The CPS spot-card states are preserved verbatim in the PROJECT feature inventory ('Spot card — available, booked, listing-not-yet-available'); only the 'resident search results' framing was reworded into the generic feature walk."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "```markdown"
+  covered_by: "dropped"
+  reason: "Trivial markdown code-fence delimiter from the old readiness-doc template literal; no semantic content."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "*Completed: [date]. Design pack is cleared for technical-design to reference.*"
+  covered_by: "CORE"
+  reason: "Readiness-doc template literal; CORE now describes the readiness document and its 'ready' declaration that clears architect/technical-design to proceed."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "## Coverage summary"
+  covered_by: "CORE"
+  reason: "Readiness-doc section header; CORE specifies the readiness doc summarizes coverage per feature area."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "| Feature area | States documented | Gaps found | Gaps filled | Escalated |"
+  covered_by: "CORE"
+  reason: "Readiness-doc coverage-table structure; CORE prescribes a per-feature-area coverage summary, leaving the exact table columns to the author."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "For each additive or clarifying change applied:"
+  covered_by: "CORE"
+  reason: "Readiness-doc subsection; CORE requires the readiness doc to record the additions made (token/class/copy rule, file changed, spec feature)."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "List any structural changes presented to the human, with their answers once received."
+  covered_by: "CORE"
+  reason: "Readiness-doc subsection; CORE requires the readiness doc to capture any open structural questions and their resolution."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "If none: \"None — all gaps were additive or clarifying.\""
+  covered_by: "dropped"
+  reason: "Generic readiness-doc template literal (the empty-case wording); the structural-questions section it qualifies is covered by CORE."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "The design pack as of this date covers all user-visible states in SPEC-1."
+  covered_by: "CORE"
+  reason: "Readiness 'ready' declaration; CORE instructs declaring the pack 'ready' only once all additive gaps are filled and all structural questions are answered."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "4. Do not proceed to the \"ready\" declaration until all additive gaps are filled and any structural questions are answered by the human."
+  covered_by: "CORE"
+  reason: "Preserved near-verbatim in CORE: 'Declare the pack \"ready\" only once all additive gaps are filled and all structural questions are answered.'"
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "## Who invokes you and why"
+  covered_by: "CORE"
+  reason: "Invoker-table section header; CORE names the invoking agents (coder, ui-reviewer, a11y-reviewer, technical-design) and the reactive gap-fill relationship narratively."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "| Invoker | Reason | Your output |"
+  covered_by: "CORE"
+  reason: "Invoker-table header; the invoker/reason/output relationships are described narratively in CORE's reactive gap-fill region."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "| `a11y-reviewer` | Existing token fails contrast; new token needed for accessible pattern | Extend tokens.css with accessible alternative; confirm new token passes WCAG AA |"
+  covered_by: "PACK:django"
+  reason: "Reactive a11y-reviewer gap-fill with the AA contrast requirement and tokens.css extension is covered by CORE's reactive region and the django pack's design-token/contrast-check guidance."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "| `pm-agent` | Product decision has UX implications | Provide design recommendation; flag if it requires a structural design change |"
+  covered_by: "CORE"
+  reason: "pm-agent consultation/escalation for product-decision-with-UX-implications is covered by CORE's escalation region (pm-agent for flow-behavior/out-of-scope questions; human for structural)."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "**Additive changes are your normal operating mode.** The design pack is a living specification — gaps are expected as new features are built. Fill them."
+  covered_by: "CORE"
+  reason: "Preserved in CORE: 'Additive is your normal operating mode.' within the additive-classification definition."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "const l1=lum('2e9e63'),l2=lum('ffffff');"
+  covered_by: "PACK:django"
+  reason: "Example invocation of the WCAG-contrast node one-liner; the django pack carries the identical formula with HEX1/HEX2 placeholders, and the meadow hex (#2e9e63) it substitutes is preserved in the PROJECT brand-tokens region."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "4. **Document in DESIGN.md:** Add one row to the relevant table with: token name, hex value, and use note."
+  covered_by: "PACK:django"
+  reason: "The django pack requires documenting a new token in the pack's design reference; CORE also requires recording token name / file changed / reason."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "4. **Rule in DESIGN.md:** Add a one-paragraph rule in the relevant component section covering: when to use, when not to use, and the required markup."
+  covered_by: "CORE"
+  reason: "Preserved in CORE: 'document the rule (when to use / when not / required markup)' for adding a component or copy pattern."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "5. **Notify the invoker** with the class name and the rendered structure so they can implement immediately."
+  covered_by: "PACK:django"
+  reason: "Covered by the django pack's downstream-notification region (notify with the exact CSS class name and expected wrapper markup) and CORE's 'notify the invoker'."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "## Adding copy patterns"
+  covered_by: "CORE"
+  reason: "Section header; CORE's reactive region covers adding a copy pattern (follow existing voice conventions; document the rule; notify the invoker)."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "When a new type of message, label, or UI string needs a voice/tone rule:"
+  covered_by: "CORE"
+  reason: "Copy-pattern trigger; CORE covers adding copy patterns following the pack's voice conventions, and PROJECT carries the CPS voice/tone brief."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "3. Provide a concrete example of the correct pattern alongside a counter-example."
+  covered_by: "CORE"
+  reason: "Generic copy-pattern documentation technique (example + counter-example); subsumed by CORE's 'document the rule' guidance for new patterns. Not a CPS brand specific."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "## Consulting pm-agent"
+  covered_by: "CORE"
+  reason: "Section header; CORE's escalation region covers consulting pm-agent for out-of-scope and flow-behavior questions."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "Consult pm-agent (do not wait for them to initiate) when:"
+  covered_by: "CORE"
+  reason: "CORE directs the agent to escalate out-of-scope additions and flow-behavior questions to pm-agent first (proactively), not to wait."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- An additive design decision changes how a user flow is presented (e.g., adding a confirmation step, changing a two-state badge to three states)."
+  covered_by: "CORE"
+  reason: "Covered by CORE: consult pm-agent if the addition affects a user-visible flow; and CORE's §2a structural-signature list forces 'structural' on a new flow step / state-enum change."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- You are uncertain whether a new pattern is in or out of the pilot scope."
+  covered_by: "CORE"
+  reason: "Covered by CORE's escalation region: out-of-scope addition -> pm-agent first; if confirmed out of scope, file a spec-gap issue and escalate to human."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- A structural change is needed because the product behavior the spec describes cannot be expressed with the current design vocabulary."
+  covered_by: "CORE"
+  reason: "Covered by CORE's structural classification and escalation (a needed pattern the current vocabulary cannot express is structural -> human; a shared architectural dependency -> architect)."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "Phrase your question as a product question, not a design question: \"The spec requires X. I plan to express it as Y — does that match the intended behavior?\" Give pm-agent a specific yes/no question, not an open-ended design discussion."
+  covered_by: "CORE"
+  reason: "Generic pm-agent consultation technique (ask a bounded product question); subsumed by CORE's escalation/consultation guidance. Not a CPS brand specific."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "When escalating: state the classification (structural), what the invoking agent requested, why you cannot resolve it, and what specific question the human needs to answer."
+  covered_by: "CORE"
+  reason: "Covered by CORE's sign-off/escalation region (record via the Status: ESCALATED path and §2a authorization artifact, stating classification, request, and the specific question for the human)."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "## After extending the design pack"
+  covered_by: "PACK:django"
+  reason: "Section header; the django pack's 'Notifying downstream reviewers after a Django pack extension' region plus CORE's round-trip notification artifact cover the post-extension steps."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "3. If you added anything that affects existing templates: notify `ui-reviewer` that a design pack extension occurred so they can re-check conformance."
+  covered_by: "PACK:django"
+  reason: "Preserved in the django pack: notify ui-reviewer when adding or modifying any component class that existing templates reference (so they re-check conformance)."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "4. Keep a one-line change note in `DESIGN.md` at the bottom under `## Change log` (add the section if absent): date, what was added, and who requested it."
+  covered_by: "dropped"
+  reason: "Generic DESIGN.md change-log bookkeeping mechanic (date / what / who); not reproduced verbatim in any new region. It is a generic process instruction, not a CPS brand/design specific, and CORE/PACK already require documenting each addition in the pack's design reference. Flagged below for human confirmation that dropping the explicit change-log section is intended."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Do not write Django application code, templates, migrations, or views — that is the coder's role."
+  covered_by: "CORE"
+  reason: "Covered by CORE's lane/boundary discipline ('do not write application code or templates (-> coder)') and the django pack's stack framing."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"

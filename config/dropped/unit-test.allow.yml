@@ -1,0 +1,125 @@
+# Dropped-line allowlist for agent: unit-test
+# Triage of UNACCOUNTED lines from the v0.1.0 -> v0.3.6 migration no-loss gate.
+# Each line below is from the BEFORE-snapshot flat agent and is semantically
+# preserved in the installed layered agent (CORE / PACK:django / PROJECT), or
+# is a generic convention example whose domain content is preserved in PROJECT.
+
+- line: "## What to test (priority order)"
+  covered_by: "CORE"
+  reason: "Generic 'what to test' section heading; reworded in CORE as '## What to test (generic priority)' with the same intent."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "**1. Booking gate logic (highest value — three distinct gates, each with invariants)**"
+  covered_by: "PROJECT"
+  reason: "Booking-gate priority heading; preserved in PROJECT as 'Booking gates — test all three at the boundary' with all three gates enumerated."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- `horizon = baseline + floor(elapsed / ratio)` with correct clamping to `max`."
+  covered_by: "PROJECT"
+  reason: "Earned-horizon formula and clamp; preserved verbatim in PROJECT earned-horizon section ('horizon = baseline + floor(elapsed / ratio), clamped to max. Test the clamp')."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- The entry contains actor, target, organization, action, timestamp — no fields missing."
+  covered_by: "PROJECT"
+  reason: "Audit-log field assertion; preserved in PROJECT admin audit log section ('carries actor, target, organization, action, timestamp — assert no field is missing')."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "## Test structure conventions"
+  covered_by: "PACK:django"
+  reason: "Test-file organization heading; reworded in PACK:django as '### Recommended test file layout' with the test_<domain>.py convention."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "test_booking_gates.py"
+  covered_by: "PACK:django"
+  reason: "Convention example filename; PACK:django supplies the 'test_<domain>.py — one file per major domain invariant' convention and the booking-gate domain itself is fully preserved in PROJECT."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "test_horizon_metric.py"
+  covered_by: "PACK:django"
+  reason: "Convention example filename; PACK:django supplies the test_<domain>.py convention and the earned-horizon metric domain is fully preserved in PROJECT."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "test_availability.py"
+  covered_by: "PACK:django"
+  reason: "Convention example filename; PACK:django supplies the test_<domain>.py convention and the availability-computation domain is fully preserved in PROJECT."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "test_auth.py"
+  covered_by: "PACK:django"
+  reason: "Convention example filename; PACK:django supplies the test_<domain>.py convention and the authentication-flows domain (TOTP/recovery/invite/registration) is fully preserved in PROJECT."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "test_erasure.py"
+  covered_by: "PACK:django"
+  reason: "Convention example filename; PACK:django supplies the test_<domain>.py convention and the right-to-erasure (delete_user_pii) domain is fully preserved in PROJECT."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "test_audit_log.py"
+  covered_by: "PACK:django"
+  reason: "Convention example filename; PACK:django supplies the test_<domain>.py convention and the admin audit-log domain is fully preserved in PROJECT."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Use `factory_boy` or Django's `baker` for test data — no copy-pasted fixtures."
+  covered_by: "PACK:django"
+  reason: "Factory-based test data idiom; preserved in PACK:django '### Factory-based test data' ('Use factory_boy or model_bakery (baker)... Never copy-paste fixture dicts')."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Each test method: one assertion focus. Name clearly: `test_booking_rejected_when_horizon_exceeded`."
+  covered_by: "PACK:django"
+  reason: "One-focus-per-test naming convention; preserved in PACK:django layout section ('Each test method: one behavioral focus, named after what it pins') and CORE ('One behavioral focus per test')."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "4. Re-run both tools to confirm improvement."
+  covered_by: "CORE"
+  reason: "Iteration-loop re-measure step; preserved in CORE 'Iteration with the coder' ('Re-measure both. Repeat until both targets are met')."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "gh issue create \\"
+  covered_by: "CORE"
+  reason: "test-resistance issue creation; CORE replaces the literal gh command with 'file a test-resistance issue recording the step, current coverage and mutant score vs. targets...'."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "--body \"**Step:** [build step]\\n**Coverage:** X% (target: 80%)\\n**Mutant score:** Y% (target: 75%)\\n**Uncoverable areas:** [specific lines/functions]\\n**What was tried:** [approaches per round]\\n**Surviving mutants not excluded:** [list if any]\" \\"
+  covered_by: "CORE"
+  reason: "Body content of the test-resistance issue; the same required fields (step, coverage, mutant score, uncoverable lines/mutants, what was tried each round, surviving non-equivalent mutants) are enumerated in CORE's escalation paragraph."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "--label \"test-resistance\""
+  covered_by: "CORE"
+  reason: "Issue label; preserved in CORE as the named 'test-resistance issue'."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "1: [what tests were added — coverage/score delta]"
+  covered_by: "CORE"
+  reason: "Loop temp-state per-round delta entry; preserved in CORE 'Loop temp-state' ('recording iteration, step, coverage, mutant score, per-round deltas, and remaining gaps')."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- **Untestable behavior** (a function or method that cannot be meaningfully tested because its behavior is ambiguous or has no observable output) → technical-design agent with a specific description of what is untestable and why."
+  covered_by: "CORE"
+  reason: "Untestable-behavior escalation; preserved in CORE Escalation section ('Untestable behavior (a function whose behavior is ambiguous or has no observable output) → technical-design with a specific description of what is untestable and why')."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- **Coder dispute** (coder refuses to refactor to make code testable) → architect."
+  covered_by: "CORE"
+  reason: "Coder-dispute escalation; preserved in CORE Escalation section ('Coder refuses to make the code testable... → architect')."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"

@@ -25,6 +25,7 @@ Config (env or scripts/framework/config.sh):
 
 Stdlib only — no third-party imports, so no venv dependency.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -100,9 +101,7 @@ def parse_suspensions(text: str) -> list[Suspension]:
         flags = m.group("flags") or ""
         pinned = "[pinned]" in flags
         rb = re.search(r"review-by:\s*(\d{4}-\d{2}-\d{2})", flags)
-        out.append(
-            Suspension(m.group("gate"), pinned, rb.group(1) if rb else None, line)
-        )
+        out.append(Suspension(m.group("gate"), pinned, rb.group(1) if rb else None, line))
     return out
 
 
@@ -188,9 +187,7 @@ def run_gate(script: str) -> bool:
     if not Path(script).exists():
         return False
     try:
-        r = subprocess.run(
-            ["bash", script, "--all"], capture_output=True, text=True, timeout=300
-        )
+        r = subprocess.run(["bash", script, "--all"], capture_output=True, text=True, timeout=300)
         return r.returncode == 0
     except (subprocess.TimeoutExpired, OSError):
         return False

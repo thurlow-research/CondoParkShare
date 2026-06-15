@@ -33,6 +33,7 @@ never silently fall behind.
 
 Exit 0 = gate passes. Exit 1 = gate fails. Exit 2 = usage / environment error.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -45,22 +46,45 @@ try:
 except ImportError:  # pragma: no cover - surfaced as an env error
     # Auto-detect the oversight venv before giving up.  On macOS Homebrew Python
     # 3.14+ and Ubuntu 24.04+ (PEP 668), the system Python has no user packages,
-    # so bare `python3 signoff_gate.py` fails.  The oversight venv always has
-    # PyYAML; os.execv replaces this process with the venv Python running the
-    # same script — argv, cwd, and exit code all propagate naturally.
+    # so bare `python3 signoff_gate.py` fails.  The oversight venv has PyYAML
+    # (a declared dependency in requirements.txt); os.execv replaces this process
+    # with the venv Python running the same script — argv, cwd, and exit code all
+    # propagate naturally.
     import os
 
-    _venv_py = Path(__file__).parent / ".venv" / "bin" / "python3"
-    if _venv_py.exists():
+    _venv_py = (Path(__file__).parent / ".venv" / "bin" / "python3").resolve()
+    # Loop guard: only re-exec if we are NOT already running as the venv Python.
+    # If we are (venv exists but somehow lacks PyYAML — a partial install), a
+    # naive `if _venv_py.exists(): execv` would re-exec into ourselves forever.
+    # Fall through to the explicit error instead of spinning.
+    _already_venv = False
+    try:
+        _already_venv = _venv_py.exists() and _venv_py.samefile(sys.executable)
+    except OSError:
+        _already_venv = False
+    if _venv_py.exists() and not _already_venv:
         os.execv(str(_venv_py), [str(_venv_py)] + sys.argv)
     sys.stderr.write(
-        "signoff_gate: PyYAML is required.\n"
-        "  Install:     pip install pyyaml\n"
-        f"  Or run via:  {_venv_py} {__file__}\n"
+        "signoff_gate: PyYAML is required but missing from the oversight venv.\n"
+        "  Repair the venv:  ./scripts/oversight/ensure_venv.sh\n"
+        "  Or install:       pip install pyyaml\n"
+        f"  Or run via:       {_venv_py} {__file__}\n"
     )
     sys.exit(2)
 
 SIGNOFFS_DIR = "signoffs"
+# Oversight-generated, append-only artifacts. The system writes these *about* a
+# step — sign-off stamps, the committed audit trail, ephemeral agent state — and
+# often does so AFTER reviewers have signed (suspension-census, second-review,
+# and the orchestrator all append to audit/oversight-log.jsonl). They are not
+# source changes, so a stamp need not be newer than them. Excluding them is what
+# stops the oversight tooling's own bookkeeping from perpetually invalidating the
+# sign-offs it records. (HOS#112)
+OVERSIGHT_ARTIFACT_PREFIXES = (
+    f"{SIGNOFFS_DIR}/",
+    "audit/",
+    ".claudetmp/",
+)
 # A stamp records a *satisfied* role: APPROVED, CONDITIONAL (human verifies the
 # conditional item before merge), or NOT_APPLICABLE (role explicitly out of
 # scope for the change — the stamp-level equivalent of the N/A register entry,
@@ -152,11 +176,12 @@ def all_tracked_files(root: Path) -> list[str]:
 
 
 def dirty_non_signoff_paths(root: Path) -> list[str]:
-    """Working-tree changes (modified/staged/untracked) outside signoffs/.
+    """Working-tree changes (modified/staged/untracked) outside oversight artifacts.
 
     An unsigned working-tree change means files exist that no stamp can be newer
-    than, so the gate must fail. Stamp edits under signoffs/ are exempt — they
-    are the act of signing.
+    than, so the gate must fail. Oversight-generated artifacts (sign-off stamps,
+    the audit trail, ephemeral agent state) are exempt — signing and the system's
+    own bookkeeping are not source changes. (HOS#112)
     """
     out = run_git(["status", "--porcelain"], root)
     dirty: list[str] = []
@@ -167,14 +192,20 @@ def dirty_non_signoff_paths(root: Path) -> list[str]:
         # Handle rename "old -> new"
         if " -> " in path:
             path = path.split(" -> ", 1)[1]
-        if path.startswith(f"{SIGNOFFS_DIR}/"):
+        if is_oversight_artifact(path):
             continue
         dirty.append(path)
     return dirty
 
 
-def is_signoff_path(path: str) -> bool:
-    return path.startswith(f"{SIGNOFFS_DIR}/")
+def is_oversight_artifact(path: str) -> bool:
+    """True for oversight-generated artifacts excluded from the changed-file set.
+
+    Covers sign-off stamps plus the audit trail and ephemeral agent state — all
+    written by the oversight tooling itself, not source the stamps must beat.
+    (HOS#112)
+    """
+    return path.startswith(OVERSIGHT_ARTIFACT_PREFIXES)
 
 
 def main() -> int:
@@ -241,7 +272,7 @@ def main() -> int:
         files = all_tracked_files(root)
     else:
         files = changed_files(root, args.base)
-    files = [f for f in files if not is_signoff_path(f)]
+    files = [f for f in files if not is_oversight_artifact(f)]
 
     newest_file = ""
     newest_file_time = 0
@@ -255,10 +286,7 @@ def main() -> int:
 
     if files:
         if newest_file_time:
-            log(
-                f"newest changed file: {newest_file} "
-                f"@ commit {newest_file_time}"
-            )
+            log(f"newest changed file: {newest_file} " f"@ commit {newest_file_time}")
         else:
             log("changed files have no committed history yet.")
     else:
@@ -282,8 +310,7 @@ def main() -> int:
         if status not in VALID_STATUSES:
             log(f"  ✗ {agent_label}: invalid status {status!r}")
             failures.append(
-                f"{agent_label}: status must be one of "
-                f"{sorted(VALID_STATUSES)}, got {status!r}"
+                f"{agent_label}: status must be one of " f"{sorted(VALID_STATUSES)}, got {status!r}"
             )
             continue
 
@@ -298,10 +325,7 @@ def main() -> int:
 
         if stamp_time < newest_file_time:
             delta = newest_file_time - stamp_time
-            log(
-                f"  ✗ {agent_label}: STALE — signed {delta}s before "
-                f"{newest_file} changed"
-            )
+            log(f"  ✗ {agent_label}: STALE — signed {delta}s before " f"{newest_file} changed")
             failures.append(
                 f"{agent_label}: stamp ({stamp_time}) is older than changed file "
                 f"{newest_file} ({newest_file_time}) — re-sign after changes"

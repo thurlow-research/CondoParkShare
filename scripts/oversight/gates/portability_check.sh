@@ -39,7 +39,11 @@ for arg in "$@"; do
 done
 
 if $CHECK_ALL || [[ ${#FILES[@]} -eq 0 ]]; then
-    mapfile -t FILES < <(find . -type f \
+    # bash 3.2 (macOS default) has no `mapfile` — use a portable read loop.
+    FILES=()
+    while IFS= read -r _f; do
+        [[ -n "$_f" ]] && FILES+=("$_f")
+    done < <(find . -type f \
         \( -name '*.py' -o -name '*.sh' -o -name '*.toml' -o -name '*.cfg' -o -name '*.ini' \) \
         -not -path "./.venv/*" -not -path "./.git/*" -not -path "./node_modules/*")
 fi

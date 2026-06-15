@@ -47,13 +47,31 @@ while [[ $# -gt 0 ]]; do
             ;;
         --diff)
             DIFF_REF="$2"; shift 2
-            mapfile -t FILES < <(git diff --name-only "$DIFF_REF" 2>/dev/null | grep '\.py$' || true)
+            # bash 3.2 (macOS default) has no `mapfile` — use a portable read loop.
+            FILES=()
+            while IFS= read -r _f; do
+                [[ -n "$_f" ]] && FILES+=("$_f")
+            done < <(git diff --name-only "$DIFF_REF" 2>/dev/null | grep '\.py$' || true)
             ;;
         *)
             FILES+=("$1"); shift
             ;;
     esac
 done
+
+# Defensive: if the caller passed every path as ONE whitespace/newline-joined
+# argument (a common quoting footgun, e.g. `run_validators.sh "$FILES"` or a
+# shell that doesn't word-split), the list would otherwise collapse to a single
+# non-existent "file", every per-file validator would no-op, and the run would
+# fail-close to a FALSE CRITICAL. Detect that exact shape and re-split.
+if [[ ${#FILES[@]} -eq 1 && "${FILES[0]}" =~ [[:space:]] && ! -e "${FILES[0]}" ]]; then
+    echo "run_validators: received one whitespace-joined argument — re-splitting into separate paths" >&2
+    _joined="${FILES[0]}"
+    FILES=()
+    for _f in $_joined; do
+        [[ -n "$_f" ]] && FILES+=("$_f")
+    done
+fi
 
 # Filter to existing Python files
 PY_FILES=()
