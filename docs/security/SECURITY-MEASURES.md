@@ -48,6 +48,23 @@ The backups carry PII (`pg_dump`: names, emails, units, phones; audit-recovery J
 
 ---
 
+## 2a. Live data at rest — disk encryption (CPS#104)
+
+The PII the app *serves* (the live Postgres DB + `audit_logs` volume) is protected at rest in **two layers**:
+
+| Layer | Measure | Protects against |
+|---|---|---|
+| **Host (owned hardware)** | **BitLocker on `nexus`** — encrypts the whole VHDX at rest, transparent to the VM (CPS#104) | physical theft of nexus's disk |
+| **Guest (defense-in-depth)** | **LUKS2 on a dedicated data disk** (`/dev/sdb` → `/mnt/cps-data`), **TPM2 auto-unlock** sealed to the VM's vTPM, holding `/var/lib/docker` | a **copied/exported VHDX** (the vTPM key doesn't travel with the copy) — and the off-owned-hardware case where host encryption isn't ours to trust |
+
+**Key model:** a **passphrase keyslot = offline recovery key** (password manager / offline, never on the VM); a **TPM2 keyslot = unattended auto-unlock** (boots with no passphrase, but a copied disk won't unlock). Prod (`opus`) uses a **hard boot-mount** (no `nofail`/automount) so the volume is present before Docker; if the TPM unlock ever fails, boot drops to emergency mode and the passphrase recovers it. PPE (`faberix`) mirrors the config (no real PII).
+
+**Why this protects what BitLocker can't:** BitLocker covers offline-disk theft, but a VHDX **copied or exported while nexus is running** is decrypted at the host layer — the guest LUKS keeps that copy encrypted (TPM-bound, doesn't travel). It's also the mechanism that becomes *mandatory* if CPS ever moves off owned hardware (SPEC-1 §2). Threat-model caveat: like all at-rest encryption, this protects the **offline** disk, not a running compromised VM.
+
+**Full procedure + recovery:** `docs/runbooks/ENCRYPTED-DATA-DISK-SETUP.md`.
+
+---
+
 ## 3. Host ingress + audit monitoring (ADR-002)
 
 **Measures:**
