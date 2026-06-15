@@ -9,7 +9,8 @@ Apply every item below **in addition to** CORE and the django pack. Do not dupli
 Every booking-creation path enforces three gates in order; each gets boundary tests (the value that just passes and the value that just fails):
 
 - **Horizon gate** — a booking whose start exceeds `now + earned_horizon` is rejected; one within is accepted. Test at the boundary (start exactly at the edge).
-- **One-active-booking gate** — a resident with an active booking cannot create another. Distinguish the three states: *active* = created but not ended; *ended* = past end time (frees the resident); *cancelled* = frees the slot.
+- **One-active-booking gate** — a resident with an in-flight booking cannot create another. "In-flight" = status `tentative`, `confirmed`, or `active` (SPEC-1 §4 — all three block a second booking and count as booked for availability, not only `active`). Test: a resident with a `tentative` or `confirmed` booking is also rejected, not just `active`. Distinguish terminal states: *ended* = past end time (frees the resident); *cancelled* = frees the slot.
+- **Duration cap** — a booking longer than `max_booking_hours` (168h) is rejected; one at exactly 168h is accepted (boundary).
 - **Overlap gate** — concurrent bookings for the same spot at overlapping times are rejected. Assert the DB-level `tstzrange` GiST exclusion constraint directly (attempt overlapping inserts, expect `IntegrityError`); pair with the `select_for_update()` path so the failure is deterministic, not a race.
 
 ---

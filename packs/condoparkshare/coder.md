@@ -36,8 +36,11 @@ Each step depends on the prior; implement in sequence:
 Every booking-creation path must enforce, in order:
 
 - **Horizon gate** — a borrower may only book within their *earned* booking horizon (see metric below).
-- **One-active-booking gate** — a borrower may hold at most one active booking at a time.
+- **One-active-booking gate** — a borrower may hold at most one in-flight booking (status `tentative`, `confirmed`, or `active` — not only `active`) at a time.
 - **Overlap gate** — no two bookings may overlap the same spot. The `tstzrange` GiST exclusion constraint is the final arbiter; pair it with `select_for_update()` (per the django pack) so the failure is deterministic, not a race.
+- **Duration cap** — reject bookings longer than `max_booking_hours` (SPEC-1 §4/§10: 168h / 7 days); validate at the form layer.
+
+A booking counts as **booked** for availability/search whenever its status is `tentative`, `confirmed`, or `active` (SPEC-1 §4) — availability computation and the one-active query must use all three, not just `active`. The `Organization` model carries a `payer_model` field (default `free_forever`, SPEC-1 §9) — include it for Spec-2 forward-compat even though billing is inert in the pilot.
 
 ---
 

@@ -8,11 +8,12 @@ Apply every item below **in addition to** CORE and the django pack. Do not dupli
 
 Each gate is a distinct scenario with its own expected rejection; do not collapse them into one test:
 
-- **Available-search:** authenticated resident searches a time window → sees only spots available for that window; a spot that is listed but already booked for an overlapping window does **not** appear.
+- **Available-search:** authenticated resident searches a time window → sees only spots available for that window; a spot with an overlapping booking in status `tentative`, `confirmed`, or `active` (SPEC-1 §4 — all three count as booked, not only `active`) does **not** appear. Assert a `tentative`/`confirmed` (not yet `active`) overlapping booking also hides the spot.
 - **Gate 1 (horizon):** a booking whose start is beyond the resident's *earned* horizon is rejected with the horizon error — booking at-or-inside the horizon succeeds.
-- **Gate 2 (one-active-booking):** a resident already holding an active booking is rejected on a second booking attempt.
+- **Gate 2 (one-active-booking):** a resident already holding an in-flight booking (`tentative`/`confirmed`/`active`) is rejected on a second booking attempt — test with a non-`active` in-flight booking too.
 - **Gate 3 (overlap):** a second booking for the same spot at an overlapping time is rejected by the `tstzrange` GiST exclusion constraint (the DB constraint, not just app logic — test that it holds even on a forced concurrent path).
-- **Success postconditions:** a confirmed booking creates notification records for **both** borrower and owner, and the spot disappears from available-search for that window.
+- **Success postconditions:** a confirmed booking creates notification records for **both** borrower (**booking confirmed**) and owner (**spot loaned**), and the spot disappears from available-search for that window.
+- **Notification event coverage (SPEC-1 §5, all six):** assert records are produced for booking confirmed, spot loaned (owner), **loan ending soon** (timed reminder before end), cancelled, owner-cancelled, and early-release confirmation — email first, web push second.
 
 ---
 
