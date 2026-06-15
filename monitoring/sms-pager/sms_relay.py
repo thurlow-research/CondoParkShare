@@ -27,6 +27,7 @@ import urllib.parse
 import urllib.request
 from base64 import b64encode
 from http import HTTPStatus
+from socketserver import ThreadingMixIn
 
 # ── logging setup ──────────────────────────────────────────────────────────────
 
@@ -64,6 +65,21 @@ def _parse_port(value: str) -> int:
         sys.exit(1)
 
 
+def _parse_timeout(value: str) -> int:
+    try:
+        t = int(value)
+        if t <= 0:
+            raise ValueError("must be positive")
+        return t
+    except (ValueError, TypeError):
+        log.error(
+            "action=startup error=invalid_timeout value=%r "
+            "reason=RELAY_REQUEST_TIMEOUT_must_be_a_positive_integer",
+            value,
+        )
+        sys.exit(1)
+
+
 def _load_config() -> dict:
     missing = [k for k in _REQUIRED_ENV if not os.environ.get(k, "").strip()]
     if missing:
@@ -96,6 +112,9 @@ def _load_config() -> dict:
         "shared_secret": secret,
         "bind_host": os.environ.get("RELAY_BIND", "127.0.0.1"),
         "bind_port": _parse_port(os.environ.get("RELAY_PORT", "9876")),
+        "request_timeout": _parse_timeout(
+            os.environ.get("RELAY_REQUEST_TIMEOUT", "10")
+        ),
     }
 
 
@@ -206,6 +225,13 @@ MAX_BODY = 64 * 1024
 class _RelayHandler(http.server.BaseHTTPRequestHandler):
     cfg: dict  # injected by the server factory
 
+    # StreamRequestHandler.setup() calls self.connection.settimeout(self.timeout)
+    # before constructing rfile, so this deadline covers the request-line read,
+    # header read, AND the Content-Length body read in do_POST.  If the client
+    # stalls at any point, a TimeoutError is raised and handle_one_request()
+    # closes the connection cleanly.  Set from cfg by the server factory.
+    timeout: int  # seconds; overrides BaseHTTPRequestHandler default (None)
+
     # Suppress the Python version from the Server: response header so it
     # doesn't leak implementation details on every response, including 403s.
     def version_string(self) -> str:  # noqa: N802
@@ -287,11 +313,25 @@ class _RelayHandler(http.server.BaseHTTPRequestHandler):
 
 # ── server factory ─────────────────────────────────────────────────────────────
 
-class _RelayServer(http.server.HTTPServer):
+class _RelayServer(ThreadingMixIn, http.server.HTTPServer):
+    # Each inbound connection is handled in its own thread, so a slow or
+    # stalled client cannot block delivery of the next alert.
+    #
+    # daemon_threads=True means a thread stuck on a timed-out slow-loris
+    # connection will not prevent clean process exit on SIGTERM — the OS
+    # reclaims it when the main thread exits rather than server_close()
+    # joining forever.
+    daemon_threads = True
+
     def __init__(self, cfg: dict):
-        # Inject config into the handler class via a subclass so each request
-        # handler instance can access it without a global.
-        handler = type("Handler", (_RelayHandler,), {"cfg": cfg})
+        # Inject both cfg and the per-socket read deadline into the handler
+        # class via a one-off subclass so handler instances share no mutable
+        # globals and the timeout is fully determined at startup.
+        handler = type(
+            "Handler",
+            (_RelayHandler,),
+            {"cfg": cfg, "timeout": cfg["request_timeout"]},
+        )
         super().__init__((cfg["bind_host"], cfg["bind_port"]), handler)
 
 
@@ -311,10 +351,11 @@ def main() -> None:
         sys.exit(1)
 
     log.info(
-        "action=startup bind=%s port=%d recipients=%d",
+        "action=startup bind=%s port=%d recipients=%d request_timeout=%ds",
         cfg["bind_host"],
         cfg["bind_port"],
         len(cfg["recipients"]),
+        cfg["request_timeout"],
     )
 
     server = _RelayServer(cfg)
