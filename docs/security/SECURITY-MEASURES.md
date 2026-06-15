@@ -24,7 +24,7 @@ These shape every decision below:
 
 **Measure:** Operator-impersonation actions are audited to `AdminAuditLog`. If that DB write fails, the action **proceeds** (fail-open, so audit-system trouble can't block operators), **but** a structured JSON **recovery record** is emitted to a durable JSONL sink and later reconciled by the idempotent `backfill_audit_log` command.
 
-**Why:** A fail-*closed* audit would turn any audit/DB hiccup into an operator outage. Fail-open keeps operators working; the recovery trail + reconciliation means **no privileged action goes permanently unaudited**. The reconstruction is anti-forgery validated (superuser + same-org actor, allow-listed action, original timestamp preserved) so the recovery path can't be used to fabricate audit history. Double-fault hardening (nested `try/except`) guarantees the request always proceeds even if the recovery emit itself fails.
+**Why:** A fail-*closed* audit would turn any audit/DB hiccup into an operator outage. Fail-open keeps operators working; the recovery trail + reconciliation means **no privileged action goes permanently unaudited**. The reconstruction is anti-forgery validated (superuser actor, allow-listed action, original timestamp preserved, and same-org **when the recovery record carries a resolvable organization** — records with a null `organization_id` are reconciled without the tenant check) so the recovery path can't be used to fabricate audit history. Double-fault hardening (nested `try/except`) guarantees the request always proceeds even if the recovery emit itself fails.
 
 ---
 
@@ -34,7 +34,7 @@ The backups carry PII (`pg_dump`: names, emails, units, phones; audit-recovery J
 
 | Layer | Measure | Why |
 |---|---|---|
-| **Who can reach the share** | **Dedicated app-only SMB account** (`cps`); no shared/personal accounts — admin-only otherwise | Least privilege; a leaked personal credential can't reach CPS backups, and the CPS account can't reach anything else |
+| **Who can reach the share** | **Dedicated app-only SMB account** (`cps`); no shared/personal accounts — admin-only otherwise | Least privilege; a leaked personal credential can't reach CPS backups, and the CPS account is designed to reach **only the CPS share** (enforced at NAS configuration time, not by this repo) |
 | **Environment isolation** | Separate shares per env: `CondoParkShare` (prod→opus), `CondoParkSharePPE` (ppe→faberix) | Prod/ppe blast-radius separation; no cross-env exposure |
 | **No comingling** | CPS backups go only under `/mnt/cps-backup`, **never** `/mnt/nas/backups/parkshare` (personal) | Keeps app data and personal data on separate trust boundaries |
 | **In transit** | SMB **3.1.1 + `seal`** (SMB3 encryption) | Encrypts the dumps on the wire across the LAN |
@@ -66,7 +66,7 @@ The relay holds a live Twilio API credential and takes network input, so it's ha
 - **Localhost-only bind + shared-secret webhook auth** (constant-time `hmac.compare_digest`); rejects missing/short secrets (**fail-closed**).
 - **Bounded input** (64 KB body cap; malformed → 400) and **bounded sends** (recipient/retry caps) so a single trigger can't become an SMS-cost amplifier.
 - **No secret in argv/logs** — the shared secret is passed to `curl` via a `0600` temp file (not the command line, which is world-readable in `/proc`); the Twilio token is read only from a `0600` `EnvironmentFile`, never logged.
-- **Least-privilege env split** — the relay's environment carries Twilio + webhook vars only; **SMTP credentials live on the Grafana side** (`/etc/grafana/grafana-pager.env`, `0600`, via `EnvironmentFile=` — never inline systemd `Environment=`, which is world-readable).
+- **Least-privilege env split** — the relay's environment carries Twilio + webhook vars only. **SMTP credentials are configured in Grafana's own `/etc/grafana/grafana.ini` `[smtp]`** (Grafana-native config, *not* an env file). Only the **webhook shared secret** + `SMTP_TO` go to Grafana via `/etc/grafana/grafana-pager.env` (`0600`, `EnvironmentFile=`) — **never** inline systemd `Environment=`, which is world-readable. *(So: to rotate SMTP creds, edit `grafana.ini`, not the env file.)*
 - **Maximum systemd sandboxing** — `ProtectSystem=strict`, `NoNewPrivileges`, `PrivateTmp`, `ProtectHome`, `RestrictNamespaces`, `SystemCallArchitectures=native`, `UMask=0077`, `InaccessiblePaths=/etc/grafana /etc/ssh /root /home`, all capabilities dropped, syscall filtered.
 - **Self-testing** — a daily synthetic heartbeat SMS proves the pager path itself is alive ("who pages you when the pager is down?").
 
@@ -76,11 +76,11 @@ The relay holds a live Twilio API credential and takes network input, so it's ha
 
 ## 5. Web ingress `:8001` (CPS#95)
 
-**Measure:** `:8001` is **interface-bound** to each host's `.1` LAN address, **dual-stack** (IPv4 + the `.1` IPv6 ULA), via the compose publish (`${WEB_BIND_IP}` / `${WEB_BIND_ULA}`) — no `0.0.0.0` wildcard.
+**Measure (pending Track A build):** `:8001` is **interface-bound** to each host's `.1` LAN address — no `0.0.0.0` wildcard. Per the CPS#95 decision this is **dual-stack** (IPv4 `${WEB_BIND_IP}` + the `.1` IPv6 ULA `${WEB_BIND_ULA}`); this **refines ADR-002 Decision C** (currently IPv4-only in the ADR) and lands with the Track A build — *not yet implemented.*
 
 **Policy:** direct `:8001` from `192.168.1.0/24` + its ULA (debug); **public only via Nexus** (the TLS front proxy); `192.168.2.0/24` and external **via Nexus only**. Inter-subnet enforcement is trusted to the router (gateways at `.X.1`); a host-level `DOCKER-USER` rule was considered and deliberately **not** added — the network layer owns that boundary (accepted, documented residual).
 
-**Why:** Binding to a **private** address *is* the source restriction — only the LAN can route to a `192.168.1.x` address, so the public can reach the app only through Nexus. The deferred Nexus-`/32` tighten was dropped because direct `/24` debug access is intended.
+**Why:** Interface-binding to a **private** address removes the `0.0.0.0` wildcard and **confines reachability to the private LAN segment** — it is a *destination/interface* control, **not** a source-IP filter. Any host that can route to `192.168.1.x` can still reach `:8001`; today only the LAN can, by router/segmentation. True source-restriction to Nexus's single IP is **deferred** (a `DOCKER-USER` `/32` rule) — dropped from MVP because direct `/24` debug access is intended and the router owns the `.1`/`.2` boundary.
 
 ---
 
