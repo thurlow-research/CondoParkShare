@@ -1,0 +1,113 @@
+- line: "1. Read all five spec files listed above completely."
+  covered_by: "CORE"
+  reason: "CORE Initial-spec-review step 1 instructs reading the full spec set
+           (paths from config.sh) completely; the count of five files is
+           preserved in the PROJECT spec-set list, so no substance is lost."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Multi-tenant assumptions baked into Spec 1 that need confirming for BT"
+  covered_by: "PROJECT"
+  reason: "Preserved verbatim in the PROJECT domain-ambiguity-focus list as
+           'Multi-tenant assumptions — anything baked into Spec 1 that must be
+           confirmed for one-org-per-condo (Bellevue Towers)'."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "```bash"
+  covered_by: "dropped"
+  reason: "Trivial markdown code-fence opening the literal gh-issue-create
+           snippet; the snippet is abstracted into CORE 'create a spec-gap
+           issue', so the fence carries no instruction content."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "gh issue create \\"
+  covered_by: "CORE"
+  reason: "CORE During-the-build step instructs 'first create a spec-gap issue
+           to record the gap, then escalate'; the exact gh CLI invocation is
+           intentionally abstracted so the mechanism is not hard-coded."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "--body \"**Asked by:** [agent]\\n**Context:** [what they were implementing]\\n**Question:** [exact question]\\n**Why spec is silent:** [brief reason]\\n**Spec sections checked:** [list]\" \\"
+  covered_by: "CORE"
+  reason: "Issue-body template for the spec-gap issue; subsumed by CORE's
+           'create a spec-gap issue to record the gap' — the body schema is an
+           implementation detail of the now-abstracted issue-creation step."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "--label \"spec-gap\""
+  covered_by: "CORE"
+  reason: "The spec-gap label is intrinsic to CORE's 'spec-gap issue' wording;
+           the literal label flag is an abstracted detail of issue creation."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "Spec amendments are triggered by: a human decision that resolves an ambiguity, a system-test finding that reveals a spec gap, or a build discovery that makes a spec requirement unimplementable as written."
+  covered_by: "CORE"
+  reason: "Generic PM process, not a CPS specific; CORE's Spec-update-path and
+           During-the-build sections cover amendments arising from human
+           resolution, test findings, and build discoveries — the explicit
+           trigger enumeration is condensed, not dropped in substance."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "| Type | Definition | Process |"
+  covered_by: "CORE"
+  reason: "Table header for the clarifying/additive/structural classification,
+           which CORE's Spec-update-path now expresses as prose bullets with
+           definitions and processes for each type."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "3. If the change affects the technical design or architecture, notify those agents immediately with: the section changed, what changed, and what they need to re-evaluate."
+  covered_by: "CORE"
+  reason: "CORE's clarifying/additive bullets instruct notifying architect and
+           technical-design on spec changes and flagging a technical-design
+           revision; generic notification process, not CPS-specific."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Update a spec file to rationalize already-built code that doesn't meet the original spec — that is a spec falsification. Surface the discrepancy instead and let the human decide."
+  covered_by: "CORE"
+  reason: "Reworded near-verbatim in CORE: 'Never rewrite the spec to rationalize
+           already-built code that misses it — that is spec falsification.
+           Surface the discrepancy and let the human decide.'"
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Do not make design decisions that belong to the human product owner."
+  covered_by: "CORE"
+  reason: "Covered by CORE's 'Never guess or extrapolate beyond the spec' plus
+           the What-you-do-NOT-do section and the structural→human-sign-off
+           rule, which together reserve product-owner decisions for the human."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "## Output format"
+  covered_by: "dropped"
+  reason: "Generic section header for output-format guidance; CORE folds the
+           response-shape guidance into the relevant procedural sections, so the
+           standalone header is structurally obsolete with no lost substance."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Q&A responses: one paragraph per question, spec citation in parentheses, escalation note if unresolvable."
+  covered_by: "CORE"
+  reason: "Generic response-format detail; CORE's During-the-build section
+           requires answering with a direct statement citing the section and an
+           explicit escalation answer when the spec is silent — same substance,
+           condensed format guidance."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Spec update: state the change type (clarifying/additive/structural), the section changed, and what changed. For structural changes, present the draft and wait for human approval before applying."
+  covered_by: "CORE"
+  reason: "Generic spec-update output format; CORE's Spec-update-path requires
+           classifying every change clarifying/additive/structural and, for
+           structural, drafting and presenting to the human for approval before
+           writing — same substance."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"

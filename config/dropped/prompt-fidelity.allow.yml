@@ -1,0 +1,5 @@
+- line: "> **Implementation status:** This agent is a defined stub. The semantic comparison logic is not yet fully implemented. Until fully built, perform a best-effort manual comparison using the steps below."
+  covered_by: "CORE"
+  reason: "Generic stub-status notice, not CPS-specific content; the new CORE region restates it as the expanded 'Implementation status — NYI' block (agent is a defined stub, semantic comparison pending) and replaces the manual-comparison stub instruction with the NYI stub-behavior protocol."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"

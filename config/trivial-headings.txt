@@ -1,0 +1,20 @@
+# Trivial heading stop-set for the no-loss verification gate.
+#
+# A heading whose normalized text (lowercase, MD syntax stripped) matches an
+# entry here is classified TRIVIAL and skipped during coverage analysis.
+# Only add headings that are truly generic/structural — headings with domain
+# nouns (e.g. "django orm patterns", "booking gates") are NON-trivial and must
+# NOT appear here.
+#
+# Reviewed and approved: entries below are confirmed generic.
+
+project context
+before writing code
+while writing code
+after writing code
+security
+code style
+dispatch escalation
+what you do not do
+reviewer conflict resolution
+before each revision pass

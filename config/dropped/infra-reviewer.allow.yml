@@ -1,0 +1,101 @@
+# Dropped-line allowlist for agent: infra-reviewer
+# CondoParkShare HOS v0.1.0 -> v0.3.6 migration.
+# Each entry is an UNACCOUNTED old-flat line confirmed to be semantically
+# covered by the new CORE / PACK:django / PROJECT regions (reworded), so no
+# CPS-unique content is lost. See config/dropped/README.md for format.
+
+- line: "You are the infrastructure reviewer for CondoParkShare. You review deployment configuration — Docker Compose, Caddy, firewall, backups, and environment config — against the spec's deployment requirements. You do not review application code; you review the container and network layer that the application runs inside."
+  covered_by: "CORE"
+  reason: "Role-intro restated by the CORE opening ('You are the infrastructure reviewer... you review the layer the app runs inside, not the application code'); CPS-specific toolchain names (Caddy) live in the PROJECT region."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "## Primary reference"
+  covered_by: "CORE"
+  reason: "Structural header; the deployment-spec reference obligation is restated by CORE 'Before you review' (read the project's deployment spec), and the concrete SPEC-1 §2 path is preserved in the PROJECT region."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- `restart: unless-stopped` on all three services."
+  covered_by: "PACK:django"
+  reason: "Django pack Compose-topology check requires 'restart: unless-stopped (or always) on web, db, and the proxy service'."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- DB port is **not** published to the host (`ports:` absent on `db`, or bound to `127.0.0.1` only). The DB must be internal-only."
+  covered_by: "PACK:django"
+  reason: "Django pack DB-service check restates this verbatim (ports absent or 127.0.0.1:5432:5432 only; bare 5432:5432 is a blocking exposure); also CORE check 2 (datastores internal-only)."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- `web` does not bind directly to a public port — traffic goes through Caddy only."
+  covered_by: "PACK:django"
+  reason: "Django pack web-service check restates this ('web must not publish a port directly to the host; all ingress arrives through the reverse proxy')."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Old backups are rotated (flag if no retention policy)."
+  covered_by: "PACK:django"
+  reason: "Django pack backups check requires rotation ('flag an unbounded accumulation of unrotated backups'); also CORE check 6 (backups rotated)."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- A restore procedure is documented (even one-liner in a README or script comment)."
+  covered_by: "PACK:django"
+  reason: "Django pack backups check requires a documented restore procedure (script, README section, or runbook comment); also CORE check 6 (documented restore)."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "**UFW / network exposure:**"
+  covered_by: "CORE"
+  reason: "Section header for firewall exposure; the obligation is restated by CORE check 4 ('the firewall and the reverse proxy agree on exactly the ports that should be open; nothing else is exposed'). UFW is the local tool name only."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Only ports 80 and 443 should be open externally (for Caddy + ACME HTTP-01)."
+  covered_by: "CORE"
+  reason: "CORE check 4 requires only the intended public ports be externally reachable; the CPS rationale for keeping :80 open (HTTP-01 on HOA aliases) is preserved in the PROJECT Caddy multi-site region."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- DB port 5432 should not appear in any externally-accessible firewall rule."
+  covered_by: "PACK:django"
+  reason: "Django pack DB-service check forbids publishing 5432 to any external interface; also CORE checks 2 and 4 (datastore internal-only, firewall exposes only intended ports)."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- If a UFW script or `ufw` commands appear in setup docs, verify they match this."
+  covered_by: "CORE"
+  reason: "CORE check 4 requires the firewall and reverse proxy 'agree on exactly the ports that should be open' — verifying a UFW script against the proxy config is exactly this generic firewall/proxy-agreement obligation; UFW is the tool name only."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Can this stack be moved to a Hetzner EU VPS by: copying `.env`, restoring `pg_dump`, pointing the canonical CNAME? If any step requires manual state not captured by these, flag it."
+  covered_by: "PROJECT"
+  reason: "Preserved in full by the PROJECT 'Portability: Hetzner EU VPS target' region — the concrete three-step move (copy .env, restore pg_dump, repoint canonical CNAME) and the flag-uncaptured-manual-state rule are restated there."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "## Review output format"
+  covered_by: "CORE"
+  reason: "Structural header; the per-finding output contract is restated by CORE 'How you report' (file + section, severity, what is wrong, what it must change to)."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "For each issue:"
+  covered_by: "CORE"
+  reason: "Restated by CORE 'How you report' ('For each finding give: ...')."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- **Architecture decision** (e.g. \"should we use Traefik instead of Caddy?\") → architect"
+  covered_by: "CORE"
+  reason: "Restated by CORE Escalation ('Architecture decision (a toolchain choice — e.g. which proxy/orchestrator) → architect')."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- **Application config in .env** that seems wrong → coder or technical-design"
+  covered_by: "CORE"
+  reason: "Restated by CORE Escalation ('A suspicious application-config value → coder / technical-design')."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"

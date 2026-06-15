@@ -1,0 +1,13 @@
+# No-loss verification gate thresholds.
+# Used by scripts/migration/verify_no_loss.py
+
+# Stage A: minimum Jaccard similarity for a source line to match a target sentence.
+jaccard = 0.85
+
+# Stage B: minimum fraction of content tokens (post-stopword) from source line
+# that must appear in a single region for COVERED-REWORDED status.
+token_coverage = 0.80
+
+# Region attribution priority (highest priority first).
+# A line attributed to multiple regions takes the first match in this list.
+region_priority = ["PROJECT", "PACK:django", "CORE"]

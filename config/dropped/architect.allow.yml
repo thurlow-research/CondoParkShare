@@ -1,0 +1,82 @@
+# Dropped-line allowlist for agent: architect
+# Format and rules: see ./README.md
+# All entries below are old-flat lines whose semantic content is now carried by
+# CORE / PACK:django / PROJECT regions (generic content, reworded). Reviewed by
+# ai-triage; pending human approval.
+
+- line: "- GiST exclusion constraint design — exactly how the `tstzrange` + spot FK exclusion is structured"
+  covered_by: "PACK:django"
+  reason: "The django pack establishes tstzrange + GiST ExclusionConstraint as
+           the range-overlap primitive and how to structure it at the DB layer;
+           the project confirms the same stack in PROJECT. This is a generic
+           Django constraint-design review item, reworded."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Availability computation strategy — live query vs. materialized; concurrency implications"
+  covered_by: "PACK:django"
+  reason: "Live-vs-materialized aggregate computation and its concurrency
+           implications are generic DB/caching architecture decisions covered by
+           the django pack's caching-layers (materialized aggregates,
+           invalidation) and the CORE risk-identification step. Names no
+           CPS-unique mechanic."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- The earned-horizon metric calculation — where it runs (DB function? Django signal? cron?), how it handles the 180-day rolling window efficiently"
+  covered_by: "PROJECT"
+  reason: "The CPS earned-horizon mechanic is carried explicitly in the PROJECT
+           region (where it runs — DB function vs Django signal vs scheduled
+           command — and 180-day rolling-window efficiency), reworded."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Correctness: does it handle all spec requirements including edge cases?"
+  covered_by: "CORE"
+  reason: "Generic critique criterion. CORE requires harsh, specific critique of
+           technical-design against spec requirements and edge cases; this is a
+           reworded checklist item of that role."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Security: are encrypted fields actually encrypted, not just obfuscated?"
+  covered_by: "PACK:django"
+  reason: "Generic Django concern. The django pack's encrypted-PII/secret-field
+           strategy (library, key source, rotation, admin exposure) covers
+           verifying fields are genuinely encrypted at rest, reworded."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Django idioms: does the design use Django's strengths (ORM, admin, signals) correctly?"
+  covered_by: "PACK:django"
+  reason: "Generic Django concern. The django pack's Django-specific critique
+           checklist (ORM/managers, admin scoping, signals, idioms) covers this,
+           reworded."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "**Temp state:** Write loop state to `.claudetmp/design/architect-{step}-{YYYYMMDDTHHMMSS}.md` (e.g. `architect-step2-multitenant-20260611T143000.md`). Create `.claudetmp/design/` if it does not exist. Format:"
+  covered_by: "CORE"
+  reason: "CORE's loop temp-state instruction specifies the same path
+           (.claudetmp/design/architect-{step}-{ISO-timestamp}.md), directory
+           creation, glob-newest read, and 24h-stale reset. Generic loop
+           mechanics, reworded."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "sticking_point: [what is not converging, if any]"
+  covered_by: "CORE"
+  reason: "A field of the old temp-state YAML template. The concept of tracking
+           and reporting the unresolved sticking point is carried by CORE's
+           loop temp-state and escalation wording (the specific point that did
+           not converge); a format detail, not a CPS specific."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- If a dispute has no correct answer and requires human judgment, escalate with a clear, specific question — do not escalate vague disagreements."
+  covered_by: "CORE"
+  reason: "CORE's escalation-arbitration rule covers exactly this: a genuine
+           human-judgment call escalates to the human with a specific, bounded
+           question. Generic, reworded."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"

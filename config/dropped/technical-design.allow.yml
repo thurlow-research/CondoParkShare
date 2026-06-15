@@ -1,0 +1,97 @@
+# Dropped-line allowlist for agent: technical-design
+# See README.md for format. All entries below are AI-triage proposals
+# pending human review.
+
+- line: "**Inputs (read before acting):**"
+  covered_by: "CORE"
+  reason: "Generic inputs header; CORE instructs reading the spec, ADR,
+           confirmed-requirements doc, and technical-design output path
+           resolved from config.sh — reworded, semantics preserved."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- `docs/architecture/ADR-001-pilot.md` — architect's decisions (created during architect's initial review)"
+  covered_by: "PROJECT"
+  reason: "CPS-concrete ADR path; PROJECT section's 'Project inputs and
+           output path' lists docs/architecture/ADR-001-pilot.md explicitly
+           as a read-before-designing input."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "**Stack:** Django + HTMX + PostgreSQL. Server-rendered. No SPA. See spec §2 for full stack details."
+  covered_by: "PACK:django"
+  reason: "Stack-idiom declaration; CORE assigns stack-specific conventions to
+           the pack, and the django pack assumes Django+HTMX+PostgreSQL
+           throughout (HTMX-contract item, PostgreSQL range types, server-side
+           views/forms). The spec §2 reference is a pointer, not lost content."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "9. **Admin surfaces** — which parts of the HOA portal extend Django admin vs. custom views, and how tenant-scoping is enforced in the admin."
+  covered_by: "PACK:django"
+  reason: "The django pack's 'Admin surfaces' section covers extends-Django-admin
+           vs. custom views and the get_queryset(request) tenant-scoping override
+           for admin classes; only the 'HOA portal' phrasing is CPS, and the
+           substantive contract is the pack template."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "When the architect critiques:"
+  covered_by: "CORE"
+  reason: "Generic header for the architect-iteration loop; CORE's 'Iteration
+           with the architect' section covers addressing critiques — reworded."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Address every criticism. Do not argue unless you have a concrete technical reason backed by Django/Postgres documentation."
+  covered_by: "CORE"
+  reason: "CORE: 'Address every critique, or push back with a concrete technical
+           reason. If you disagree, state your reasoning and escalate to
+           architect.' Same semantics, generically reworded."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "**Temp state:** Read the architect's temp file by globbing `.claudetmp/design/architect-{step}-*.md` and taking the newest. Write your own revision notes to `.claudetmp/design/technical-design-{step}-{YYYYMMDDTHHMMSS}.md`. If your own newest file is older than 24 hours, delete it and start fresh. Delete your temp file when the design is approved or escalated."
+  covered_by: "CORE"
+  reason: "CORE 'Loop temp-state' reproduces this verbatim in intent: same
+           architect-temp glob, same technical-design-{step}-{ISO-timestamp}
+           write path, same 24h-stale restart and delete-on-approval/escalation."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "## Receiving unit-test escalations"
+  covered_by: "CORE"
+  reason: "Generic section header; CORE's 'Routing hub for downstream gaps'
+           explicitly receives untestable-design escalations from the test
+           roles — reworded into the routing-hub section."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "When the unit-test agent reports an untestable behavior:"
+  covered_by: "CORE"
+  reason: "CORE: 'Receive untestable-design escalations from the test roles and
+           make the behavior explicit and testable.' Generic restatement."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Investigate whether the design is genuinely ambiguous or untestable."
+  covered_by: "CORE"
+  reason: "Subsumed by CORE's untestable-design handling — investigate then make
+           the behavior explicit and testable; reworded."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- If no (the test agent misunderstood): clarify the design and send the clarification back."
+  covered_by: "CORE"
+  reason: "Generic clarify-and-return routing covered by CORE's answering /
+           routing-hub guidance (give a direct cited answer; close or re-route
+           the gap)."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Do not approve code. That is the code-reviewer's role."
+  covered_by: "CORE"
+  reason: "CORE 'What you do NOT do': 'Do not approve code — that is
+           code-reviewer.' Verbatim semantics."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"

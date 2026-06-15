@@ -1,0 +1,11 @@
+- line: "- Example: can an owner cancel bookings repeatedly just before start time to avoid penalty but still disrupting residents?"
+  covered_by: "PROJECT"
+  reason: "Preserved verbatim-in-substance in the PROJECT 'Cancel-and-retry' bullet ('can an owner cancel bookings repeatedly just before start time to dodge a penalty while still stranding the resident?') — same owner-cancel/penalty-dodge/resident-disruption attack vector, kept as a CPS-specific probe."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"
+
+- line: "- Example: \"bookings must be hour-aligned\" AND \"residents can cancel at any time\" — what happens if they cancel mid-hour?"
+  covered_by: "CORE"
+  reason: "CORE generalizes this contradiction example to '\"records must be aligned to a fixed interval\" AND \"users may edit at any time\" — what happens on an edit that lands mid-interval?'; identical contradiction-detection teaching point with CPS specifics abstracted into the generic CORE wording."
+  approved_by: "ai-triage (pending human review)"
+  approved_at: "2026-06-15"

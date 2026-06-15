@@ -18,6 +18,13 @@ Apply every item below **in addition to** CORE and the django pack. Do not dupli
 
 ---
 
+### Copy & layout restraint (CPS specifics)
+
+- **Sentence case everywhere** — no ALL CAPS headings or Title Case navigation labels (unless a proper noun).
+- Primary views should feel **spacious** — generous whitespace, hairline borders (`var(--line)`), few or no shadows. Flag views that have multiple card shadows, thick borders, or dense icon clusters.
+
+---
+
 ### Spline Sans Mono — scope of the data typeface
 
 - `.mono` / `.spot-id` / `.data` appear **only** on: spot IDs (e.g. `P2-114`), time windows (e.g. `09:00–12:00`), and credit/permit-like values. Any use on headings, body copy, labels, or navigation is **blocking**.
