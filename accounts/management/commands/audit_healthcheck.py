@@ -47,6 +47,7 @@ import json
 import logging
 import os
 import platform
+import re
 import sys
 import tempfile
 import time
@@ -54,6 +55,7 @@ from datetime import timezone as dt_timezone
 from pathlib import Path
 
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from django.core.management.base import BaseCommand
 from django.utils.timezone import now as django_now
 
@@ -63,9 +65,34 @@ logger = logging.getLogger(__name__)
 # successful probe so the table never accumulates unboundedly.
 _PROBE_RETAIN_COUNT = 10
 
-# Common labels attached to every metric line.
-_ENV = getattr(settings, "ENVIRONMENT", os.environ.get("DJANGO_ENV", "unknown"))
-_HOST = platform.node()
+# Prometheus label values must not contain characters that could escape the
+# label context in the text-format line (e.g. '"', '\n', '}').  We restrict
+# to a safe subset and validate at module load so a misconfigured deployment
+# fails loudly on startup rather than silently writing malformed or injected
+# metrics.
+_LABEL_VALUE_RE = re.compile(r'^[a-zA-Z0-9._-]{1,64}$')
+
+
+def _validate_label(name: str, value: str) -> str:
+    """Return *value* if it matches the safe label regex, else raise ImproperlyConfigured."""
+    if not _LABEL_VALUE_RE.match(value):
+        raise ImproperlyConfigured(
+            f"audit_healthcheck: Prometheus label '{name}' value {value!r} does not match "
+            r"^[a-zA-Z0-9._-]{1,64}$ — fix DJANGO_ENV / hostname before running."
+        )
+    return value
+
+
+_ENV = _validate_label("env", getattr(settings, "ENVIRONMENT", "unknown"))
+_HOST = _validate_label("host", platform.node())
+
+if _ENV == "unknown":
+    # Not fail-closed — the metrics are still valid — but operators should set
+    # DJANGO_ENV so the label is meaningful in dashboards.
+    logger.warning(
+        "audit_healthcheck: DJANGO_ENV is not set; Prometheus label env=\"unknown\". "
+        "Set DJANGO_ENV=prod (opus) or DJANGO_ENV=ppe (faberix) in the environment."
+    )
 
 
 def _common_labels() -> str:
@@ -153,16 +180,23 @@ def _write_prom_atomically(
     Raises OSError if the directory does not exist or is not writable.
     """
     target = Path(textfile_dir) / "parkshare_audit.prom"
-    # tempfile in the same directory guarantees rename(2) is atomic
-    # (same filesystem).  delete=False because we rename it ourselves.
+    # tempfile in the same directory guarantees rename(2) is atomic (same filesystem).
+    # delete=False because we rename it ourselves.
     fd, tmp_path = tempfile.mkstemp(dir=textfile_dir, prefix=".parkshare_audit_", suffix=".prom.tmp")
+    # Track whether os.fdopen has taken ownership of fd.  If fdopen raises, the
+    # raw fd would otherwise leak; we close it explicitly in that case.
+    fd_owned_by_fh = False
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        try:
+            fh = os.fdopen(fd, "w", encoding="utf-8")
+            fd_owned_by_fh = True
+        except Exception:
+            os.close(fd)
+            raise
+        with fh:
             fh.write(content)
         os.rename(tmp_path, target)
     except Exception:
-        # Clean up the temp file if rename failed, then re-raise so callers
-        # can log and fall through to a degraded (status-file-only) path.
         try:
             os.unlink(tmp_path)
         except OSError:
@@ -177,29 +211,60 @@ def _append_liveness_status(status_path: str, record: dict) -> None:
         fh.write(json.dumps(record) + "\n")
 
 
+_TAIL_CHUNK = 8192  # bytes read per backward scan chunk
+
+
 def _read_last_success_ts(status_path: str) -> float | None:
     """
-    Scan AUDIT_LIVENESS_STATUS from the end to find the most recent ok=true
-    entry and return its Unix timestamp, or None if none exists.
+    Tail-scan AUDIT_LIVENESS_STATUS backward in chunks to find the most recent
+    ok=true entry without reading the whole (ever-growing) file into memory.
 
-    Used to compute liveness_age_seconds even when the current probe failed.
+    Returns the Unix timestamp of the most recent successful probe, or None.
     """
     try:
-        with open(status_path, encoding="utf-8") as fh:
-            lines = fh.readlines()
+        with open(status_path, "rb") as fh:
+            fh.seek(0, 2)
+            file_size = fh.tell()
+            if file_size == 0:
+                return None
+
+            remainder = b""
+            pos = file_size
+            while pos > 0:
+                chunk_size = min(_TAIL_CHUNK, pos)
+                pos -= chunk_size
+                fh.seek(pos)
+                chunk = fh.read(chunk_size)
+                # Prepend chunk to any leftover bytes from the previous iteration.
+                data = chunk + remainder
+                # Split on newlines; the first element may be a partial line.
+                parts = data.split(b"\n")
+                # All parts except the first are complete lines (scan in reverse).
+                for raw in reversed(parts[1:]):
+                    line = raw.decode("utf-8", errors="replace").strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                        if entry.get("ok"):
+                            return float(entry["ts"])
+                    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+                        continue
+                # parts[0] is a partial line; carry it backward into the next chunk.
+                remainder = parts[0]
+
+            # Handle the very first line of the file (remainder after the loop).
+            if remainder:
+                line = remainder.decode("utf-8", errors="replace").strip()
+                if line:
+                    try:
+                        entry = json.loads(line)
+                        if entry.get("ok"):
+                            return float(entry["ts"])
+                    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+                        pass
     except FileNotFoundError:
         return None
-
-    for line in reversed(lines):
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            entry = json.loads(line)
-            if entry.get("ok"):
-                return float(entry["ts"])
-        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
-            continue
     return None
 
 
@@ -229,7 +294,7 @@ class Command(BaseCommand):
         else:
             last_ok_ts = _read_last_success_ts(status_path)
             liveness_age_seconds = (
-                now_unix - last_ok_ts if last_ok_ts is not None else float("inf")
+                max(0.0, now_unix - last_ok_ts) if last_ok_ts is not None else float("inf")
             )
             # inf would produce invalid Prometheus text; cap at a large sentinel
             if liveness_age_seconds == float("inf"):

@@ -18,6 +18,7 @@ env = environ.Env(
     DEBUG=(bool, False),
     ALLOWED_HOSTS=(list, []),
     EMAIL_BACKEND=(str, "anymail.backends.brevo.EmailBackend"),
+    DJANGO_ENV=(str, "unknown"),
 )
 
 # Read .env if it exists (dev convenience only — production uses real env vars)
@@ -250,6 +251,14 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 # fonts.gstatic.com for font files.  HTMX is self-hosted; no external scripts.
 # frame-ancestors: 'none' is the authoritative clickjacking control (CSP Level 3).
 # XFrameOptionsMiddleware and X_FRAME_OPTIONS are omitted — redundant with frame-ancestors.
+
+# ---------------------------------------------------------------------------
+# Deployment environment identifier
+# ---------------------------------------------------------------------------
+# Used by audit_healthcheck to label Prometheus metrics.  Must match the
+# label regex ^[a-zA-Z0-9._-]{1,64}$ — audit_healthcheck validates at startup.
+# opus = prod, faberix = ppe.  Default "unknown" triggers a startup warning.
+ENVIRONMENT = env("DJANGO_ENV")
 
 # ---------------------------------------------------------------------------
 # Audit-recovery logging

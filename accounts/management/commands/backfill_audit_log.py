@@ -28,6 +28,7 @@ backstop for any edge-case partial write.
 """
 
 import json
+import os
 from dataclasses import dataclass
 from datetime import datetime
 from datetime import timezone as dt_timezone
@@ -53,6 +54,9 @@ class BacklogCounts:
     oldest_unreconciled_at: datetime | None = None
 
 
+_MAX_RECOVERY_FILE_BYTES = 50 * 1024 * 1024  # 50 MB
+
+
 def compute_backlog(recovery_path: str) -> BacklogCounts:
     """
     Parse *recovery_path* and return counts of what a live backfill would do,
@@ -67,13 +71,34 @@ def compute_backlog(recovery_path: str) -> BacklogCounts:
 
     Raises ``FileNotFoundError`` if *recovery_path* does not exist — callers
     that must not crash should catch it.
+    Raises ``ValueError`` if the file exceeds _MAX_RECOVERY_FILE_BYTES — callers
+    (audit_healthcheck) catch this and emit a degraded/zero reading with a warning.
     """
     from accounts.models import AdminAuditLog, User
+
+    file_size = os.path.getsize(recovery_path)
+    if file_size > _MAX_RECOVERY_FILE_BYTES:
+        raise ValueError(
+            f"Recovery file {recovery_path!r} is {file_size} bytes "
+            f"(limit {_MAX_RECOVERY_FILE_BYTES}); refusing to load into memory."
+        )
 
     counts = BacklogCounts()
 
     with open(recovery_path, encoding="utf-8") as fh:
         lines = fh.readlines()
+
+    # Pre-load all reconciled fingerprints in a single query so the per-line
+    # dedupe check is O(1) dict lookup rather than one EXISTS query per line.
+    reconciled_fingerprints: set[tuple] = set(
+        AdminAuditLog.objects.filter(
+            notes__contains="[recovered:attempted_at="
+        ).values_list("actor_id", "on_behalf_of_id", "action", "notes")
+    )
+
+    # Cache actor objects keyed by pk to avoid repeated DB hits when the same
+    # impersonation actor appears on many lines (e.g. a failing session replay).
+    actor_cache: dict[int, User] = {}
 
     for raw_line in lines:
         raw_line = raw_line.strip()
@@ -96,6 +121,7 @@ def compute_backlog(recovery_path: str) -> BacklogCounts:
             counts.malformed += 1
             continue
 
+        # --- Anti-forgery: allowlist action ---
         if action not in _ALLOWED_ACTIONS:
             counts.rejected += 1
             continue
@@ -110,30 +136,27 @@ def compute_backlog(recovery_path: str) -> BacklogCounts:
             counts.malformed += 1
             continue
 
-        try:
-            actor = User.objects.get(pk=actor_id)
-        except User.DoesNotExist:
-            counts.malformed += 1
-            continue
+        # --- Anti-forgery: actor must exist and be a superuser ---
+        if actor_id not in actor_cache:
+            try:
+                actor_cache[actor_id] = User.objects.get(pk=actor_id)
+            except User.DoesNotExist:
+                counts.malformed += 1
+                continue
+        actor = actor_cache[actor_id]
 
         if not actor.is_superuser:
             counts.rejected += 1
             continue
 
+        # --- Anti-forgery: no cross-tenant rows ---
         if organization_id is not None and actor.organization_id != organization_id:
             counts.rejected += 1
             continue
 
         backfill_notes = f"{notes} [recovered:attempted_at={attempted_at_str}]"
 
-        already_exists = AdminAuditLog.objects.filter(
-            actor_id=actor_id,
-            on_behalf_of_id=on_behalf_of_id,
-            action=action,
-            notes=backfill_notes,
-        ).exists()
-
-        if already_exists:
+        if (actor_id, on_behalf_of_id, action, backfill_notes) in reconciled_fingerprints:
             counts.skipped += 1
             continue
 
