@@ -18,6 +18,7 @@ exactly matches the recovery record on a second run.
 Usage:
   python manage.py backfill_audit_log
   python manage.py backfill_audit_log --file /path/to/audit-recovery.jsonl
+  python manage.py backfill_audit_log --dry-run
 
 Concurrency note: multiple Gunicorn workers may append to the same JSONL
 file concurrently. We rely on POSIX O_APPEND semantics — each JSON record
@@ -27,6 +28,7 @@ backstop for any edge-case partial write.
 """
 
 import json
+from dataclasses import dataclass
 from datetime import datetime
 from datetime import timezone as dt_timezone
 
@@ -36,6 +38,113 @@ from django.db import transaction
 from django.utils.timezone import make_aware
 
 _ALLOWED_ACTIONS = {"impersonate_action"}
+
+
+@dataclass
+class BacklogCounts:
+    """Counts produced by a dry-run or live reconciliation pass."""
+
+    created_would_be: int = 0
+    skipped: int = 0
+    rejected: int = 0
+    malformed: int = 0
+    # Oldest unreconciled attempted_at as a UTC-aware datetime, or None when
+    # the backlog is empty.  Used by audit_healthcheck to emit S3b.
+    oldest_unreconciled_at: datetime | None = None
+
+
+def compute_backlog(recovery_path: str) -> BacklogCounts:
+    """
+    Parse *recovery_path* and return counts of what a live backfill would do,
+    without writing anything to the database.
+
+    Implements the same anti-forgery checks and dedupe fingerprint as the live
+    reconciliation so the reported numbers are identical to what
+    ``backfill_audit_log`` (without ``--dry-run``) would actually create.
+
+    Returns a BacklogCounts with ``created_would_be`` as the number of records
+    that would be inserted, ``skipped`` as already-reconciled records, etc.
+
+    Raises ``FileNotFoundError`` if *recovery_path* does not exist — callers
+    that must not crash should catch it.
+    """
+    from accounts.models import AdminAuditLog, User
+
+    counts = BacklogCounts()
+
+    with open(recovery_path, encoding="utf-8") as fh:
+        lines = fh.readlines()
+
+    for raw_line in lines:
+        raw_line = raw_line.strip()
+        if not raw_line:
+            continue
+
+        try:
+            record = json.loads(raw_line)
+            actor_id = int(record["actor_id"])
+            on_behalf_of_id = record.get("on_behalf_of_id")
+            if on_behalf_of_id is not None:
+                on_behalf_of_id = int(on_behalf_of_id)
+            action = str(record["action"])
+            notes = str(record.get("notes", ""))
+            attempted_at_str = str(record["attempted_at"])
+            organization_id = record.get("organization_id")
+            if organization_id is not None:
+                organization_id = int(organization_id)
+        except (KeyError, ValueError, TypeError):
+            counts.malformed += 1
+            continue
+
+        if action not in _ALLOWED_ACTIONS:
+            counts.rejected += 1
+            continue
+
+        try:
+            attempted_at = datetime.fromisoformat(attempted_at_str)
+            if attempted_at.tzinfo is None:
+                attempted_at = make_aware(attempted_at)
+            else:
+                attempted_at = attempted_at.astimezone(dt_timezone.utc)
+        except ValueError:
+            counts.malformed += 1
+            continue
+
+        try:
+            actor = User.objects.get(pk=actor_id)
+        except User.DoesNotExist:
+            counts.malformed += 1
+            continue
+
+        if not actor.is_superuser:
+            counts.rejected += 1
+            continue
+
+        if organization_id is not None and actor.organization_id != organization_id:
+            counts.rejected += 1
+            continue
+
+        backfill_notes = f"{notes} [recovered:attempted_at={attempted_at_str}]"
+
+        already_exists = AdminAuditLog.objects.filter(
+            actor_id=actor_id,
+            on_behalf_of_id=on_behalf_of_id,
+            action=action,
+            notes=backfill_notes,
+        ).exists()
+
+        if already_exists:
+            counts.skipped += 1
+            continue
+
+        counts.created_would_be += 1
+        if (
+            counts.oldest_unreconciled_at is None
+            or attempted_at < counts.oldest_unreconciled_at
+        ):
+            counts.oldest_unreconciled_at = attempted_at
+
+    return counts
 
 
 class Command(BaseCommand):
@@ -51,12 +160,48 @@ class Command(BaseCommand):
                 "Defaults to the AUDIT_RECOVERY_LOG setting."
             ),
         )
+        parser.add_argument(
+            "--dry-run",
+            action="store_true",
+            dest="dry_run",
+            default=False,
+            help=(
+                "Report what would be reconciled (count, oldest age, "
+                "rejected, malformed) without writing anything to the database."
+            ),
+        )
 
     def handle(self, *args, **options):
+        recovery_path = options["file"] or settings.AUDIT_RECOVERY_LOG
+
+        if options["dry_run"]:
+            self._handle_dry_run(recovery_path)
+            return
+
+        self._handle_live(recovery_path)
+
+    def _handle_dry_run(self, recovery_path: str) -> None:
+        try:
+            counts = compute_backlog(recovery_path)
+        except FileNotFoundError:
+            self.stderr.write(
+                self.style.ERROR(f"Recovery file not found: {recovery_path}")
+            )
+            return
+
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"backfill_audit_log (dry-run): "
+                f"would_create={counts.created_would_be} "
+                f"skipped={counts.skipped} "
+                f"rejected={counts.rejected} "
+                f"malformed={counts.malformed}"
+            )
+        )
+
+    def _handle_live(self, recovery_path: str) -> None:
         from accounts.models import AdminAuditLog, User
         from parking.models import Organization
-
-        recovery_path = options["file"] or settings.AUDIT_RECOVERY_LOG
 
         created_count = 0
         skipped_count = 0
