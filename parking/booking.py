@@ -10,15 +10,12 @@ Functions:
 See TECHNICAL-DESIGN.md §6, §8 and CONFIRMED-REQUIREMENTS.md §B.
 """
 
-BUFFER_HOURS = 1  # fixed for pilot; see booking_buffer_hours on Organization
-
-
 def assign_spot(organization, borrower, requested_start, requested_end):
     """Tentatively assign a spot using the owner-rotation algorithm.
 
     Finds active spots in *organization* whose availability windows cover
     [requested_start, requested_end] and which have no conflicting booking
-    (including the 1-hour buffer on each side).
+    (including the buffer on each side, sized by organization.booking_buffer_hours).
 
     Ties are broken by ``owner.last_booking_at`` ascending (nulls first),
     so the owner whose spot was last booked longest ago gets priority.
@@ -41,7 +38,7 @@ def assign_spot(organization, borrower, requested_start, requested_end):
 
     from parking.models import AvailabilityWindow, Booking, ParkingSpot
 
-    buffer = timedelta(hours=BUFFER_HOURS)
+    buffer = timedelta(hours=organization.booking_buffer_hours)
     buffered = DateTimeTZRange(requested_start - buffer, requested_end + buffer)
     req_range = DateTimeTZRange(requested_start, requested_end)
 
