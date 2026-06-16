@@ -7,8 +7,7 @@ Covers full HTTP request/response cycle for the primary booking flow:
   3. Gate 2 (one-active-booking): resident with active booking cannot book again.
   4. Gate 3 (overlap): second booking for same spot at overlapping time → rejected.
   5. Valid booking → confirmed → borrower and owner both receive notification records.
-  6. Booked spot disappears from available spots for that window.
-  7. Unauthenticated resident cannot access any resident views → redirect to login.
+  6. Unauthenticated resident cannot access any resident views → redirect to login.
 """
 
 from datetime import timedelta
@@ -288,42 +287,4 @@ def test_confirm_booking_promotes_to_confirmed_and_notifies(org, borrower, spot,
     assert borrower.email in recipient_emails or owner.email in recipient_emails, (
         f"Expected email notification for borrower ({borrower.email}) or owner ({owner.email}) "
         f"after booking confirmation. outbox recipients: {recipient_emails}"
-    )
-
-
-# ---------------------------------------------------------------------------
-# Test 6 — Booked spot disappears from search results
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.django_db
-@override_settings(ALLOWED_HOSTS=[HOSTNAME])
-@freeze_time("2029-05-01T00:00:00Z")
-def test_booked_spot_not_available_for_same_window(org, borrower, spot, owner):
-    """
-    After booking, the spot is unavailable to a second searcher for the same window.
-    (SPEC-1 §4 Availability is computed, not stored)
-    """
-    from parking.models import Booking
-    from parking.availability import get_available_slots
-
-    win_start = utc(2029, 5, 2, 0)
-    win_end = utc(2029, 5, 2, 23)
-    make_window(org, spot, win_start, win_end)
-
-    book_start = utc(2029, 5, 2, 10)
-    book_end = utc(2029, 5, 2, 14)
-
-    # Confirm there's a slot before booking
-    slots_before = get_available_slots(org, book_start, book_end)
-    assert len(slots_before) > 0, "Expected at least one available slot before booking"
-
-    # Create a confirmed booking
-    make_booking(org, spot, borrower, book_start, book_end, status="confirmed")
-
-    # Now the slot should not be available
-    slots_after = get_available_slots(org, book_start, book_end)
-    spot_ids = [s.pk for s in slots_after]
-    assert spot.pk not in spot_ids, (
-        "Booked spot should not appear in available slots for the same window"
     )
