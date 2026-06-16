@@ -251,7 +251,7 @@ A booking counts as **booked** for availability/search whenever its status is `t
 ### Earned-horizon metric
 
 - A spot owner earns booking horizon by *listing* their spot as available; the more they contribute availability, the further ahead they may book others' spots.
-- Apply a **cold-start grace**: new residents get a baseline horizon before they have earned any, so they are not locked out at signup. The grace and earning formula are specified in `TECHNICAL-DESIGN.md` — implement to that, do not invent the curve.
+- Apply a **cold-start grace**: new residents get a baseline horizon before they have earned any, so they are not locked out at signup. The grace and earning formula are specified in `docs/design/TECHNICAL-DESIGN.md` — implement to that, do not invent the curve.
 - The metric feeds both the horizon gate and the leaderboard ordering.
 
 ---
