@@ -21,7 +21,6 @@ SUSPENDED: portability
 
 | Gate | Reason | Authorized | Review by | Tracking |
 |------|--------|------------|-----------|----------|
-| `portability` | Gate is inoperable on macOS — `portability_check.sh` uses the bash-4 `mapfile` builtin and aborts on macOS bash 3.2 before checking anything. Suspending loses no real coverage (it catches nothing here today) and unblocks the pipeline while the gate is fixed. | Scott Thurlow / 2026-06-13 | 2026-07-13 | HOS #101 |
 
 **Re-enable plan:** fix #101 (replace `mapfile` with a portable `while read` loop),
 then let `suspension_manager.py --check` record passes; after 3 consecutive passes
