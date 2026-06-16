@@ -26,8 +26,8 @@ Booking records (borrower)
 RelayMessage records (from_user or to_user)
   - body            → ``[erased]``  (preserve audit trail of message count)
 
-TOTPDevice records (django-otp)
-  - deleted in full (secret lives in TOTPDevice, not on User)
+EncryptedTOTPDevice records (django-otp, encrypted subclass)
+  - deleted in full (encrypted secret lives in EncryptedTOTPDevice, not on User)
 
 WebPushSubscription records
   - deleted in full
@@ -66,9 +66,7 @@ def erase_user_pii(user, erased_by):
     """
     with transaction.atomic():
         # Import inside transaction to avoid circular imports at module load time.
-        from django_otp.plugins.otp_totp.models import TOTPDevice
-
-        from accounts.models import AdminAuditLog
+        from accounts.models import AdminAuditLog, EncryptedTOTPDevice
         from notifications.models import RelayMessage
         from parking.models import Booking, ParkingSpot
 
@@ -102,8 +100,8 @@ def erase_user_pii(user, erased_by):
         )
         RelayMessage.objects.filter(to_user=user).update(body="[erased]", to_user=None)
 
-        # --- Delete TOTP devices (secret lives in TOTPDevice, not on User) -------
-        TOTPDevice.objects.filter(user=user).delete()
+        # --- Delete encrypted TOTP devices (secret lives in EncryptedTOTPDevice) --
+        EncryptedTOTPDevice.objects.filter(user=user).delete()
 
         # --- Delete push subscriptions and email OTPs ----------------------------
         user.push_subscriptions.all().delete()

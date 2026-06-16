@@ -25,7 +25,7 @@ from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.timezone import now
 from django.views.decorators.http import require_POST
-from django_otp.plugins.otp_totp.models import TOTPDevice
+from accounts.models import EncryptedTOTPDevice
 from django_ratelimit.decorators import ratelimit
 
 from accounts.decorators import active_required
@@ -158,7 +158,7 @@ def totp_verify(request):
         if form.is_valid():
             token = form.cleaned_data["token"]
             # Find a confirmed TOTP device for this user and verify the token.
-            devices = TOTPDevice.objects.filter(user=user, confirmed=True)
+            devices = EncryptedTOTPDevice.objects.filter(user=user, confirmed=True)
             matched_device = None
             for device in devices:
                 if device.verify_token(token):
@@ -403,7 +403,7 @@ def totp_enroll(request):
     - request.user.status == 'pending_totp', OR
     - session['totp_reset_required'] is True (lost-authenticator or recovery-code path)
 
-    GET:  Create an unconfirmed TOTPDevice and render the QR code.
+    GET:  Create an unconfirmed EncryptedTOTPDevice and render the QR code.
     POST: Verify the submitted token.  On success:
           - Confirm the device.
           - Generate 10 recovery codes; hash each; store hashed list on user.
@@ -424,7 +424,7 @@ def totp_enroll(request):
         token = request.POST.get("token", "").strip()
 
         # Find the unconfirmed device created during the GET phase.
-        device = TOTPDevice.objects.filter(
+        device = EncryptedTOTPDevice.objects.filter(
             user=request.user,
             confirmed=False,
         ).first()
@@ -438,7 +438,7 @@ def totp_enroll(request):
             device.save()
 
             # Delete any other (old) TOTP devices for this user.
-            TOTPDevice.objects.filter(user=request.user).exclude(pk=device.pk).delete()
+            EncryptedTOTPDevice.objects.filter(user=request.user).exclude(pk=device.pk).delete()
 
             # Generate 10 single-use recovery codes.
             plaintext_codes = [secrets.token_urlsafe(10) for _ in range(10)]
@@ -477,9 +477,9 @@ def totp_enroll(request):
 
     else:  # GET
         # Remove any prior unconfirmed devices before creating a fresh one.
-        TOTPDevice.objects.filter(user=request.user, confirmed=False).delete()
+        EncryptedTOTPDevice.objects.filter(user=request.user, confirmed=False).delete()
 
-        device = TOTPDevice.objects.create(
+        device = EncryptedTOTPDevice.objects.create(
             user=request.user,
             name=f"{request.user.email} TOTP",
             confirmed=False,
