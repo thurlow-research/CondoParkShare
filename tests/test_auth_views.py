@@ -498,6 +498,67 @@ def test_pending_approval_cannot_bypass_via_lost_authenticator():
 
 
 # ---------------------------------------------------------------------------
+# Happy-path: pending_totp user CAN be promoted to active via totp_enroll (T3-1)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_pending_totp_promoted_to_active_via_totp_enroll():
+    """
+    Happy-path regression complement for #17: a legitimate pending_totp user
+    must still be able to complete enrollment and advance to 'active'.
+
+    TODO (T3-1): Full end-to-end coverage requires generating a real TOTP token
+    at the exact drift window the test runs, which is fragile without freezegun
+    + a known TOTP secret. The defense-in-depth gate in totp_enroll checks
+    `user.status == "pending_totp"` before advancing to "active"; the negative
+    path (pending_approval blocked) is covered by
+    test_pending_approval_cannot_bypass_via_lost_authenticator above.
+
+    This stub documents the gap and the correct assertion when a TOTP-token mock
+    is wired up:
+        1. Create user with status="pending_totp"
+        2. Create unconfirmed EncryptedTOTPDevice for them
+        3. POST to totp_enroll with a token that verify_token() accepts (mocked)
+        4. Assert user.status == "active" after the view runs
+
+    To implement: patch EncryptedTOTPDevice.verify_token to return True (see
+    test_pending_approval_cannot_bypass_via_lost_authenticator for the mock
+    pattern) and verify the user.status transition.
+    """
+    from accounts.models import EncryptedTOTPDevice
+    from accounts.views import totp_enroll
+
+    org = OrganizationFactory()
+    user = UserFactory(organization=org, status="pending_totp")
+
+    with patch("accounts.models.EncryptedTOTPDevice.verify_token", return_value=True):
+        EncryptedTOTPDevice.objects.filter(user=user).delete()
+        EncryptedTOTPDevice.objects.create(user=user, name="primary", confirmed=False)
+
+        from django.contrib.sessions.backends.db import SessionStore
+
+        session = SessionStore()
+        session.create()
+
+        from django.test import RequestFactory as RF
+
+        rf = RF()
+        enroll_request = rf.post("/accounts/totp/enroll/", {"token": "000000"})
+        enroll_request.user = user
+        enroll_request.organization = org
+        enroll_request.session = session
+
+        totp_enroll(enroll_request)
+
+    user.refresh_from_db()
+    assert user.status == "active", (
+        "pending_totp user should be promoted to active after successful totp_enroll; "
+        f"got status={user.status!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
 # profile
 # ---------------------------------------------------------------------------
 
