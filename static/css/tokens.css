@@ -12,10 +12,12 @@
   --eucalyptus:#5e9079;  /* secondary — community warmth, focus rings */
   --meadow:#2e9e63;      /* SIGNAL — available + primary action */
   --meadow-ink:#1d6b43;  /* meadow as accessible text */
+  --meadow-btn:#1c8350;      /* meadow darkened for white-on-green button — AA 4.76:1 */
+  --meadow-btn-hover:#187a4a; /* btn-primary hover — AA 5.36:1 */
 
   /* --- Functional status --- */
   --clay:#bc7a4e;        /* STATUS — booked / occupied (use sparingly) */
-  --clay-ink:#9a5d34;
+  --clay-ink:#8f5531;    /* darkened for AA on warm badge surface 5.02:1 */
 
   /* --- Neutrals (warm-cool: garden meets concrete) --- */
   --ink:#18211c;         /* primary text */
@@ -127,8 +129,8 @@ a{color:var(--meadow-ink)}
   align-items:center;gap:8px;text-decoration:none;
   transition:transform .12s ease,background .15s ease}
 .btn:focus-visible{outline:var(--focus);outline-offset:2px}
-.btn-primary{background:var(--meadow);color:#fff}
-.btn-primary:hover{background:#268a55;transform:translateY(-1px)}
+.btn-primary{background:var(--meadow-btn);color:#fff}
+.btn-primary:hover{background:var(--meadow-btn-hover);transform:translateY(-1px)}
 .btn-secondary{background:var(--pine);color:#fff}
 .btn-secondary:hover{background:var(--pine-700)}
 .btn-ghost{background:transparent;color:var(--pine);border-color:var(--line)}
