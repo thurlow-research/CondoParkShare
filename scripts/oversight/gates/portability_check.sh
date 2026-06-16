@@ -7,7 +7,7 @@
 # Matches:
 #   /Users/<name>/...       macOS home dirs
 #   /home/<name>/...        Linux home dirs (excludes /home/runner — CI is OK)
-#   C:\Users\<name>\...     Windows home dirs
+#   C:/Users/<name>/...     Windows home dirs (the backslash-separator form is what the pattern matches)
 #
 # Scans Python, shell, TOML, ini, cfg files — broader than the portability_check.py
 # validator (which scores risk) — this gate is the blocking Phase-1 check.
