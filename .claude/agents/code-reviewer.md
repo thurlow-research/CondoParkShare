@@ -220,7 +220,7 @@ Every booking-creation path must enforce all three gates; verify each is enforce
 ### Earned-horizon metric semantics
 
 - The metric must count **only elapsed (past) listed hours** — availability the owner has already provided — not hours listed in the future. A calculation that credits not-yet-elapsed listed time inflates horizon and is a blocking finding.
-- Do not re-implement the earning curve or cold-start grace; verify the code matches the formula and grace value in `TECHNICAL-DESIGN.md`.
+- Do not re-implement the earning curve or cold-start grace; verify the code matches the formula and grace value in `docs/design/TECHNICAL-DESIGN.md`.
 - The same metric value must feed both the horizon gate and the leaderboard ordering — flag any divergent computation between the two call sites.
 
 ---

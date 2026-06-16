@@ -1,9 +1,17 @@
 """
-accounts.models — User, UserManager, Invite, EmailOTP, AdminAuditLog.
+accounts.models — User, UserManager, Invite, EmailOTP, AdminAuditLog,
+                   EncryptedTOTPDevice.
 
 User extends AbstractBaseUser + PermissionsMixin.
 Phone is field-encrypted via django-encrypted-model-fields.
 AUTH_USER_MODEL = 'accounts.User' is set in settings.
+
+EncryptedTOTPDevice subclasses django-otp's TOTPDevice and replaces the
+plain-hex `key` field with an EncryptedCharField.  The TOTP secret is
+therefore stored encrypted at rest using the same FIELD_ENCRYPTION_KEY
+(PII_ENCRYPTION_KEY) as User.phone.  All views and the erasure handler
+use EncryptedTOTPDevice exclusively — the parent TOTPDevice table is
+never written to by application code.
 """
 
 from django.contrib.auth.models import (
@@ -12,11 +20,62 @@ from django.contrib.auth.models import (
     PermissionsMixin,
 )
 from django.db import models
+from django_otp.plugins.otp_totp.models import TOTPDevice
+from django_otp.plugins.otp_totp.models import default_key
 from encrypted_model_fields.fields import EncryptedCharField
 
 
 def default_notification_prefs():
     return {"push": False}
+
+
+class EncryptedTOTPDevice(TOTPDevice):
+    """
+    A TOTPDevice whose TOTP secret is encrypted at rest.
+
+    Django forbids redeclaring a concrete parent field in a multi-table
+    inheritance subclass (FieldError: clashes with field of the same name
+    from base class).  We therefore hold the encrypted secret in a new
+    field `encrypted_key` on the subclass's own table
+    (`accounts_encryptedtotpdevice`) and override `bin_key` to decrypt it.
+
+    The parent `key` field retains a random-hex placeholder value (written
+    once at creation and never read after that).  All TOTP logic that uses
+    `bin_key` — `verify_token`, `config_url` — goes through our override
+    and therefore uses the encrypted value.
+
+    Encryption: `EncryptedCharField` backed by Fernet via the project's
+    existing FIELD_ENCRYPTION_KEY (PII_ENCRYPTION_KEY).  The ciphertext is
+    base64-encoded, well within max_length=500.
+
+    django-otp's `device_classes()` discovers this model automatically
+    because it scans concrete subclasses of Device; no explicit registration
+    needed.
+    """
+
+    encrypted_key = EncryptedCharField(
+        max_length=500,
+        default=default_key,
+        help_text=(
+            "TOTP secret stored encrypted at rest (Fernet/AES-128-CBC). "
+            "Plaintext is a hex-encoded 20-byte key identical in format "
+            "to the parent TOTPDevice.key."
+        ),
+    )
+
+    class Meta:
+        verbose_name = "encrypted TOTP device"
+
+    @property
+    def bin_key(self):
+        """Return the TOTP secret as raw bytes, decrypting from encrypted_key.
+
+        Overrides the parent property so all TOTP operations (verify_token,
+        config_url) use the encrypted field, not the parent's plaintext key.
+        """
+        from binascii import unhexlify
+
+        return unhexlify(self.encrypted_key.encode())
 
 
 class UserManager(BaseUserManager):

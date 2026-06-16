@@ -258,7 +258,7 @@ Every booking-creation path enforces, in order — the design must specify each 
 ### Earned-horizon metric (design the algorithm, not just the format)
 
 - An owner **earns booking horizon by listing their spot as available**: elapsed *past* listed hours, counted over a **rolling 180-day window**, drive how far ahead they may book others' spots. Only hours already elapsed count — never future-listed hours.
-- **Cold-start grace**: a new resident receives a baseline horizon at signup so they are not locked out before earning any. The grace value and the earning curve are fixed in `TECHNICAL-DESIGN.md`/SPEC-1 — design to the specified curve; do not invent it.
+- **Cold-start grace**: a new resident receives a baseline horizon at signup so they are not locked out before earning any. The grace value and the earning curve are fixed in `docs/design/TECHNICAL-DESIGN.md`/SPEC-1 — design to the specified curve; do not invent it.
 - Specify where the metric runs (signal / cron / on-demand), how `booking_horizon` is derived, and the cache/materialization contract (when written, what triggers recompute, staleness behavior).
 - The same metric feeds both the horizon gate and the leaderboard ordering — design one computation, two consumers.
 

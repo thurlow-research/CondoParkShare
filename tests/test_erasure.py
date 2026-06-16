@@ -114,9 +114,9 @@ def _make_relay_message(org, from_user, to_user, booking, body="Hello"):
 
 
 def _make_totp_device(user):
-    from django_otp.plugins.otp_totp.models import TOTPDevice
+    from accounts.models import EncryptedTOTPDevice
 
-    return TOTPDevice.objects.create(user=user, name="default", confirmed=True)
+    return EncryptedTOTPDevice.objects.create(user=user, name="default", confirmed=True)
 
 
 def _make_push_subscription(user):
@@ -255,23 +255,22 @@ def test_erasure_password_unusable():
 
 @pytest.mark.django_db
 def test_erasure_deletes_totp_devices():
-    """After erase_user_pii, TOTPDevice.objects.filter(user=user).count() == 0."""
-    from django_otp.plugins.otp_totp.models import TOTPDevice
-
+    """After erase_user_pii, EncryptedTOTPDevice.objects.filter(user=user).count() == 0."""
     from accounts.erasure import erase_user_pii
+    from accounts.models import EncryptedTOTPDevice
 
     org = OrganizationFactory()
     user = UserFactory(organization=org)
     admin = UserFactory(organization=org)
 
     _make_totp_device(user)
-    assert TOTPDevice.objects.filter(user=user).count() == 1
+    assert EncryptedTOTPDevice.objects.filter(user=user).count() == 1
 
     erase_user_pii(user, erased_by=admin)
 
     assert (
-        TOTPDevice.objects.filter(user=user).count() == 0
-    ), "All TOTPDevice records for the erased user should be deleted"
+        EncryptedTOTPDevice.objects.filter(user=user).count() == 0
+    ), "All EncryptedTOTPDevice records for the erased user should be deleted"
 
 
 # ---------------------------------------------------------------------------

@@ -80,10 +80,10 @@ def _make_request_with_session(session_data=None):
 
 
 def _make_totp_device(user, confirmed=True):
-    """Create a TOTPDevice for *user*."""
-    from django_otp.plugins.otp_totp.models import TOTPDevice
+    """Create an EncryptedTOTPDevice for *user*."""
+    from accounts.models import EncryptedTOTPDevice
 
-    return TOTPDevice.objects.create(
+    return EncryptedTOTPDevice.objects.create(
         user=user,
         name=f"{user.email} TOTP",
         confirmed=confirmed,
@@ -571,7 +571,7 @@ def test_totp_enroll_reset_preserves_pending_approval_status(rf):
     _make_totp_device(user, confirmed=False)
 
     with patch(
-        "django_otp.plugins.otp_totp.models.TOTPDevice.verify_token", return_value=True
+        "accounts.models.EncryptedTOTPDevice.verify_token", return_value=True
     ):
         request = rf.post("/accounts/totp/enroll/", {"token": "000000"})
         request.user = user

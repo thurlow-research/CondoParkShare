@@ -155,7 +155,7 @@ For `launch_grace_days` (14) after `Organization.launched_at`, all residents rec
 | `display_name` | `User.display_name` | Volume encryption only |
 | `phone` | `User.phone` | Field-encrypted using `django-encrypted-model-fields`. Optional. |
 | `password` | `User.password` | Argon2 one-way hash (Django `Argon2PasswordHasher`) |
-| `totp_secret` | `User.totp_secret` | Field-encrypted |
+| `totp_secret` | `EncryptedTOTPDevice.encrypted_key` (accounts app) | Field-encrypted (Fernet via `django-encrypted-model-fields`, same `PII_ENCRYPTION_KEY`). Not stored on `User`. |
 | `recovery_codes` | `User.recovery_codes` (JSON array) | Each code individually hashed (Argon2). Shown to user once at enrollment; never stored in plaintext. |
 
 **Encryption key:** loaded from `PII_ENCRYPTION_KEY` environment variable. Never in DB or repo. Key rotation path: `django-encrypted-model-fields` supports key rotation via a secondary key list.

@@ -228,19 +228,18 @@ def test_totp_verify_redirects_if_no_pre_auth():
 @pytest.mark.django_db
 def test_totp_verify_post_valid_token_logs_in():
     """totp_verify POST with valid TOTP token completes login."""
-    from django_otp.plugins.otp_totp.models import TOTPDevice
-
+    from accounts.models import EncryptedTOTPDevice
     from accounts.views import totp_verify
 
     org = OrganizationFactory()
     user = UserFactory(organization=org)
-    device = TOTPDevice.objects.create(user=user, name="test", confirmed=True)
+    device = EncryptedTOTPDevice.objects.create(user=user, name="test", confirmed=True)
 
     request = _make_request("POST", data={"token": "123456"},
                              session={"_pre_auth_user_id": user.pk}, org=org)
 
     with patch.object(device.__class__, "verify_token", return_value=True), \
-         patch("accounts.views.TOTPDevice.objects") as mock_mgr, \
+         patch("accounts.views.EncryptedTOTPDevice.objects") as mock_mgr, \
          patch("accounts.views.login"), \
          patch("django_otp.login"):
         mock_mgr.filter.return_value = [device]
@@ -252,19 +251,18 @@ def test_totp_verify_post_valid_token_logs_in():
 @pytest.mark.django_db
 def test_totp_verify_post_invalid_token_shows_error():
     """totp_verify POST with invalid TOTP token shows error."""
-    from django_otp.plugins.otp_totp.models import TOTPDevice
-
+    from accounts.models import EncryptedTOTPDevice
     from accounts.views import totp_verify
 
     org = OrganizationFactory()
     user = UserFactory(organization=org)
-    device = TOTPDevice.objects.create(user=user, name="test", confirmed=True)
+    device = EncryptedTOTPDevice.objects.create(user=user, name="test", confirmed=True)
 
     request = _make_request("POST", data={"token": "000000"},
                              session={"_pre_auth_user_id": user.pk}, org=org)
 
     with patch.object(device.__class__, "verify_token", return_value=False), \
-         patch("accounts.views.TOTPDevice.objects") as mock_mgr:
+         patch("accounts.views.EncryptedTOTPDevice.objects") as mock_mgr:
         mock_mgr.filter.return_value = [device]
         response = totp_verify(request)
 
