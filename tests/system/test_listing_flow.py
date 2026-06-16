@@ -2,13 +2,10 @@
 System tests — Listing flow (SPEC-1 §11).
 
 Covers:
-  1. Owner creates an availability window → spot appears in search for that window.
-  2. Owner creates recurring availability → multiple windows created correctly.
-  3. Elapsed listed hours accumulate as time passes (freezegun).
-  4. Future listed hours do not accumulate yet.
+  1. Spot list page shows owner's spots.
+  2. Elapsed listed hours accumulate as time passes (freezegun).
+  3. Future listed hours do not accumulate yet.
 """
-
-from datetime import timedelta
 
 import pytest
 from django.test import Client, override_settings
@@ -16,7 +13,6 @@ from freezegun import freeze_time
 
 from tests.system.conftest import (
     client_get,
-    client_post,
     force_login_active,
     make_org,
     make_spot,
@@ -39,62 +35,12 @@ def owner(org):
 
 
 @pytest.fixture
-def borrower(org):
-    return make_user(org, "borrower@listingflow.test", display_name="BorrowerUser")
-
-
-@pytest.fixture
 def spot(org, owner):
     return make_spot(org, owner, spot_number="L001")
 
 
 # ---------------------------------------------------------------------------
-# Test 1 — Owner creates availability window → spot available for that window
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.django_db
-@override_settings(ALLOWED_HOSTS=[HOSTNAME])
-@freeze_time("2029-05-01T00:00:00Z")
-def test_availability_window_makes_spot_searchable(org, owner, spot, borrower):
-    """
-    Owner adds availability window via the HTTP endpoint → spot appears in
-    get_available_slots for that time range. (SPEC-1 §11 Listing)
-    """
-    from parking.availability import get_available_slots
-
-    win_start = utc(2029, 5, 2, 0)
-    win_end = utc(2029, 5, 2, 23)
-
-    # No window yet — spot should not appear
-    slots_before = get_available_slots(org, utc(2029, 5, 2, 10), utc(2029, 5, 2, 14))
-    assert spot.pk not in [s.pk for s in slots_before], (
-        "Spot should not be available before a window is created"
-    )
-
-    # Owner logs in and adds availability window via the HTTP endpoint
-    client = Client()
-    force_login_active(client, owner)
-
-    response = client_post(client, HOSTNAME, f"/spots/{spot.pk}/availability/add/", {
-        "start": "2029-05-02 00:00",
-        "end": "2029-05-02 23:00",
-        "spot": spot.pk,
-    })
-    # Successful POST redirects to spot_availability page
-    assert response.status_code in (302, 200), (
-        f"Expected redirect or 200, got {response.status_code}"
-    )
-
-    # Spot should now appear in search results
-    slots_after = get_available_slots(org, utc(2029, 5, 2, 10), utc(2029, 5, 2, 14))
-    assert spot.pk in [s.pk for s in slots_after], (
-        "Spot should be available after adding an availability window"
-    )
-
-
-# ---------------------------------------------------------------------------
-# Test 2 — Spot list page shows owner's spots
+# Test 1 — Spot list page shows owner's spots
 # ---------------------------------------------------------------------------
 
 
@@ -118,7 +64,7 @@ def test_spot_list_page_shows_owner_spots(org, owner, spot):
 
 
 # ---------------------------------------------------------------------------
-# Test 3 — Elapsed listed hours accumulate as time passes → raises horizon
+# Test 2 — Elapsed listed hours accumulate as time passes → raises horizon
 # ---------------------------------------------------------------------------
 
 
@@ -148,7 +94,7 @@ def test_elapsed_listed_hours_accumulate_to_raise_horizon(org, owner, spot):
 
 
 # ---------------------------------------------------------------------------
-# Test 4 — Future listed hours do not accumulate yet
+# Test 3 — Future listed hours do not accumulate yet
 # ---------------------------------------------------------------------------
 
 

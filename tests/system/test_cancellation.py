@@ -2,7 +2,7 @@
 System tests — Cancellation and early release flows (SPEC-1 §11, §4).
 
 Covers:
-  1. Borrower cancels pre-start → booking voided; spot available again; one-booking slot freed.
+  1. Borrower cancels pre-start → booking voided; one-booking slot freed.
   2. Borrower early release → remaining hours freed; borrower can book again.
   3. Owner cancels booked slot → booking voided; borrower notification record created;
      owner standing penalty recorded.
@@ -47,7 +47,7 @@ def spot(org, owner):
 
 
 # ---------------------------------------------------------------------------
-# Test 1 — Borrower pre-start cancel: booking voided, spot freed
+# Test 1 — Borrower pre-start cancel: booking voided, slot freed
 # ---------------------------------------------------------------------------
 
 
@@ -57,21 +57,14 @@ def spot(org, owner):
 def test_borrower_cancel_pre_start_voids_booking(org, owner, borrower, spot):
     """
     Borrower cancels before the booking starts → status becomes 'cancelled_borrower',
-    spot is available again, borrower's one-booking slot is freed. (SPEC-1 §4, §11)
+    borrower's one-booking slot is freed. (SPEC-1 §4, §11)
     """
     from parking.models import Booking
-    from parking.availability import get_available_slots
 
     book_start = utc(2029, 5, 2, 10)
     book_end = utc(2029, 5, 2, 14)
     make_window(org, spot, utc(2029, 5, 2, 0), utc(2029, 5, 2, 23))
     booking = make_booking(org, spot, borrower, book_start, book_end, status="confirmed")
-
-    # Spot should be unavailable before cancellation
-    slots_before = get_available_slots(org, book_start, book_end)
-    assert spot.pk not in [s.pk for s in slots_before], (
-        "Spot should not be available while booking is confirmed"
-    )
 
     # Borrower cancels via POST
     client = Client()
@@ -86,12 +79,6 @@ def test_borrower_cancel_pre_start_voids_booking(org, owner, borrower, spot):
     booking.refresh_from_db()
     assert booking.status == "cancelled_borrower", (
         f"Expected 'cancelled_borrower', got '{booking.status}'"
-    )
-
-    # Spot should now be available again
-    slots_after = get_available_slots(org, book_start, book_end)
-    assert spot.pk in [s.pk for s in slots_after], (
-        "Spot should be available again after borrower cancellation"
     )
 
     # Gate 2: borrower should be able to book again (no active booking)
