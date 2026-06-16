@@ -97,4 +97,26 @@ A TPM2-unlocked LUKS device becomes available **late** in boot (after `local-fs.
 ## Follow-up (separate step)
 Migrate **`/var/lib/docker`** onto `/mnt/cps-data` so CPS data actually lands on the encrypted disk, with `docker.service` ordered **after** the mount (`RequiresMountsFor`). Until then, the encrypted disk is provisioned but not yet holding the data.
 
+---
+
+## Backup encryption (age) — restore procedure
+
+Nightly backups written by `scripts/backup.sh` are piped through `age` before landing on the NAS. The output files have the extension `.sql.gz.age`. The private key is stored **off-NAS** (password manager / offline key store).
+
+To restore from a backup:
+
+```bash
+# Decrypt, decompress, and restore in one pipeline
+age -d -i <private-key-path> <backup>.sql.gz.age | gunzip | psql "${DATABASE_URL}"
+```
+
+Key custody notes:
+- The `BACKUP_ENCRYPTION_RECIPIENT` in `.env` holds the **public** age key (safe to commit to `.env.example` as a placeholder).
+- The **private** key (`age-keygen -o backup-key.txt`) must never be stored on the NAS alongside the backups — keep it in a password manager or on offline media.
+- Generate a keypair: `age-keygen -o backup-key.txt` (the "Public key:" line is the recipient value).
+
+*Refs: CPS#48, CPS#63, CPS#91 (backup encryption implementation).*
+
+---
+
 *Refs: CPS#104 (BitLocker host layer), CPS#91/#48/#63 (backup encryption), SPEC-1 §2/§7, `docs/security/SECURITY-MEASURES.md`.*
