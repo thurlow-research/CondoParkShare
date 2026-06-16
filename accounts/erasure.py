@@ -102,6 +102,12 @@ def erase_user_pii(user, erased_by):
 
         # --- Delete encrypted TOTP devices (secret lives in EncryptedTOTPDevice) --
         EncryptedTOTPDevice.objects.filter(user=user).delete()
+        # Belt-and-suspenders: catch any bare TOTPDevice rows that pre-date the
+        # EncryptedTOTPDevice migration (no-op if none exist).
+        from django_otp.plugins.otp_totp.models import TOTPDevice
+        TOTPDevice.objects.filter(user=user).exclude(
+            encryptedtotpdevice__isnull=False
+        ).delete()
 
         # --- Delete push subscriptions and email OTPs ----------------------------
         user.push_subscriptions.all().delete()
