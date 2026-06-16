@@ -412,6 +412,92 @@ def test_lost_authenticator_post_unknown_email_still_redirects():
 
 
 # ---------------------------------------------------------------------------
+# Regression: HOA approval bypass via lost-authenticator → totp_enroll (#17)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+def test_pending_approval_cannot_bypass_via_lost_authenticator():
+    """
+    Regression test for issue #17 — HOA approval bypass path:
+      1. pending_approval user requests lost-authenticator OTP
+      2. verify step must reject them (status gate)
+      3. Even if they somehow reach totp_enroll with totp_reset_required=True,
+         their status must not advance to 'active'
+
+    Both fix points are exercised in sequence:
+    - lost_authenticator_verify rejects pending_approval at the status gate.
+    - totp_enroll (defense-in-depth) preserves pending_approval on save.
+    """
+    from django.contrib.sessions.backends.db import SessionStore
+    from accounts.models import EmailOTP, EncryptedTOTPDevice
+    from accounts.views import lost_authenticator_verify, totp_enroll
+
+    org = OrganizationFactory()
+    user = UserFactory(organization=org, status="pending_approval")
+
+    # Part 1: verify view blocks the bypass — OTP is not consumed, no redirect.
+    otp_plaintext = "482917"
+    EmailOTP.objects.create(
+        user=user,
+        code_hash=make_password(otp_plaintext),
+        expires_at=now() + timedelta(minutes=15),
+        consumed=False,
+    )
+
+    rf = RequestFactory()
+    session = SessionStore()
+    session.create()
+    session["_lost_auth_user_id"] = user.pk
+
+    verify_request = rf.post(
+        "/accounts/lost-authenticator/verify/",
+        {"code": otp_plaintext},
+    )
+    verify_request.organization = org
+    verify_request.session = session
+
+    response = lost_authenticator_verify(verify_request)
+
+    # Must not redirect to totp_enroll (302 redirect = bypass succeeded).
+    assert response.status_code == 200, (
+        "pending_approval user must not be redirected by lost_authenticator_verify; "
+        f"got status {response.status_code}"
+    )
+    user.refresh_from_db()
+    assert user.status == "pending_approval", (
+        "lost_authenticator_verify must not change status away from pending_approval"
+    )
+    # OTP must not be consumed (do not burn it on a denied request).
+    otp = EmailOTP.objects.get(user=user)
+    assert not otp.consumed, "OTP must not be consumed when request is denied"
+
+    # Part 2: defense-in-depth — even if pending_approval reaches totp_enroll
+    # with totp_reset_required=True, status must not advance to 'active'.
+    with patch("accounts.models.EncryptedTOTPDevice.verify_token", return_value=True):
+        EncryptedTOTPDevice.objects.filter(user=user).delete()
+        EncryptedTOTPDevice.objects.create(user=user, name="test", confirmed=False)
+
+        enroll_session = SessionStore()
+        enroll_session.create()
+        enroll_session["totp_reset_required"] = True
+
+        enroll_request = rf.post("/accounts/totp/enroll/", {"token": "000000"})
+        enroll_request.user = user
+        enroll_request.organization = org
+        enroll_request.session = enroll_session
+
+        totp_enroll(enroll_request)
+
+    user.refresh_from_db()
+    assert user.status == "pending_approval", (
+        "totp_enroll must not elevate pending_approval to active — "
+        "HOA approval bypass blocked (#17)"
+    )
+
+
+# ---------------------------------------------------------------------------
 # profile
 # ---------------------------------------------------------------------------
 
