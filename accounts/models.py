@@ -6,12 +6,15 @@ User extends AbstractBaseUser + PermissionsMixin.
 Phone is field-encrypted via django-encrypted-model-fields.
 AUTH_USER_MODEL = 'accounts.User' is set in settings.
 
-EncryptedTOTPDevice subclasses django-otp's TOTPDevice and replaces the
-plain-hex `key` field with an EncryptedCharField.  The TOTP secret is
-therefore stored encrypted at rest using the same FIELD_ENCRYPTION_KEY
-(PII_ENCRYPTION_KEY) as User.phone.  All views and the erasure handler
-use EncryptedTOTPDevice exclusively — the parent TOTPDevice table is
-never written to by application code.
+EncryptedTOTPDevice subclasses django-otp's TOTPDevice and stores the
+TOTP secret in a separate `encrypted_key` EncryptedCharField (Django
+forbids redeclaring concrete parent fields in MTI subclasses).  The
+`bin_key` property is overridden to decrypt `encrypted_key`, so all
+TOTP crypto uses the encrypted value.  The parent `key` field retains
+an independent random-hex placeholder — it is NOT the TOTP secret.
+Both `accounts_encryptedtotpdevice` and `otp_totp_totpdevice` rows are
+created together (MTI) and deleted together (CASCADE).  All views and
+the erasure handler use EncryptedTOTPDevice exclusively.
 """
 
 from django.contrib.auth.models import (
