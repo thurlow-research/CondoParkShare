@@ -55,7 +55,7 @@ So the human's job is bounded and legible: **keep the `needs-human` issue queue 
 
 **The return path (human → HOS).** When the human decides, the issue moves from the human's inbox back to HOS's: the human **removes `needs-human`, adds [`needs-ai`](https://github.com/ScottThurlow/HumanOversightSystem/labels)**, and writes the decision in a comment with a parseable opener — `Decision: <choice>` (optionally `Action:` / `Disposition:`). HOS (the agentic loop / the standing daily job, #131) scans `needs-ai` issues, reads the `Decision:`, acts on it, and **closes** the issue — or swaps it back to `needs-human` if it needs more input. The result is a clean two-state handoff, `needs-human` ⇄ `needs-ai` → closed, where each side's queue is exactly one label, so neither the human nor HOS has to guess whether the ball is in their court.
 
-> **⚠ Threat-model limitation — the human gate is currently *behavioral*, not *mechanical*.** Every artifact that *loosens* oversight — `human-authorization.md`, `gate-suspension.md`, `human-tier-override.md` — is "human only," and the evaluator robustly re-derives whether a *covering* artifact must exist (anti-gaming, conditions 9–10). But AI and human commits share one git identity, so the OS/git layer cannot tell an agent-authored authorization from a human one — **the agent can fabricate the very artifact it is forbidden to create.** The anti-gaming check verifies a file *exists*, not that a *human* wrote it. So the human-authority guarantee does not yet *prevent* a self-authorization. **Pilot state (#127):** the gate is now **accountable and tamper-evident** — on verifying an authorization the evaluator commits a content-hashed `human-authorization` record to the append-only `audit/oversight-log.jsonl`, pinning *what* was authorized, *when*, and the claimed authorizer into permanent history (the prior gap, per the #127 thread, was that the artifact lived untracked in `.claudetmp/` with no record at all). This makes a self-authorization *detectable and undeniable after the fact* — but it does **not** make it *impossible*: an agent running on the human's account can still write the file. **True forge-proofing is a deliberate, deferred backfill** — and crucially, signed commits do **not** solve it here, because the agent shares the human's git *and* GitHub identity, so a signature also resolves to the human. The viable forge-proof path is an **out-of-band human proof** (a hardware-key touch or a phone TOTP) verified **in CI**, where the local agent cannot reach the verifying secret — tracked as a future enhancement. This boundary is stated plainly because it bounds every claim the system makes about human authority: in the pilot the gate is *auditable*, not *unforgeable*.
+> **Threat model — the human gate is forge-proof via identity separation (#152, `docs/AGENT-IDENTITY.md`).** The gate runs as two orthogonal checks: (1) **server-side branch protection** requires an approving review from a human account (`ScottThurlow`) before a PR touching a protected surface can merge; and (2) the **`require-human-approval` CI status check** re-derives whether human approval is present independently. The critical property: the bots (`HOSWorkerTutelare` / `HOSOversightTutelare`) hold *only their own PATs* — the human's credentials are absent from their environments. GitHub's identity layer therefore makes it structurally impossible for a bot to produce a human approval: the required reviewer is a different account the bot cannot authenticate as. This supersedes the prior #151 TOTP/out-of-band-proof approach: the cleaner fix is the identity split, not a cryptographic add-on. **Residual:** repo-config tampering (disabling branch protection) remains a possible bypass — but it is loud, auditable, and detectable post-hoc (a committed change to `.github/CODEOWNERS` or the workflow file, both on the protected surface, would itself require a human approval to merge). The `#127` accountability layer (content-hashed `human-authorization` records in `audit/oversight-log.jsonl`) stays as the underlying audit trail; forge-proofing is added on top by the identity split.
 
 ---
 
@@ -78,6 +78,10 @@ We deliberately use **multiple vendors and model tiers** — the whole point is 
 - **Why no Claude in the reviewer seat:** Opus is the author, so no Claude model casts an independent review — same-vendor judgement correlates errors. Sonnet is the **arbiter** (synthesis), never an independent reviewer; the independent votes are cross-vendor (`agy`/`codex`).
 
 > Google is retiring the Gemini CLI (consumer shutoff **2026-06-18**) in favor of the **Antigravity CLI (`agy`)**, which is what the tooling now installs.
+
+### Runtime orchestration agents (the human interface layer)
+
+Two named agents sit above the specialist roles listed above: `worker` is the human's console interface and the autonomous build agent — it accepts work from a human or from a cron invocation, routes it to the appropriate specialist agents (coder, reviewers, etc.), and never absorbs their outputs into its own response. `overseer` is the oversight console and the autonomous review/merge agent — it evaluates what the worker produced and decides what may merge per the merge-authority matrix. Both run under their dedicated machine accounts (`HOSWorkerTutelare` / `HOSOversightTutelare`) in autonomous mode. This is an orchestration layer above the specialist agents, not a replacement for them; the specialists perform the actual code authoring, reviewing, and testing.
 
 ---
 
@@ -212,6 +216,17 @@ Each prompt-to-verify cycle must leave the codebase in a working state before th
 │  └──────── back to 1 for next incremental change ──────────┘
 ```
 
+### Definition of Done (inner loop step)
+
+A build step is **not done** until all four conditions hold — in this order:
+
+1. **Code passes inner-loop tests.** `run_tests_inner_loop.sh` exits 0 against the current working tree.
+2. **Relevant docs updated.** If the step modified documented behavior (new agent, new gate, new governance rule, changed spec flow), the relevant spec, design doc, AGENTS.md, or DECISIONS.md entry reflects what was built. A step whose observable behavior differs from its documentation is not done — it is broken.
+3. **Research finding filed (if applicable).** If the step produced empirical data (escaped defect, tier-calibration signal, pipeline timing), a finding is recorded in `research/findings/`.
+4. **Sign-off register entry written.** The step's register entry is complete with all required fields (§3).
+
+"I'll update the docs later" is not a valid sign-off state.
+
 > **Why the inner loop matters:** AI agents have no memory of the codebase state from one prompt to the next beyond what is in the current context. An agent asked to "add X" on a tree where Y is already broken will produce code that looks correct but depends on a broken foundation. By the time CI runs (after the PR opens), the failure stack may span five prompts and require significant archaeology to untangle. Local verification after each prompt is the only reliable way to keep the codebase in a known-good state throughout development.
 
 ### Transition phase (runs once per feature, pre-PR)
@@ -246,6 +261,9 @@ Once the inner loop produces a complete verified working state, a transition pha
                      PROCEED/CONDITIONAL → opens PR.
                      ESCALATE → surfaces bounded questions to human;
                                 does NOT open the PR.                   [✅ oversight-orchestrator]
+
+   pr_readiness.py   →  deterministic self-assessment gate (REQ-W-01..W-14);
+                        exit 0 required before gh pr create              [✅ #317]
 ```
 
 **Why `panel-context.md` withholds internal findings:** if the outer panel could read the internal reviewers' conclusions, it would tend to converge on the same findings rather than produce a genuinely independent signal. The isolation is an anchoring-prevention mechanism — the same principle as blind peer review. The panel sees structural signals (risk tier, blast radius, provenance) but forms its own judgments.
@@ -270,6 +288,10 @@ An adversarial self-review on a rich governance corpus **never says "nothing lef
                      ESCALATE). main is protected: ≥1 approval + all
                      review threads resolved before merge.              [✅]
 
+   overseer bounce-back  →  register-completeness check before merge-authority
+                            matrix; incomplete → pr-bounced (PR stays open,
+                            re-assigned to worker, failure counter unchanged) [✅ #317]
+
 13. CI CHEAP GATES   lint, types, build, unit tests, secret scan.
                      If CI fails on a gate the inner loop should have
                      caught, that is a process health signal — the
@@ -290,6 +312,17 @@ An adversarial self-review on a rich governance corpus **never says "nothing lef
 
 16. MERGE → AUDIT    Resolved trail committed to
                      audit/oversight-log.jsonl (append-only).          [✅]
+
+17. RELEASE AUTH     Human-authorized only (NG3b). Trigger: human creates
+                     "do release vX.Y.Z" issue (label release-request, assigned
+                     to worker). Worker validates all required suites, posts
+                     results + "Release candidate SHA: <sha>" + how-to-authorize
+                     instructions. Final cut ONLY on three-part GitHub signal:
+                     release-authorized label + needs-human removal + re-assign
+                     to worker — all by the same human CODEOWNER, temporally
+                     after the results comment (§6 four conditions + §6.3
+                     same-actor three-signal). Chat never authorizes the cut.
+                     Violations → ng3b-violation-attempt audit event.  [#345]
 ```
 
 **Why the panel runs locally, not in CI:** the CLIs authenticate interactively (browser OAuth that lives on your machine); CI runners can't hold that session. So CI handles the deterministic gates + Copilot's native PR review, while the cross-vendor AI panel runs from a local command and **posts its findings to the PR**. The PR stays the auditable record.
