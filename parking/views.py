@@ -14,12 +14,7 @@ from psycopg2.extras import DateTimeTZRange
 
 from accounts.decorators import active_required
 from notifications.dispatch import notify
-from parking.booking import (
-    assign_spot,
-    cancel_booking,
-    confirm_booking,
-    release_booking,
-)
+from parking.booking import assign_spot, cancel_booking, confirm_booking, release_booking
 from parking.forms import (
     AvailabilityWindowForm,
     AvailabilityWindowRemoveForm,
@@ -84,9 +79,7 @@ def spot_availability(request, pk):
 
     now_dt = now()
 
-    future_windows = spot.availability_windows.filter(
-        time_range__endswith__gt=now_dt
-    ).order_by("time_range")
+    future_windows = spot.availability_windows.filter(time_range__endswith__gt=now_dt).order_by("time_range")
 
     upcoming_bookings = spot.bookings.filter(
         status__in=["confirmed", "active"],
@@ -115,9 +108,7 @@ def availability_add(request, pk):
         raise PermissionDenied
 
     if request.method == "POST":
-        form = AvailabilityWindowForm(
-            request.POST, owner=request.user, org=request.organization
-        )
+        form = AvailabilityWindowForm(request.POST, owner=request.user, org=request.organization)
         if form.is_valid():
             start = form.cleaned_data["start"]
             end = form.cleaned_data["end"]
@@ -127,9 +118,7 @@ def availability_add(request, pk):
                 time_range=DateTimeTZRange(start, end),
             )
             if request.headers.get("HX-Request"):
-                future_windows = spot.availability_windows.filter(
-                    time_range__endswith__gt=now()
-                ).order_by("time_range")
+                future_windows = spot.availability_windows.filter(time_range__endswith__gt=now()).order_by("time_range")
                 return render(
                     request,
                     "parking/partials/availability_windows.html",
@@ -182,10 +171,7 @@ def availability_remove(request, pk, wk):
             ).exists()
 
             if overlapping:
-                error_msg = (
-                    "This availability window cannot be removed because "
-                    "it has active or confirmed bookings."
-                )
+                error_msg = "This availability window cannot be removed because " "it has active or confirmed bookings."
                 if request.headers.get("HX-Request"):
                     return render(
                         request,
@@ -204,9 +190,7 @@ def availability_remove(request, pk, wk):
             window.delete()
             if request.headers.get("HX-Request"):
                 response = HttpResponse(status=204)
-                response["HX-Redirect"] = request.build_absolute_uri(
-                    redirect("spot_availability", pk=spot.pk).url
-                )
+                response["HX-Redirect"] = request.build_absolute_uri(redirect("spot_availability", pk=spot.pk).url)
                 return response
             return redirect("spot_availability", pk=spot.pk)
     else:
@@ -278,9 +262,7 @@ def book_request(request):
 
     context = {"form": form}
     if request.headers.get("HX-Request") and request.method == "POST":
-        return render(
-            request, "parking/partials/book_request_form.html", context, status=422
-        )
+        return render(request, "parking/partials/book_request_form.html", context, status=422)
     return render(request, "parking/book_request.html", context)
 
 
@@ -333,11 +315,7 @@ def book_confirm(request):
 @active_required
 def booking_list(request):
     """List the authenticated user's bookings (active + recent)."""
-    bookings = (
-        Booking.scoped.filter(borrower=request.user)
-        .select_related("spot")
-        .order_by("-time_range")
-    )
+    bookings = Booking.scoped.filter(borrower=request.user).select_related("spot").order_by("-time_range")
     return render(request, "parking/booking_list.html", {"bookings": bookings})
 
 

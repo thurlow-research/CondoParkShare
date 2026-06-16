@@ -53,8 +53,7 @@ def get_earned_horizon_hours(user):
             clamped_start=Greatest(Lower("time_range"), window_start),
             clamped_end=Least(Upper("time_range"), now_dt),
             hours=ExpressionWrapper(
-                Least(Upper("time_range"), now_dt)
-                - Greatest(Lower("time_range"), window_start),
+                Least(Upper("time_range"), now_dt) - Greatest(Lower("time_range"), window_start),
                 output_field=DurationField(),
             ),
         )

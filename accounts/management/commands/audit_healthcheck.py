@@ -70,7 +70,7 @@ _PROBE_RETAIN_COUNT = 10
 # to a safe subset and validate at module load so a misconfigured deployment
 # fails loudly on startup rather than silently writing malformed or injected
 # metrics.
-_LABEL_VALUE_RE = re.compile(r'^[a-zA-Z0-9._-]{1,64}$')
+_LABEL_VALUE_RE = re.compile(r"^[a-zA-Z0-9._-]{1,64}$")
 
 
 def _validate_label(name: str, value: str) -> str:
@@ -90,7 +90,7 @@ if _ENV == "unknown":
     # Not fail-closed — the metrics are still valid — but operators should set
     # DJANGO_ENV so the label is meaningful in dashboards.
     logger.warning(
-        "audit_healthcheck: DJANGO_ENV is not set; Prometheus label env=\"unknown\". "
+        'audit_healthcheck: DJANGO_ENV is not set; Prometheus label env="unknown". '
         "Set DJANGO_ENV=prod (opus) or DJANGO_ENV=ppe (faberix) in the environment."
     )
 
@@ -101,11 +101,7 @@ def _common_labels() -> str:
 
 def _prom_gauge(name: str, help_text: str, value: float) -> str:
     labels = _common_labels()
-    return (
-        f"# HELP {name} {help_text}\n"
-        f"# TYPE {name} gauge\n"
-        f'{name}{{{labels}}} {value}\n'
-    )
+    return f"# HELP {name} {help_text}\n" f"# TYPE {name} gauge\n" f"{name}{{{labels}}} {value}\n"
 
 
 def _build_prom_text(
@@ -170,9 +166,7 @@ def _build_prom_text(
     return "".join(lines)
 
 
-def _write_prom_atomically(
-    textfile_dir: str, content: str
-) -> None:
+def _write_prom_atomically(textfile_dir: str, content: str) -> None:
     """
     Write *content* to parkshare_audit.prom inside *textfile_dir* using a
     temp-file + os.rename so node_exporter never reads a partial file.
@@ -183,13 +177,10 @@ def _write_prom_atomically(
     # tempfile in the same directory guarantees rename(2) is atomic (same filesystem).
     # delete=False because we rename it ourselves.
     fd, tmp_path = tempfile.mkstemp(dir=textfile_dir, prefix=".parkshare_audit_", suffix=".prom.tmp")
-    # Track whether os.fdopen has taken ownership of fd.  If fdopen raises, the
-    # raw fd would otherwise leak; we close it explicitly in that case.
-    fd_owned_by_fh = False
+    # If os.fdopen raises, the raw fd would otherwise leak; close it explicitly.
     try:
         try:
             fh = os.fdopen(fd, "w", encoding="utf-8")
-            fd_owned_by_fh = True
         except Exception:
             os.close(fd)
             raise
@@ -269,16 +260,11 @@ def _read_last_success_ts(status_path: str) -> float | None:
 
 
 class Command(BaseCommand):
-    help = (
-        "Synthetic audit DB liveness probe + backlog gauge writer "
-        "(spec AUDIT-MONITORING-SPEC.md §6.3)."
-    )
+    help = "Synthetic audit DB liveness probe + backlog gauge writer " "(spec AUDIT-MONITORING-SPEC.md §6.3)."
 
     def handle(self, *args, **options):
         liveness_ok = self._run_probe()
-        backlog_records, backlog_oldest_seconds, backlog_rejected, backlog_malformed = (
-            self._compute_backlog()
-        )
+        backlog_records, backlog_oldest_seconds, backlog_rejected, backlog_malformed = self._compute_backlog()
 
         now_unix = time.time()
         status_path = settings.AUDIT_LIVENESS_STATUS
@@ -293,9 +279,7 @@ class Command(BaseCommand):
             }
         else:
             last_ok_ts = _read_last_success_ts(status_path)
-            liveness_age_seconds = (
-                max(0.0, now_unix - last_ok_ts) if last_ok_ts is not None else float("inf")
-            )
+            liveness_age_seconds = max(0.0, now_unix - last_ok_ts) if last_ok_ts is not None else float("inf")
             # inf would produce invalid Prometheus text; cap at a large sentinel
             if liveness_age_seconds == float("inf"):
                 liveness_age_seconds = 86400.0 * 365  # 1 year — "never succeeded"
@@ -360,8 +344,7 @@ class Command(BaseCommand):
 
             # Prune old probe rows so the table stays bounded.
             keep_ids = list(
-                AuditProbe.objects.order_by("-created_at")
-                .values_list("pk", flat=True)[:_PROBE_RETAIN_COUNT]
+                AuditProbe.objects.order_by("-created_at").values_list("pk", flat=True)[:_PROBE_RETAIN_COUNT]
             )
             AuditProbe.objects.exclude(pk__in=keep_ids).delete()
 
@@ -408,9 +391,7 @@ class Command(BaseCommand):
                 from django.utils.timezone import make_aware
 
                 oldest_dt = make_aware(oldest_dt)
-            oldest_seconds = max(
-                0.0, (now_utc - oldest_dt.astimezone(dt_timezone.utc)).total_seconds()
-            )
+            oldest_seconds = max(0.0, (now_utc - oldest_dt.astimezone(dt_timezone.utc)).total_seconds())
         else:
             oldest_seconds = 0.0
 

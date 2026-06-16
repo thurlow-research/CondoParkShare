@@ -9,20 +9,36 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('accounts', '0003_auditprobe'),
-        ('otp_totp', '0003_add_timestamps'),
+        ("accounts", "0003_auditprobe"),
+        ("otp_totp", "0003_add_timestamps"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='EncryptedTOTPDevice',
+            name="EncryptedTOTPDevice",
             fields=[
-                ('totpdevice_ptr', models.OneToOneField(auto_created=True, on_delete=django.db.models.deletion.CASCADE, parent_link=True, primary_key=True, serialize=False, to='otp_totp.totpdevice')),
-                ('encrypted_key', encrypted_model_fields.fields.EncryptedCharField(default=django_otp.plugins.otp_totp.models.default_key, help_text='TOTP secret stored encrypted at rest (Fernet/AES-128-CBC). Plaintext is a hex-encoded 20-byte key identical in format to the parent TOTPDevice.key.')),
+                (
+                    "totpdevice_ptr",
+                    models.OneToOneField(
+                        auto_created=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        parent_link=True,
+                        primary_key=True,
+                        serialize=False,
+                        to="otp_totp.totpdevice",
+                    ),
+                ),
+                (
+                    "encrypted_key",
+                    encrypted_model_fields.fields.EncryptedCharField(
+                        default=django_otp.plugins.otp_totp.models.default_key,
+                        help_text="TOTP secret stored encrypted at rest (Fernet/AES-128-CBC). Plaintext is a hex-encoded 20-byte key identical in format to the parent TOTPDevice.key.",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'encrypted TOTP device',
+                "verbose_name": "encrypted TOTP device",
             },
-            bases=('otp_totp.totpdevice',),
+            bases=("otp_totp.totpdevice",),
         ),
     ]

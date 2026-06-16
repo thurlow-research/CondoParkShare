@@ -55,12 +55,8 @@ def get_leaderboard(organization, limit=20):
                     output_field=DurationField(),
                 ),
                 filter=(
-                    Q(
-                        owned_spots__availability_windows__time_range__endswith__lte=now_dt
-                    )
-                    & Q(
-                        owned_spots__availability_windows__time_range__endswith__gt=window_start
-                    )
+                    Q(owned_spots__availability_windows__time_range__endswith__lte=now_dt)
+                    & Q(owned_spots__availability_windows__time_range__endswith__gt=window_start)
                     & Q(owned_spots__status="active")
                     # Explicit tenant scope (defense-in-depth): don't rely solely
                     # on the spot-owner-same-org invariant for cross-org safety.

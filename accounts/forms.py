@@ -154,9 +154,7 @@ class InviteRegistrationForm(forms.Form):
                 organization=self._organization,
                 email=email,
             ).exists():
-                raise forms.ValidationError(
-                    "An account with this email already exists for this building."
-                )
+                raise forms.ValidationError("An account with this email already exists for this building.")
 
         return cleaned
 
@@ -204,9 +202,7 @@ class SelfRegistrationForm(forms.Form):
                 organization=self._organization,
                 email=email,
             ).exists():
-                raise forms.ValidationError(
-                    "An account with this email already exists for this building."
-                )
+                raise forms.ValidationError("An account with this email already exists for this building.")
         return email
 
 

@@ -17,14 +17,9 @@ created together (MTI) and deleted together (CASCADE).  All views and
 the erasure handler use EncryptedTOTPDevice exclusively.
 """
 
-from django.contrib.auth.models import (
-    AbstractBaseUser,
-    BaseUserManager,
-    PermissionsMixin,
-)
+from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
-from django_otp.plugins.otp_totp.models import TOTPDevice
-from django_otp.plugins.otp_totp.models import default_key
+from django_otp.plugins.otp_totp.models import TOTPDevice, default_key
 from encrypted_model_fields.fields import EncryptedCharField
 
 
@@ -82,9 +77,7 @@ class EncryptedTOTPDevice(TOTPDevice):
 
 
 class UserManager(BaseUserManager):
-    def create_user(
-        self, email, organization, display_name, password=None, **extra_fields
-    ):
+    def create_user(self, email, organization, display_name, password=None, **extra_fields):
         if not email:
             raise ValueError("Email required")
         user = self.model(
@@ -97,21 +90,15 @@ class UserManager(BaseUserManager):
         user.save(using=self._db)
         return user
 
-    def create_superuser(
-        self, email, organization, display_name, password, **extra_fields
-    ):
+    def create_superuser(self, email, organization, display_name, password, **extra_fields):
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
         extra_fields.setdefault("status", "active")
-        return self.create_user(
-            email, organization, display_name, password, **extra_fields
-        )
+        return self.create_user(email, organization, display_name, password, **extra_fields)
 
 
 class User(AbstractBaseUser, PermissionsMixin):
-    organization = models.ForeignKey(
-        "parking.Organization", on_delete=models.PROTECT, related_name="users"
-    )
+    organization = models.ForeignKey("parking.Organization", on_delete=models.PROTECT, related_name="users")
 
     # PII — volume encryption only (LUKS). Not field-encrypted (breaks login lookup).
     email = models.CharField(max_length=255)
@@ -132,9 +119,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         ("active", "Active"),
         ("blocked", "Blocked"),
     ]
-    status = models.CharField(
-        max_length=20, choices=STATUS_CHOICES, default="pending_totp"
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending_totp")
 
     is_hoa_admin = models.BooleanField(default=False)
     is_staff = models.BooleanField(default=False)  # Django admin access
@@ -165,13 +150,9 @@ class User(AbstractBaseUser, PermissionsMixin):
 
 class Invite(models.Model):
     organization = models.ForeignKey("parking.Organization", on_delete=models.CASCADE)
-    issued_by = models.ForeignKey(
-        User, on_delete=models.PROTECT, related_name="issued_invites"
-    )
+    issued_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name="issued_invites")
     code = models.CharField(max_length=64, unique=True)  # secrets.token_urlsafe(32)
-    unit_number = models.CharField(
-        max_length=50, blank=True
-    )  # pre-tag: pre-fills registration form
+    unit_number = models.CharField(max_length=50, blank=True)  # pre-tag: pre-fills registration form
     max_uses = models.PositiveIntegerField(default=1)
     use_count = models.PositiveIntegerField(default=0)
     expires_at = models.DateTimeField(null=True, blank=True)
@@ -234,9 +215,7 @@ class AdminAuditLog(models.Model):
         null=True,
         blank=True,
     )
-    actor = models.ForeignKey(
-        User, on_delete=models.PROTECT, related_name="audit_actions"
-    )
+    actor = models.ForeignKey(User, on_delete=models.PROTECT, related_name="audit_actions")
     on_behalf_of = models.ForeignKey(
         User,
         null=True,
@@ -248,9 +227,7 @@ class AdminAuditLog(models.Model):
     # Actions: pii_access, pii_erasure, admin_cancel, block, unblock, approve_user,
     #          approve_spot, impersonate_start, impersonate_end, admin_adjustment,
     #          impersonate_action
-    target_type = models.CharField(
-        max_length=50, blank=True
-    )  # 'user', 'booking', 'spot'
+    target_type = models.CharField(max_length=50, blank=True)  # 'user', 'booking', 'spot'
     target_id = models.PositiveIntegerField(null=True, blank=True)
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

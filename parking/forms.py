@@ -60,9 +60,7 @@ class BookingRequestForm(forms.Form):
             raise forms.ValidationError("Minimum booking is 1 hour.")
 
         if self._org and duration_hours > self._org.max_booking_hours:
-            raise forms.ValidationError(
-                f"Maximum booking is {self._org.max_booking_hours} hours."
-            )
+            raise forms.ValidationError(f"Maximum booking is {self._org.max_booking_hours} hours.")
 
         return cleaned
 
@@ -106,12 +104,8 @@ class EarlyReleaseForm(forms.Form):
             raise forms.ValidationError("Release time must be in the future.")
         if self._booking and value >= self._booking.time_range.upper:
             raise forms.ValidationError("Release time must be before the booking end.")
-        if self._booking and value < self._booking.time_range.lower + timedelta(
-            hours=1
-        ):
-            raise forms.ValidationError(
-                "At least 1 hour must remain after the release time."
-            )
+        if self._booking and value < self._booking.time_range.lower + timedelta(hours=1):
+            raise forms.ValidationError("At least 1 hour must remain after the release time.")
         return value
 
 
@@ -139,9 +133,7 @@ class AvailabilityWindowForm(forms.Form):
     def __init__(self, *args, owner=None, org=None, **kwargs):
         super().__init__(*args, **kwargs)
         if owner is not None:
-            self.fields["spot"].queryset = ParkingSpot.scoped.filter(
-                owner=owner, status="active"
-            )
+            self.fields["spot"].queryset = ParkingSpot.scoped.filter(owner=owner, status="active")
 
     def clean(self):
         cleaned = super().clean()

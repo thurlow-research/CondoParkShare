@@ -260,7 +260,7 @@ class UserAdmin(admin.ModelAdmin):
         )
         return redirect("/")
 
-    impersonate_user.short_description = "Impersonate this user"
+    impersonate_user.short_description = "Impersonate this user"  # type: ignore[attr-defined]
 
 
 # ---------------------------------------------------------------------------
@@ -280,6 +280,7 @@ class AdminAuditLogAdmin(admin.ModelAdmin):
     ]
     list_filter = ["action", "organization"]
     search_fields = ["actor__email", "notes"]
+
     def get_readonly_fields(self, request, obj=None):
         return [f.name for f in AdminAuditLog._meta.concrete_fields]
 
@@ -331,4 +332,4 @@ class BookingAdmin(admin.ModelAdmin):
             messages.SUCCESS,
         )
 
-    admin_cancel_booking.short_description = "Admin cancel selected bookings"
+    admin_cancel_booking.short_description = "Admin cancel selected bookings"  # type: ignore[attr-defined]

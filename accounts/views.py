@@ -25,7 +25,6 @@ from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.timezone import now
 from django.views.decorators.http import require_POST
-from accounts.models import EncryptedTOTPDevice
 from django_ratelimit.decorators import ratelimit
 
 from accounts.decorators import active_required
@@ -39,7 +38,7 @@ from accounts.forms import (
     SelfRegistrationForm,
     TOTPVerifyForm,
 )
-from accounts.models import AdminAuditLog, EmailOTP, Invite
+from accounts.models import AdminAuditLog, EmailOTP, EncryptedTOTPDevice, Invite
 
 User = get_user_model()
 
@@ -77,9 +76,7 @@ def _qr_svg_inline(data: str) -> str:
     """Return an inline SVG string for *data* generated locally via segno.
     The TOTP secret must never leave the server — no third-party QR service."""
     buf = io.BytesIO()
-    segno.make(data, error="M").save(
-        buf, kind="svg", xmldecl=False, svgns=True, title="", nl=False, scale=4
-    )
+    segno.make(data, error="M").save(buf, kind="svg", xmldecl=False, svgns=True, title="", nl=False, scale=4)
     return buf.getvalue().decode("utf-8")
 
 
@@ -170,9 +167,7 @@ def totp_verify(request):
                 # auth.login() must come first so request.user carries the real
                 # user pk before django_otp.login() checks device.user_id == request.user.pk.
                 del request.session["_pre_auth_user_id"]
-                login(
-                    request, user, backend="django.contrib.auth.backends.ModelBackend"
-                )
+                login(request, user, backend="django.contrib.auth.backends.ModelBackend")
                 django_otp.login(request, matched_device)
                 return redirect("book_request")
             else:
@@ -222,9 +217,7 @@ def recovery_code(request):
                     # Blocked accounts must not be able to log in via any path.
                     if locked_user.status == "blocked":
                         form.add_error("code", "Invalid recovery code.")
-                        return render(
-                            request, "accounts/recovery_code.html", {"form": form}
-                        )
+                        return render(request, "accounts/recovery_code.html", {"form": form})
 
                     # Consume the recovery code (single-use).
                     codes = list(locked_user.recovery_codes)
@@ -534,9 +527,7 @@ def register_invite(request, code):
                     display_name=form.cleaned_data["display_name"],
                     password=form.cleaned_data["password"],
                     status="pending_totp",
-                    marketing_email_opted_in=form.cleaned_data.get(
-                        "marketing_email_opted_in", False
-                    ),
+                    marketing_email_opted_in=form.cleaned_data.get("marketing_email_opted_in", False),
                 )
 
                 locked_invite.use_count += 1
@@ -589,9 +580,7 @@ def register(request):
                 display_name=form.cleaned_data["display_name"],
                 password=None,  # No password until approved
                 status="pending_approval",
-                marketing_email_opted_in=form.cleaned_data.get(
-                    "marketing_email_opted_in", False
-                ),
+                marketing_email_opted_in=form.cleaned_data.get("marketing_email_opted_in", False),
             )
             return render(request, "accounts/register_pending.html")
     else:
@@ -621,9 +610,7 @@ def notification_prefs(request):
             prefs = user.notification_prefs.copy()
             prefs["push"] = form.cleaned_data["push"]
             user.notification_prefs = prefs
-            user.marketing_email_opted_in = form.cleaned_data[
-                "marketing_email_opted_in"
-            ]
+            user.marketing_email_opted_in = form.cleaned_data["marketing_email_opted_in"]
             user.save(update_fields=["notification_prefs", "marketing_email_opted_in"])
             return redirect("notification_prefs")
     else:

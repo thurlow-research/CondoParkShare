@@ -88,9 +88,7 @@ class Migration(migrations.Migration):
                 ("password", models.CharField(max_length=128, verbose_name="password")),
                 (
                     "last_login",
-                    models.DateTimeField(
-                        blank=True, null=True, verbose_name="last login"
-                    ),
+                    models.DateTimeField(blank=True, null=True, verbose_name="last login"),
                 ),
                 (
                     "is_superuser",
@@ -104,9 +102,7 @@ class Migration(migrations.Migration):
                 ("display_name", models.CharField(max_length=255)),
                 (
                     "phone",
-                    encrypted_model_fields.fields.EncryptedCharField(
-                        blank=True, null=True
-                    ),
+                    encrypted_model_fields.fields.EncryptedCharField(blank=True, null=True),
                 ),
                 ("recovery_codes", models.JSONField(default=list)),
                 (
@@ -127,9 +123,7 @@ class Migration(migrations.Migration):
                 ("is_active", models.BooleanField(default=True)),
                 (
                     "notification_prefs",
-                    models.JSONField(
-                        default=accounts.models.default_notification_prefs
-                    ),
+                    models.JSONField(default=accounts.models.default_notification_prefs),
                 ),
                 ("marketing_email_opted_in", models.BooleanField(default=False)),
                 ("last_booking_at", models.DateTimeField(blank=True, null=True)),

@@ -195,9 +195,7 @@ class Migration(migrations.Migration):
                 ],
                 "constraints": [
                     django.contrib.postgres.constraints.ExclusionConstraint(
-                        condition=models.Q(
-                            ("status__in", ["tentative", "confirmed", "active"])
-                        ),
+                        condition=models.Q(("status__in", ["tentative", "confirmed", "active"])),
                         expressions=[("spot", "="), ("time_range", "&&")],
                         name="booking_no_overlap",
                     )
