@@ -65,6 +65,7 @@ The app is built **multi-tenant from day one** (so other buildings can be added 
 - **One active booking at a time** (`max_concurrent_bookings`, default **1**). **Strict:** a booking counts from creation until its end passes (or cancel/release); a resident may not hold or queue a second while one is active. This is the credit-less overbooking guard.
 - **Max length:** `max_booking_hours` (default **168** = 7 days).
 - **Overlap safety:** Postgres exclusion constraint on (`spot`, range) — DB rejects overlaps (race-safe).
+- **Booking buffer:** a 1-hour buffer is enforced on both sides of every booking on the same spot (`booking_buffer_hours = 1`, config-reserved for future tenants). If booking A ends at 14:00, the earliest booking B can start on the same spot is 15:00. Consequence: an availability window must be at least 3 hours wide to accommodate even a 1-hour booking (buffer + 1 h + buffer). Windows shorter than 3 hours do not appear in search results or receive an assignment (B4/B5).
 - **Availability is computed, not stored:** an `AvailabilityWindow` is one continuous range; available = windows − union of bookings, computed live; bookings fragment windows automatically.
 - **Availability is binary — no "blocked" state:** a spot is either available or booked; there is no separate "blocked", "hold", or "buffer" state exposed to searchers or the spot owner. Any internal booking status that holds the spot — including the tentative 5-minute checkout hold — is treated as **booked** for (a) any resident searching for a spot and (b) the spot owner viewing their spot's occupancy. Concretely: a spot is unavailable whenever a booking with status `tentative`, `confirmed`, or `active` overlaps the queried window (this is exactly what the Postgres exclusion constraint already enforces). The borrower sees their booking end at the time they specified; any internal hold around that window is not surfaced to them as a distinct lifecycle state. The `tentative`/`confirmed`/`active`/`completed`/`cancelled_*` enum values are internal lifecycle states only and are never presented directly to searchers or owners as availability categories.
 
@@ -75,24 +76,24 @@ The app is built **multi-tenant from day one** (so other buildings can be added 
 
 ### Alignment incentive — listing → prebooking horizon (non-spendable)
 - Baseline `booking_horizon_baseline_days` (default **3**).
-- Every `listing_to_horizon_ratio` **elapsed listed hours** grants +1 horizon hour (default ratio **10**), over rolling `tier_metric_window_days` (default **180**). `horizon = baseline + floor(elapsed_listed_hours / ratio)`, clamped to `booking_horizon_max_days` (default **30**).
+- Every `listing_to_horizon_ratio` **elapsed listed hours** grants +1 horizon hour (default ratio **10**), over rolling `tier_metric_window_days` (default **180**). Net hours are reduced by any owner-cancel penalties: `earned_hours = elapsed_listed_hours - penalty_hours`. Full formula: `horizon = baseline + floor(max(0, earned_hours) / ratio)`, clamped to `booking_horizon_max_days` (default **30**).
 - **Counts only elapsed listed hours** (genuinely available, already passed) — future listings contribute nothing until they pass (prevents list-then-bail gaming). 180-day window bridges list-while-away → need-later.
 - **Cold-start grace:** for `launch_grace_days` (default 14) after a tenant goes live, grant `launch_grace_horizon_days` (default 14) to all residents.
 - **Leaderboard:** same elapsed-listed-hours basis; data tracked now, UI later.
-- Chronic no-shows / owner-cancels demote standing.
+- Owner-cancels incur a penalty: the hours of the cancelled booking are recorded as `penalty_hours` on the booking record and deducted from the owner's `elapsed_listed_hours` when computing their earned horizon (see formula below). No separate "standing" field exists.
 
 ### Cancellation / release (no money)
 - Borrower pre-start → booking voided, window freed.
 - Borrower early release → remaining hours freed back to inventory; the one-booking slot frees so they can book again.
-- Owner cancels a booked slot → booking voided, borrower notified, owner standing penalty.
+- Owner cancels a booked slot → booking voided, borrower notified, `penalty_hours` deducted from owner's earned-horizon calculation.
 
 ### Other
 - **Timezone:** one per tenant (`Organization.timezone`; BT = America/Los_Angeles). Store UTC, display local.
-- **Discovery:** primary = search by time needed; browse secondary.
+- **Discovery:** the resident specifies a time window (from → to); the system auto-assigns a spot using owner-rotation (the owner whose spot was least recently booked). The resident does not browse or choose from a list. If the resident declines the assigned spot, they try a different time window — no re-assignment in the same session (F19).
 - **Completion:** a booked hour completes when its end passes without cancellation (trust-based, no check-in).
 
 ## 5. Notifications
-Channel-agnostic; per-user per-event prefs. Pilot = email (default) + web push (PWA; iOS needs add-to-home-screen; email is the reliable floor). Events: booking confirmed; spot loaned (owner); loan ending soon; cancelled; owner-cancelled; early-release confirmation.
+Channel-agnostic; per-user per-event prefs. Pilot = email (default) + web push (PWA; iOS needs add-to-home-screen; email is the reliable floor). For the full notification event matrix (which party receives each event, and the three scheduled cron jobs that fire them), see **C7** in `docs/pm/CONFIRMED-REQUIREMENTS.md`. Operational emails (all C7 events) cannot be disabled; push is fully user-controlled (C8).
 
 ## 6. Authentication
 - **2FA: standard TOTP only** (RFC 6238); QR-enroll any authenticator; on-device, free, vendor-neutral. No vendor push.
@@ -118,7 +119,7 @@ Channel-agnostic; per-user per-event prefs. Pilot = email (default) + web push (
 - Users: view residents, approve pending registrations, block/unblock, resend invites.
 - Invites: generate links/codes; see joined/pending.
 - Spots: add/edit, assign owners, deactivate.
-- Reports: usage incl. **booked-hours/spot** (demand signal).
+- Reports: usage incl. **booking count per spot** (demand signal; implementation delivers count per spot, not booked-hours per spot).
 - Bookings: view, disputes, admin-cancel (logged).
 - **Cannot:** see other tenants; access operator console.
 
@@ -128,8 +129,8 @@ Channel-agnostic; per-user per-event prefs. Pilot = email (default) + web push (
 ## 9. Data model (pilot)
 All domain rows carry `organization` FK + timestamps.
 - **Organization** — `timezone`, `registration_mode`, `unit_count`, hostname, all §10 config. (Pilot tenant = Bellevue Towers; `payer_model` exists as a field defaulting to `free_forever` but billing is inert — see Spec 2.)
-- **User** — `email`(enc), `display_name`(enc), `phone`(opt, field-enc), `password`(hashed), `totp_secret`, `recovery_codes`, `notification_prefs`, `status`(pending/active/blocked), `organization`.
-- **ParkingSpot** — `spot_number`, `owner`, `organization`, location/notes, active.
+- **User** — `email`(enc), `display_name`(enc), `phone`(opt, field-enc), `password`(hashed), `totp_secret`, `recovery_codes`, `notification_prefs`, `status`(`pending_totp` / `pending_approval` / `active` / `blocked`), `organization`. `pending_totp` = account created, TOTP enrollment not yet complete; `pending_approval` = self-registered (Mode B), awaiting HOA admin approval.
+- **ParkingSpot** — `spot_number`, `owner`, `organization`, location/notes, `status` (`pending` / `active` / `inactive`). `pending` = self-declared at registration, awaiting HOA admin approval before the spot can be listed; `active` = approved and listable; `inactive` = deactivated by admin (E15).
 - **AvailabilityWindow** — `spot`, continuous `tstzrange`.
 - **Booking** — `spot`, `borrower`, `tstzrange` (hour-aligned), `status` (`tentative`/`confirmed`/`active`/`completed`/`cancelled_borrower`/`cancelled_owner`/`cancelled_admin`); GiST exclusion constraint. Status values are internal lifecycle only — searchers and owners see a binary available/booked signal (see §4 Booking).
 - **Invite** — `code`, `organization`, `issued_by`, single-use/capped, expiry, `consumed_by/at`, optional unit/spot pre-tag.
@@ -142,6 +143,7 @@ All domain rows carry `organization` FK + timestamps.
 | `registration_mode` | invite_only | invite / approve / both |
 | `unit_count` | (per tenant) | Recorded now; billing denominator later |
 | `payer_model` | free_forever | Field present; only free_forever used in pilot |
+| `booking_buffer_hours` | 1 | Buffer on each side of a booking; minimum window = buffer + 1 h + buffer = 3 h; fixed at 1 for pilot |
 | `max_concurrent_bookings` | 1 | Strict one-at-a-time guard |
 | `max_booking_hours` | 168 | Max single booking |
 | `booking_horizon_baseline_days` | 3 | Baseline advance booking |
@@ -151,7 +153,7 @@ All domain rows carry `organization` FK + timestamps.
 | `launch_grace_days` / `launch_grace_horizon_days` | 14 / 14 | Cold-start grace |
 
 ## 11. Primary flows (pilot)
-- **Booking:** auth (TOTP) → search by time → pick spot + hours → Gate 1 horizon (≤ now + earned horizon) → Gate 2 one-active-booking → Gate 3 DB overlap → confirm → notify borrower + owner → reminder → completion.
+- **Booking:** auth (TOTP) → specify time window (from → to) → Gate 1 horizon (≤ now + earned horizon) → Gate 2 one-active-booking → Gate 3 DB overlap → system auto-assigns spot (owner rotation) → borrower confirms or cancels → notify borrower + owner → reminder → completion. The borrower specifies hours only; spot selection is automatic (F19).
 - **Listing:** "I'm away [dates]" / recurring → `AvailabilityWindow`(s) → bookable → elapsed listed hours feed horizon/leaderboard.
 - **Cancellation/release:** free the spot; owner-cancel notifies + penalty; no money.
 - **Onboarding A (invite):** admin generates → resident registers (email, password, TOTP, recovery codes) → auto-active.
