@@ -17,7 +17,7 @@ accounts/               ← User, auth, TOTP, invites, registration
 parking/                ← Organization, ParkingSpot, AvailabilityWindow, Booking
 notifications/          ← notification dispatch, email relay, web push
 portal/                 ← HOA/manager portal views
-operator/               ← operator console (Django admin extensions)
+operator_console/       ← operator console (Django admin extensions)
 ```
 
 ---
@@ -285,7 +285,8 @@ class AdminAuditLog(models.Model):
                                         related_name='audit_impersonations')  # impersonation sessions
     action          = models.CharField(max_length=100)
     # Actions: pii_access, pii_erasure, admin_cancel, block, unblock, approve_user,
-    #          approve_spot, impersonate_start, impersonate_end, admin_adjustment
+    #          approve_spot, impersonate_start, impersonate_end, admin_adjustment,
+    #          impersonate_action
     target_type     = models.CharField(max_length=50, blank=True)  # 'user', 'booking', 'spot'
     target_id       = models.PositiveIntegerField(null=True, blank=True)
     notes           = models.TextField(blank=True)
@@ -293,6 +294,13 @@ class AdminAuditLog(models.Model):
 
     class Meta:
         indexes = [models.Index(fields=['organization', 'created_at'])]
+```
+
+`AdminAuditLog.log()` — convenience classmethod for creating an entry without spelling out every field. Falls back to `actor.organization` when `organization` is not supplied, so portal-view callers do not have to pass it explicitly:
+
+```python
+AdminAuditLog.log(actor=request.user, action='admin_cancel',
+                  target_type='booking', target_id=booking.pk)
 ```
 
 ### 2.9 `notifications.WebPushSubscription`
@@ -570,12 +578,13 @@ def is_spot_available(spot, requested_start, requested_end):
 
 ```python
 from django.db import transaction
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, F, OuterRef
 from django.utils.timezone import now
 
 def assign_spot(organization, borrower, requested_start, requested_end):
     """
-    Finds and tentatively assigns a spot. Returns a Booking (status='tentative')
+    Finds and tentatively assigns a spot. Returns a Booking (status='tentative'),
+    the string 'already_active' if the borrower already holds an in-flight booking,
     or None if no spot is available.
     """
     buffer = timedelta(hours=BUFFER_HOURS)
@@ -589,21 +598,41 @@ def assign_spot(organization, borrower, requested_start, requested_end):
         status__in=['tentative', 'confirmed', 'active'],
     )
 
+    # Subquery: does this spot have an availability window that covers the
+    # full requested range?  Using Exists avoids the JOIN fan-out that
+    # would require DISTINCT, which is incompatible with SELECT FOR UPDATE.
+    covers = AvailabilityWindow.objects.filter(
+        spot=OuterRef('pk'),
+        time_range__contains=req_range,
+    )
+
     with transaction.atomic():
+        # Gate 2 — one active booking per borrower, checked inside the
+        # transaction so it is atomic with Booking.objects.create.
+        already_active = (
+            Booking.objects.filter(
+                borrower=borrower,
+                status__in=['tentative', 'confirmed', 'active'],
+            )
+            .select_for_update()
+            .exists()
+        )
+        if already_active:
+            return 'already_active'
+
         candidates = (
             ParkingSpot.objects
-            .select_for_update(skip_locked=True)
+            .select_for_update(skip_locked=True, of=('self',))
             .filter(
                 organization=organization,
                 status='active',
-                availability_windows__time_range__contains=req_range,
             )
+            .filter(Exists(covers))
             .exclude(Exists(conflict))
             .select_related('owner')
             .order_by(
-                models.F('owner__last_booking_at').asc(nulls_first=True)
+                F('owner__last_booking_at').asc(nulls_first=True)
             )
-            .distinct()
         )
 
         spot = candidates.first()
@@ -623,18 +652,23 @@ def assign_spot(organization, borrower, requested_start, requested_end):
 
 ### Expired tentative hold cleanup
 
-Management command `clean_tentative_bookings` — run at `:00` each hour (alongside the notification job):
+Two paths both cancel expired tentative bookings — they are intentionally redundant:
 
-```python
-Booking.objects.filter(
-    status='tentative',
-    tentative_expires_at__lt=now()
-).update(status='cancelled_admin')
-```
+1. **Management command `clean_tentative_bookings`** (`parking/management/commands/clean_tentative_bookings.py`) — a standalone command run at `:00` each hour:
+   ```python
+   Booking.objects.filter(
+       status='tentative',
+       tentative_expires_at__lt=now()
+   ).update(status='cancelled_admin')
+   ```
+
+2. **`tentative_cleanup` event inside `notify_bookings`** — the `notify_bookings` management command (§10) also runs this same query when it processes the `tentative_cleanup` event (which is always included alongside `starts` and `completions` in the `:00` cron entry). Both paths produce the same result; `clean_tentative_bookings` is the authoritative standalone command.
 
 ---
 
 ## 7. Earned-horizon metric
+
+`parking/leaderboard.py` — `get_leaderboard(organization, limit=20)` — is implemented and ranks active owners by elapsed listed hours using the same basis as `get_earned_horizon_hours`. The leaderboard UI is deferred (CONFIRMED-REQUIREMENTS.md §Deferred); the query is available when needed.
 
 ```python
 from math import floor
@@ -746,16 +780,18 @@ def book_request(request):
     if not check_horizon_gate(request.user, requested_start):
         return htmx_error('You can't book that far ahead yet. List your spot to earn more.')
 
-    # Gate 2 — One active booking
-    active = Booking.scoped.filter(
-        borrower=request.user,
-        status__in=['tentative', 'confirmed', 'active'],
-    ).exists()
-    if active:
-        return htmx_error('You already have an active booking.')
+    # Gate 2 — One active booking (enforced inside assign_spot, not as a
+    # separate pre-check).  assign_spot returns the string 'already_active'
+    # when the borrower already holds a tentative/confirmed/active booking.
+    # The check runs inside the transaction.atomic() block in assign_spot so
+    # it is atomic with Booking.objects.create, preventing the race where two
+    # concurrent requests both pass a pre-check before either creates a row.
 
-    # Gate 3 — Assign (includes DB overlap check via ExclusionConstraint)
+    # Gate 3 — Assign (includes DB overlap check via ExclusionConstraint;
+    # Gate 2 one-active check is also inside assign_spot)
     booking = assign_spot(request.organization, request.user, requested_start, requested_end)
+    if booking == 'already_active':
+        return htmx_error('You already have an active booking.')
     if not booking:
         return htmx_error('No spots are available for that window. Try a different time.')
 
@@ -823,6 +859,8 @@ Accepts `--event` flag. Run via cron:
 30 * * * *  python manage.py notify_bookings --event warning_30
 45 * * * *  python manage.py notify_bookings --event warning_15
 ```
+
+**`tentative_cleanup`** — cancels expired tentative bookings (same query as the `clean_tentative_bookings` management command; see §6). Runs automatically alongside `starts` and `completions` in the `:00` cron entry — even if `tentative_cleanup` is not listed explicitly, `notify_bookings` runs the cleanup whenever `starts` or `completions` is requested.
 
 **`starts`** — bookings where `time_range` lower bound falls in `(now - 1h, now]` and status is `confirmed`:
 ```python
@@ -951,12 +989,12 @@ Extends Django's default admin site. Superuser-only (`is_superuser=True`). Key c
   ```python
   request.session['impersonating'] = user.pk
   request.session['real_operator'] = request.user.pk
-  AdminAuditLog.objects.create(actor=request.user, action='impersonate_start',
-                                target_type='user', target_id=user.pk)
+  AdminAuditLog.log(actor=request.user, action='impersonate_start',
+                    target_type='user', target_id=user.pk)
   ```
 - `AdminAuditLogAdmin` — read-only; no add/change/delete permissions
 
-**Impersonation middleware** — checks session for `impersonating` key; overrides `request.user` with impersonated user; logs every POST to `AdminAuditLog`; banner template tag injected into base template.
+**Impersonation middleware** — checks session for `impersonating` key; overrides `request.user` with impersonated user; logs every POST as `impersonate_action` to `AdminAuditLog` (use `AdminAuditLog.log()`); banner template tag injected into base template.
 
 ---
 
