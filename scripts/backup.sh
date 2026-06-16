@@ -27,10 +27,17 @@ FILENAME="parkshare_${TIMESTAMP}.sql.gz.age"
 # Create backup directory if it does not exist
 mkdir -p "${BACKUP_DIR}"
 
-# Run pg_dump, compress, and encrypt in one pipeline
-echo "Starting backup: ${FILENAME}"
-pg_dump "${DATABASE_URL}" | gzip | age -r "${BACKUP_ENCRYPTION_RECIPIENT}" > "${BACKUP_DIR}/${FILENAME}"
+# Run pg_dump, compress, and encrypt — write atomically via a temp file so a
+# mid-pipeline failure (disk full, network drop, bad key) never leaves a corrupt
+# partial archive in the retention pool.
+TMPFILE="${BACKUP_DIR}/${FILENAME}.tmp"
+trap 'rm -f "${TMPFILE}"' ERR EXIT
 
+echo "Starting backup: ${FILENAME}"
+pg_dump "${DATABASE_URL}" | gzip | age -r "${BACKUP_ENCRYPTION_RECIPIENT}" > "${TMPFILE}"
+mv "${TMPFILE}" "${BACKUP_DIR}/${FILENAME}"
+
+trap - ERR EXIT
 echo "Backup written to ${BACKUP_DIR}/${FILENAME}"
 
 # Retain only the last 30 backups — delete older ones
