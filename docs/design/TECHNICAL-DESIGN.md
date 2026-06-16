@@ -42,7 +42,7 @@ class Organization(models.Model):
     launched_at     = models.DateTimeField(null=True, blank=True)
 
     # Booking config
-    booking_buffer_hours        = models.PositiveIntegerField(default=1)  # fixed at 1, reserved for future
+    booking_buffer_hours        = models.PositiveIntegerField(default=1)  # per-tenant; live-read at booking time (see ADR-001 §buffer, implemented in #84)
     max_concurrent_bookings     = models.PositiveIntegerField(default=1)
     max_booking_hours           = models.PositiveIntegerField(default=168)
 
@@ -555,7 +555,7 @@ from datetime import timedelta
 from django.db.models import Q
 from psycopg2.extras import DateTimeTZRange
 
-BUFFER_HOURS = 1  # fixed for pilot
+# buffer is per-tenant: read organization.booking_buffer_hours at call time (ADR-001)
 
 def is_spot_available(spot, requested_start, requested_end):
     buffer = timedelta(hours=BUFFER_HOURS)
