@@ -63,14 +63,14 @@ EXCLUDE USING gist (
 );
 ```
 
-### Buffer enforcement (1 hour, fixed for pilot)
-The 1-hour symmetric buffer (1h before + 1h after every booking) is enforced at the **application layer** inside a `SELECT FOR UPDATE` transaction:
+### Buffer enforcement (per-tenant configurable)
+The symmetric buffer (N hours before + N hours after every booking) is enforced at the **application layer** inside a `SELECT FOR UPDATE` transaction:
 
 ```python
 with transaction.atomic():
     conflicts = Booking.objects.select_for_update().filter(
         spot=spot,
-        time_range__overlap=buffered_range,  # expanded by 1h each side
+        time_range__overlap=buffered_range,  # expanded by N hours each side
         status__in=['active', 'confirmed']
     )
     if conflicts.exists():
@@ -80,13 +80,7 @@ with transaction.atomic():
 
 The DB constraint catches true overlaps; the app layer catches buffer violations. This is a deliberate two-layer approach.
 
-**Buffer is fixed at 1 hour for the pilot.** `booking_buffer_hours` exists as a field on `Organization` (default 1) but is treated as a constant in application logic — not read from the DB on each query.
-
-**To make buffer configurable in a future release:**
-1. Replace the hardcoded `timedelta(hours=1)` in the availability computation and buffer-check query with `spot.organization.booking_buffer_hours`
-2. Add `booking_buffer_hours` to the operator console tenant configuration form
-3. Document in the HOA onboarding guide that changing this value affects all future bookings for the tenant
-4. Consider: if a tenant changes the buffer mid-operation, existing bookings are unaffected but new bookings around existing ones may gain or lose gap. A migration notice to the tenant is good practice.
+**Buffer is per-tenant and read from the DB on each query.** `booking_buffer_hours` is a field on `Organization` (default 1). The application reads `spot.organization.booking_buffer_hours` at booking time — there is no hardcoded constant. Changing this value for a tenant affects all future bookings; existing bookings are unaffected.
 
 ---
 
@@ -97,7 +91,7 @@ The DB constraint catches true overlaps; the app layer catches buffer violations
 ### Availability query
 A spot is available for `[requested_start, requested_end]` if:
 1. An `AvailabilityWindow` covers the entire requested range.
-2. No existing `Booking` with status `active`/`confirmed` has a `time_range` overlapping the **buffered** range `[requested_start − 1h, requested_end + 1h]`.
+2. No existing `Booking` with status `active`/`confirmed` has a `time_range` overlapping the **buffered** range `[requested_start − Nh, requested_end + Nh]` where N = `organization.booking_buffer_hours`.
 
 ### Owner rotation algorithm
 When multiple spots are available, assign the spot belonging to the owner who has gone longest since their spot was last booked. Implementation:
@@ -281,7 +275,7 @@ Caddy handles:
 
 | Item | When to address |
 |---|---|
-| Per-tenant configurable `booking_buffer_hours` | Second paying tenant with different requirements |
+| ~~Per-tenant configurable `booking_buffer_hours`~~ | **Done** — implemented in #84; `Organization.booking_buffer_hours` is live. |
 | Blind-index on email for field-level encryption | If LUKS-only email storage is judged insufficient |
 | Redis + Celery | If caching, WebSockets, or complex async tasks are needed |
 | Leaderboard UI | Post-launch, data already tracked |
