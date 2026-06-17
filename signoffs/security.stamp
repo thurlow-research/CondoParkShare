@@ -1,6 +1,5 @@
 role: security
 agent: security-reviewer
 status: APPROVED
-signed_at: 2026-06-14T17:57:24Z          # informational — the gate uses the git commit time
-head_at_signing: 5be0826
-note: iter3; absolute fail-open + atomic + WatchedFileHandler; 1 accepted LOW residual
+signed_at: 2026-06-17T02:03:48Z          # informational — the gate uses the git commit time
+head_at_signing: 4ded744

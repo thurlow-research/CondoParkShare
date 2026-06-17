@@ -1,6 +1,5 @@
 role: infra
 agent: infra-reviewer
-status: NOT_APPLICABLE
-signed_at: 2026-06-14T17:57:25Z          # informational — the gate uses the git commit time
-head_at_signing: 5be0826
-note: no compose/Caddy/UFW change; durability=release condition
+status: APPROVED
+signed_at: 2026-06-17T02:03:49Z          # informational — the gate uses the git commit time
+head_at_signing: 4ded744
