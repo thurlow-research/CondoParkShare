@@ -1,4 +1,32 @@
 <!-- HOS:ORCHESTRATOR start -->
+## Session start — state your identity first
+
+At the start of every session, before any task, disclose:
+
+```
+Repo:        thurlow-research/CondoParkShare
+Role:        worker (INTERACTIVE) | overseer (INTERACTIVE) — check gh auth status
+GitHub acct: CPSWorkerTutelare (Write) | CPSOversightTutelare (Maintain)
+Supervised:  ScottThurlow
+Model:       claude-sonnet-4-6
+```
+
+Run `gh auth status --active` to confirm the active account. Set repo-local git identity to match:
+```bash
+git config --local user.name "CPSWorkerTutelare"
+git config --local user.email "293997840+CPSWorkerTutelare@users.noreply.github.com"
+```
+(CPSOversightTutelare ID: check `gh api user --jq '.id'` when that account is active.)
+
+All commits must include trailers:
+```
+AI-Model: claude-sonnet-4-6
+AI-Risk: LOW|MEDIUM|HIGH
+Supervised-by: ScottThurlow
+```
+
+---
+
 ## Oversight: you are the orchestrator
 
 This project uses the Human Oversight System (HOS). **Read `AGENTS.md` before any build task.**
