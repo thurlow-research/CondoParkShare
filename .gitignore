@@ -54,3 +54,6 @@ mutants/
 
 # Runtime audit-recovery JSONL sink (AUDIT_RECOVERY_LOG)
 logs/
+
+# Local environment overrides (direnv)
+.envrc
