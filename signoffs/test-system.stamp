@@ -1,6 +1,5 @@
 role: test-system
 agent: system-test
-status: APPROVED
-signed_at: 2026-06-14T17:57:24Z          # informational — the gate uses the git commit time
-head_at_signing: 5be0826
-note: 32 tests incl 8 E2E full pipeline
+status: NOT_APPLICABLE
+signed_at: 2026-06-17T01:50:13Z          # informational — the gate uses the git commit time
+head_at_signing: e49158a

@@ -1,6 +1,5 @@
 role: a11y
 agent: a11y-reviewer
 status: NOT_APPLICABLE
-signed_at: 2026-06-14T17:57:25Z          # informational — the gate uses the git commit time
-head_at_signing: 5be0826
-note: no templates
+signed_at: 2026-06-17T01:50:12Z          # informational — the gate uses the git commit time
+head_at_signing: e49158a
