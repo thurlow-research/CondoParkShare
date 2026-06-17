@@ -1,6 +1,5 @@
 role: process
 agent: pm-agent
-status: APPROVED
-signed_at: 2026-06-14T17:57:24Z          # informational — the gate uses the git commit time
-head_at_signing: 5be0826
-note: faithful to CPS#78; RC-1 volume + RC-2 #87 release conditions
+status: NOT_APPLICABLE
+signed_at: 2026-06-17T01:50:16Z          # informational — the gate uses the git commit time
+head_at_signing: 4ef3adf
