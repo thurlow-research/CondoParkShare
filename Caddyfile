@@ -6,33 +6,84 @@
 # Caddy uses on Nexus — do not overwrite that file wholesale if it serves other
 # kumajyo apps.
 #
-# Host mapping (flip the upstreams if reversed):
+# Host mapping:
 #   production -> opus.kumajyo.com:8001
 #   pre-prod   -> faberix.kumajyo.com:8001
 #
 # TLS:
 #   *.kumajyo.com names      -> served by Nexus's existing *.kumajyo.com wildcard cert.
-#   condoparkshare.com names -> Caddy auto-issues Let's Encrypt certs via TLS-ALPN-01
-#                               (:443) / HTTP-01 (:80). No token needed; just keep the
-#                               site listed and ensure :443 is internet-reachable on Nexus.
-#   (condoparkshare.com is self-hosted DNS on Nexus, NOT Cloudflare, so the
-#    Cloudflare DNS-01 challenge does not apply unless the zone is moved to CF.)
+#   condoparkshare.com names -> Caddy auto-issues Let's Encrypt certs via TLS-ALPN-01.
 #
-# Host header is preserved by default, so each backend's TenantMiddleware sees
-# the real domain — each backend must have an Organization row with the matching
-# hostname and list these domains in ALLOWED_HOSTS.
+# SECURE_SSL_REDIRECT is False in Django — Caddy enforces HTTPS, not the app.
 
 # ── Production → opus ─────────────────────────────────────────────────────────
 condoparkshare.kumajyo.com, condoparkshare.com {
-	reverse_proxy opus.kumajyo.com:8001
+    reverse_proxy opus.kumajyo.com:8001 {
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Real-IP {remote_host}
+
+        health_uri /accounts/login/
+        health_interval 30s
+        health_timeout 5s
+        health_status 200
+
+        transport http {
+            dial_timeout 5s
+            response_header_timeout 35s
+        }
+    }
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
 }
 
 # Canonical-host redirect: www → apex
 www.condoparkshare.com {
-	redir https://condoparkshare.com{uri} permanent
+    redir https://condoparkshare.com{uri} permanent
 }
 
 # ── Pre-production (PPE) → faberix ────────────────────────────────────────────
 ppe.condoparkshare.kumajyo.com, ppe.condoparkshare.com {
-	reverse_proxy faberix.kumajyo.com:8001
+    reverse_proxy faberix.kumajyo.com:8001 {
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Real-IP {remote_host}
+
+        health_uri /accounts/login/
+        health_interval 30s
+        health_timeout 5s
+        health_status 200
+
+        transport http {
+            dial_timeout 5s
+            response_header_timeout 35s
+        }
+    }
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+}
+
+# ── Explicit HTTP → HTTPS redirects ───────────────────────────────────────────
+# Caddy's auto_https handles these by default, but explicit blocks survive
+# any global auto_https overrides elsewhere on Nexus.
+http://condoparkshare.com, http://condoparkshare.kumajyo.com {
+    redir https://{host}{uri} permanent
+}
+
+http://www.condoparkshare.com {
+    redir https://condoparkshare.com{uri} permanent
+}
+
+http://ppe.condoparkshare.com, http://ppe.condoparkshare.kumajyo.com {
+    redir https://{host}{uri} permanent
 }
