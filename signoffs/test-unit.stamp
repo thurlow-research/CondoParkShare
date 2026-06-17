@@ -1,6 +1,5 @@
 role: test-unit
 agent: unit-test
-status: APPROVED
-signed_at: 2026-06-14T17:57:24Z          # informational — the gate uses the git commit time
-head_at_signing: 5be0826
-note: 100% cov; ~85-90% mutant (reasoning, HOS#69)
+status: NOT_APPLICABLE
+signed_at: 2026-06-17T01:21:09Z          # informational — the gate uses the git commit time
+head_at_signing: f7608e1
