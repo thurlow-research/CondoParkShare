@@ -1,5 +1,5 @@
 role: privacy
 agent: privacy-reviewer
 status: NOT_APPLICABLE
-signed_at: 2026-06-17T01:21:09Z          # informational — the gate uses the git commit time
-head_at_signing: f7608e1
+signed_at: 2026-06-17T01:50:13Z          # informational — the gate uses the git commit time
+head_at_signing: e49158a
