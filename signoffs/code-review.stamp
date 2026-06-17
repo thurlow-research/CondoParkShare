@@ -1,5 +1,5 @@
 role: code-review
 agent: code-reviewer
 status: APPROVED
-signed_at: 2026-06-17T01:50:12Z          # informational — the gate uses the git commit time
-head_at_signing: e49158a
+signed_at: 2026-06-17T02:06:58Z          # informational — the gate uses the git commit time
+head_at_signing: df3c284
