@@ -1,5 +1,5 @@
 role: process
 agent: pm-agent
 status: NOT_APPLICABLE
-signed_at: 2026-06-17T01:50:13Z          # informational — the gate uses the git commit time
-head_at_signing: e49158a
+signed_at: 2026-06-17T01:50:16Z          # informational — the gate uses the git commit time
+head_at_signing: 4ef3adf
