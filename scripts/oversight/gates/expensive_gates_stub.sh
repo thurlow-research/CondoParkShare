@@ -45,7 +45,7 @@ _check_binary_in_requirements() {
     done
     # Check requirements*.txt files
     local found=false
-    for req in requirements*.txt requirements/*.txt 2>/dev/null; do
+    for req in requirements*.txt requirements/*.txt; do
         [[ -f "$req" ]] || continue
         if grep -qi "^${bin}" "$req" 2>/dev/null; then
             found=true

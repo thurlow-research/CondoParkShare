@@ -13,7 +13,7 @@
 /AGENTS.md                                 @ScottThurlow
 /docs/AGENTS.md                            @ScottThurlow
 /docs/AGENT-IDENTITY.md                    @ScottThurlow
-/docs/METHODOLOGY.md                       @ScottThurlow
+/METHODOLOGY.md                            @ScottThurlow
 /docs/FABERIX-ROLES.md                     @ScottThurlow
 /docs/CROSS-REPO-CONDUCT.md                @ScottThurlow
 /bootstrap/                                @ScottThurlow
@@ -23,3 +23,5 @@
 /scripts/oversight/validators/schema.py    @ScottThurlow
 /.github/CODEOWNERS                        @ScottThurlow
 /.github/workflows/                        @ScottThurlow
+/PROJECT/hos-coordination.yaml             @ScottThurlow
+/PROJECT/hos-halt                          @ScottThurlow
