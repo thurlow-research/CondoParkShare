@@ -20,7 +20,30 @@ VENV="$_ENSURE_VENV_DIR/.venv"
 VENV_BIN="$VENV/bin"
 OVERSIGHT_PYTHON="$VENV_BIN/python3"
 
-GREEN="\033[32m"; CYAN="\033[36m"; RED="\033[31m"; RESET="\033[0m"
+GREEN="\033[32m"; CYAN="\033[36m"; RED="\033[31m"; YELLOW="\033[33m"; RESET="\033[0m"
+
+warn() { echo -e "  ${YELLOW}⚠${RESET}  $*" >&2; }
+
+# Detect a stale venv: shebangs embed the absolute venv path at creation time.
+# After a repo move the shebang points to the old location and tools break with
+# "bad interpreter: No such file or directory".  If the pip shebang doesn't
+# start with the current VENV path, the venv was built elsewhere — delete it so
+# the creation block below rebuilds it in the right place.
+_check_venv_stale() {
+  local pip="$VENV/bin/pip"
+  [[ -f "$pip" ]] || return 0  # doesn't exist yet, not stale
+  local shebang
+  shebang=$(head -1 "$pip" 2>/dev/null)
+  if [[ "$shebang" != "#!${VENV}/"* ]]; then
+    return 1  # stale
+  fi
+  return 0
+}
+
+if ! _check_venv_stale; then
+  warn "Venv shebang is stale (repo may have moved) — rebuilding venv"
+  rm -rf "$VENV"
+fi
 
 if [[ ! -x "$OVERSIGHT_PYTHON" ]]; then
     echo -e "  ${CYAN}→${RESET}  oversight venv not found — creating at $VENV"
