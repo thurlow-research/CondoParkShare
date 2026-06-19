@@ -291,12 +291,18 @@ def analyse_files(
                 )
             )
 
-    # Process-level ambiguity signals
-    proc_score, proc_signals = get_process_ambiguity(step)
-    all_ambiguity_signals.extend(proc_signals)
-    max_ambiguity = max(
-        max_ambiguity, proc_score * 0.5
-    )  # process signals weight less than prompt signals
+    # Process-level ambiguity signals — only meaningful when there are files to score.
+    # With no input files there is no authoring context to assess, so process signals
+    # would produce a non-zero score from unrelated repo history (e.g. existing
+    # spec-gap issues), making the empty-input case a false positive.
+    if file_paths:
+        proc_score, proc_signals = get_process_ambiguity(step)
+        all_ambiguity_signals.extend(proc_signals)
+        max_ambiguity = max(
+            max_ambiguity, proc_score * 0.5
+        )  # process signals weight less than prompt signals
+    else:
+        proc_signals = []
 
     if missing_artifacts:
         evidence.append(

@@ -17,6 +17,19 @@ This means every session should actively embody the oversight mechanisms the res
 
 ---
 
+## Entry points — start here
+
+Two named agents serve as the runtime entry points for the entire HOS pipeline:
+
+| Agent | Invoke when | Modes |
+|---|---|---|
+| **`worker`** | Starting a coding session, picking up a build step, or running the autonomous build loop | `INTERACTIVE` (human present) · `AUTONOMOUS` (cron, `hos_orchestrator.sh --class worker`) |
+| **`overseer`** | Querying PR/risk status, or running the autonomous review/merge loop | `INTERACTIVE` (human querying) · `AUTONOMOUS` (cron, `hos_orchestrator.sh --class overseer`) |
+
+Both agents identify their mode at the start of every session and adjust their behavior accordingly. Both enforce repo scope — they will push back if asked to act on a different repository. **The `worker` is the correct entry point for any new session.**
+
+---
+
 ## Core Principle: Orchestrate, Don't Absorb (the human-facing agent)
 
 **If you are the agent the human talks to, you are the *orchestrator*, not the worker.** Your job is to route each piece of work to the specialized agent that owns it and to integrate the results — **not to do that work yourself.** The entire value of this system is the **independence** between the agent that authors and the agents that review. If you author the code, run the checks, *and* record the sign-offs, you have collapsed the whole pipeline into a single agent: there is no oversight left, only the appearance of it. (This is `the-recorder-must-not-be-in-the-recorded-set`, applied to you.)
@@ -259,6 +272,18 @@ Human approval is required before merge for **MEDIUM+ risk or any protected surf
 
 This section must appear before all other content. Never omit or abbreviate it.
 
+### Actor Identity (Layer 1) — Who Authenticated the Operation
+
+HOS uses two machine accounts to make agent actions structurally distinguishable from human actions at the GitHub actor level (not just in commit content). See `docs/AGENT-IDENTITY.md` for the full spec.
+
+| Account | Class | May approve PRs? |
+|---|---|---|
+| `HOSWorkerTutelare` | **worker** — opens PRs, never approves | No |
+| `HOSOversightTutelare` | **overseer** — reviews and approves within ceiling | Yes (≤ OVERSEER_CEILING) |
+| `ScottThurlow` (human) | escalation ceiling | Yes (all tiers) |
+
+The split is load-bearing: `HOSWorkerTutelare` literally cannot approve its own PR — GitHub's identity layer enforces it, not a policy check. Any agent session that pushes branches or opens PRs runs under the **worker** credentials. Review agents run under the **overseer** credentials. The human account is absent from both bot environments.
+
 ### Git Commit Trailer Convention
 
 For every commit containing AI-generated code, append trailers:
@@ -270,7 +295,8 @@ Implements JWT validation with refresh token rotation.
 
 Prompt-Artifact: prompts/auth/middleware.md
 AI-Model: claude-sonnet-4-6
-AI-Risk: HIGH"
+AI-Risk: HIGH
+Supervised-by: ScottThurlow"
 ```
 
 For LOW risk changes with no artifact file:
@@ -278,9 +304,12 @@ For LOW risk changes with no artifact file:
 Prompt-Artifact: none (LOW risk)
 AI-Model: claude-sonnet-4-6
 AI-Risk: LOW
+Supervised-by: ScottThurlow
 ```
 
-AI provenance is then queryable: `git log --grep="Prompt-Artifact:"` returns all AI-assisted commits.
+`Supervised-by:` names the human who holds recovery for the bot account and bears responsibility for the work. It links the bot's Layer-1 actor identity back to the human "reports-to" relationship (AGENT-IDENTITY.md §6). Always set to the human operator's GitHub handle.
+
+AI provenance is then queryable: `git log --grep="Prompt-Artifact:"` returns all AI-assisted commits; `git log --grep="Supervised-by:"` confirms the responsible human for each.
 
 ### Prompt Quality Requirements
 
