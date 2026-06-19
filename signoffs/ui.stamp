@@ -1,5 +1,5 @@
 role: ui
 agent: ui-reviewer
 status: NOT_APPLICABLE
-signed_at: 2026-06-17T02:03:49Z          # informational — the gate uses the git commit time
-head_at_signing: 4ded744
+signed_at: 2026-06-17T03:05:48Z          # informational — the gate uses the git commit time
+head_at_signing: c975a5a
