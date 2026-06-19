@@ -58,7 +58,7 @@ fi
 # pytest exit codes: 0 = collected OK, 2 = collection/usage error,
 # 5 = no tests collected. We treat 2 as a hard failure, 5 as N/A.
 set +e
-COLLECT_OUT="$("$PY" -m pytest --collect-only -q 2>&1)"
+COLLECT_OUT="$("$PY" -m pytest --collect-only -q --ignore=mutants --ignore=.venv --ignore=htmlcov 2>&1)"
 COLLECT_RC=$?
 set -e
 
