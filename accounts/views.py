@@ -219,8 +219,9 @@ def recovery_code(request):
                         break
 
                 if matched_index is not None:
-                    # Blocked accounts must not be able to log in via any path.
-                    if locked_user.status == "blocked":
+                    # Guard: blocked and pending_approval must not access recovery codes
+                    # (mirrors lost_authenticator_verify gate — #17)
+                    if locked_user.status in ("blocked", "pending_approval"):
                         form.add_error("code", "Invalid recovery code.")
                         return render(
                             request, "accounts/recovery_code.html", {"form": form}

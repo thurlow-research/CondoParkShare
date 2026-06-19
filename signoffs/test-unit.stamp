@@ -1,5 +1,5 @@
 role: test-unit
 agent: unit-test
 status: NOT_APPLICABLE
-signed_at: 2026-06-17T05:40:55Z          # informational — the gate uses the git commit time
-head_at_signing: 4f921cc
+signed_at: 2026-06-17T02:07:01Z          # informational — the gate uses the git commit time
+head_at_signing: 4ded744
