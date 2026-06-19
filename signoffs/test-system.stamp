@@ -1,5 +1,5 @@
 role: test-system
 agent: system-test
 status: NOT_APPLICABLE
-signed_at: 2026-06-17T02:07:01Z          # informational — the gate uses the git commit time
-head_at_signing: 4ded744
+signed_at: 2026-06-17T02:06:58Z          # informational — the gate uses the git commit time
+head_at_signing: df3c284

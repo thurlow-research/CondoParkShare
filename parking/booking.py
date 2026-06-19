@@ -10,6 +10,7 @@ Functions:
 See TECHNICAL-DESIGN.md §6, §8 and CONFIRMED-REQUIREMENTS.md §B.
 """
 
+
 def assign_spot(organization, borrower, requested_start, requested_end):
     """Tentatively assign a spot using the owner-rotation algorithm.
 
@@ -154,18 +155,14 @@ def cancel_booking(booking, cancelled_by):
         raise ValueError("Booking already finalised")
 
     if is_owner:
-        duration = int(
-            (booking.time_range.upper - booking.time_range.lower).total_seconds() / 3600
-        )
+        duration = int((booking.time_range.upper - booking.time_range.lower).total_seconds() / 3600)
         booking.status = "cancelled_owner"
         booking.penalty_hours = duration
     else:
         booking.status = "cancelled_borrower"
 
     booking.save()
-    event = (
-        "booking_cancelled_by_owner" if is_owner else "booking_cancelled_by_borrower"
-    )
+    event = "booking_cancelled_by_owner" if is_owner else "booking_cancelled_by_borrower"
     notify(event, booking)
     return booking
 

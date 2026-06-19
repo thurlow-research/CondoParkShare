@@ -91,9 +91,9 @@ def compute_backlog(recovery_path: str) -> BacklogCounts:
     # Pre-load all reconciled fingerprints in a single query so the per-line
     # dedupe check is O(1) dict lookup rather than one EXISTS query per line.
     reconciled_fingerprints: set[tuple] = set(
-        AdminAuditLog.objects.filter(
-            notes__contains="[recovered:attempted_at="
-        ).values_list("actor_id", "on_behalf_of_id", "action", "notes")
+        AdminAuditLog.objects.filter(notes__contains="[recovered:attempted_at=").values_list(
+            "actor_id", "on_behalf_of_id", "action", "notes"
+        )
     )
 
     # Cache actor objects keyed by pk to avoid repeated DB hits when the same
@@ -156,15 +156,17 @@ def compute_backlog(recovery_path: str) -> BacklogCounts:
 
         backfill_notes = f"{notes} [recovered:attempted_at={attempted_at_str}]"
 
-        if (actor_id, on_behalf_of_id, action, backfill_notes) in reconciled_fingerprints:
+        if (
+            actor_id,
+            on_behalf_of_id,
+            action,
+            backfill_notes,
+        ) in reconciled_fingerprints:
             counts.skipped += 1
             continue
 
         counts.created_would_be += 1
-        if (
-            counts.oldest_unreconciled_at is None
-            or attempted_at < counts.oldest_unreconciled_at
-        ):
+        if counts.oldest_unreconciled_at is None or attempted_at < counts.oldest_unreconciled_at:
             counts.oldest_unreconciled_at = attempted_at
 
     return counts
@@ -178,10 +180,7 @@ class Command(BaseCommand):
             "--file",
             dest="file",
             default=None,
-            help=(
-                "Path to the recovery JSONL file. "
-                "Defaults to the AUDIT_RECOVERY_LOG setting."
-            ),
+            help=("Path to the recovery JSONL file. " "Defaults to the AUDIT_RECOVERY_LOG setting."),
         )
         parser.add_argument(
             "--dry-run",
@@ -207,9 +206,7 @@ class Command(BaseCommand):
         try:
             counts = compute_backlog(recovery_path)
         except FileNotFoundError:
-            self.stderr.write(
-                self.style.ERROR(f"Recovery file not found: {recovery_path}")
-            )
+            self.stderr.write(self.style.ERROR(f"Recovery file not found: {recovery_path}"))
             return
 
         self.stdout.write(
@@ -235,9 +232,7 @@ class Command(BaseCommand):
             with open(recovery_path, encoding="utf-8") as fh:
                 lines = fh.readlines()
         except FileNotFoundError:
-            self.stderr.write(
-                self.style.ERROR(f"Recovery file not found: {recovery_path}")
-            )
+            self.stderr.write(self.style.ERROR(f"Recovery file not found: {recovery_path}"))
             return
 
         for line_no, raw_line in enumerate(lines, start=1):
@@ -261,21 +256,13 @@ class Command(BaseCommand):
                 raw_target_id = record.get("target_id")
                 target_id = int(raw_target_id) if raw_target_id is not None else None
             except (KeyError, ValueError, TypeError) as exc:
-                self.stderr.write(
-                    self.style.WARNING(
-                        f"Line {line_no}: malformed record ({exc}): {raw_line[:120]}"
-                    )
-                )
+                self.stderr.write(self.style.WARNING(f"Line {line_no}: malformed record ({exc}): {raw_line[:120]}"))
                 malformed_count += 1
                 continue
 
             # --- Anti-forgery: allowlist action ---
             if action not in _ALLOWED_ACTIONS:
-                self.stderr.write(
-                    self.style.WARNING(
-                        f"Line {line_no}: rejected — disallowed action {action!r}"
-                    )
-                )
+                self.stderr.write(self.style.WARNING(f"Line {line_no}: rejected — disallowed action {action!r}"))
                 rejected_count += 1
                 continue
 
@@ -287,9 +274,7 @@ class Command(BaseCommand):
                     attempted_at = attempted_at.astimezone(dt_timezone.utc)
             except ValueError as exc:
                 self.stderr.write(
-                    self.style.WARNING(
-                        f"Line {line_no}: unparseable attempted_at {attempted_at_str!r} ({exc})"
-                    )
+                    self.style.WARNING(f"Line {line_no}: unparseable attempted_at {attempted_at_str!r} ({exc})")
                 )
                 malformed_count += 1
                 continue
@@ -297,20 +282,14 @@ class Command(BaseCommand):
             try:
                 actor = User.objects.get(pk=actor_id)
             except User.DoesNotExist:
-                self.stderr.write(
-                    self.style.WARNING(
-                        f"Line {line_no}: actor pk={actor_id} not found — skipping"
-                    )
-                )
+                self.stderr.write(self.style.WARNING(f"Line {line_no}: actor pk={actor_id} not found — skipping"))
                 malformed_count += 1
                 continue
 
             # --- Anti-forgery: actor must be a superuser ---
             if not actor.is_superuser:
                 self.stderr.write(
-                    self.style.WARNING(
-                        f"Line {line_no}: rejected — actor pk={actor_id} is not a superuser"
-                    )
+                    self.style.WARNING(f"Line {line_no}: rejected — actor pk={actor_id} is not a superuser")
                 )
                 rejected_count += 1
                 continue

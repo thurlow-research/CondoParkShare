@@ -99,9 +99,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="invite",
             name="organization",
-            field=models.ForeignKey(
-                on_delete=django.db.models.deletion.CASCADE, to="parking.organization"
-            ),
+            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to="parking.organization"),
         ),
         migrations.AlterUniqueTogether(
             name="user",

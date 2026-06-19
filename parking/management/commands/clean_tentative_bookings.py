@@ -26,8 +26,4 @@ class Command(BaseCommand):
         ).update(status="cancelled_admin")
 
         if options["verbosity"] >= 1:
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f"clean_tentative_bookings: {updated} expired hold(s) cancelled."
-                )
-            )
+            self.stdout.write(self.style.SUCCESS(f"clean_tentative_bookings: {updated} expired hold(s) cancelled."))

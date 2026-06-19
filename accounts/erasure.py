@@ -95,9 +95,7 @@ def erase_user_pii(user, erased_by):
         ParkingSpot.objects.filter(owner=user).update(owner=None)
 
         # --- Scrub relay message bodies and null FK columns to remove identity ---
-        RelayMessage.objects.filter(from_user=user).update(
-            body="[erased]", from_user=None
-        )
+        RelayMessage.objects.filter(from_user=user).update(body="[erased]", from_user=None)
         RelayMessage.objects.filter(to_user=user).update(body="[erased]", to_user=None)
 
         # --- Delete encrypted TOTP devices (secret lives in EncryptedTOTPDevice) --
@@ -105,9 +103,8 @@ def erase_user_pii(user, erased_by):
         # Belt-and-suspenders: catch any bare TOTPDevice rows that pre-date the
         # EncryptedTOTPDevice migration (no-op if none exist).
         from django_otp.plugins.otp_totp.models import TOTPDevice
-        TOTPDevice.objects.filter(user=user).exclude(
-            encryptedtotpdevice__isnull=False
-        ).delete()
+
+        TOTPDevice.objects.filter(user=user).exclude(encryptedtotpdevice__isnull=False).delete()
 
         # --- Delete push subscriptions and email OTPs ----------------------------
         user.push_subscriptions.all().delete()

@@ -33,9 +33,7 @@ class Organization(models.Model):
     launched_at = models.DateTimeField(null=True, blank=True)
 
     # Booking config
-    booking_buffer_hours = models.PositiveIntegerField(
-        default=1
-    )  # fixed at 1; reserved for future
+    booking_buffer_hours = models.PositiveIntegerField(default=1)  # fixed at 1; reserved for future
     max_concurrent_bookings = models.PositiveIntegerField(default=1)
     max_booking_hours = models.PositiveIntegerField(default=168)
 
@@ -59,9 +57,7 @@ class Organization(models.Model):
 
 
 class ParkingSpot(models.Model):
-    organization = models.ForeignKey(
-        Organization, on_delete=models.PROTECT, related_name="spots"
-    )
+    organization = models.ForeignKey(Organization, on_delete=models.PROTECT, related_name="spots")
     owner = models.ForeignKey(
         "accounts.User",
         on_delete=models.PROTECT,
@@ -94,9 +90,7 @@ class ParkingSpot(models.Model):
 
 class AvailabilityWindow(models.Model):
     organization = models.ForeignKey(Organization, on_delete=models.PROTECT)
-    spot = models.ForeignKey(
-        ParkingSpot, on_delete=models.CASCADE, related_name="availability_windows"
-    )
+    spot = models.ForeignKey(ParkingSpot, on_delete=models.CASCADE, related_name="availability_windows")
     time_range = DateTimeRangeField()  # tstzrange; continuous window; stored UTC
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -113,9 +107,7 @@ class AvailabilityWindow(models.Model):
 
 class Booking(models.Model):
     organization = models.ForeignKey(Organization, on_delete=models.PROTECT)
-    spot = models.ForeignKey(
-        ParkingSpot, on_delete=models.PROTECT, related_name="bookings"
-    )
+    spot = models.ForeignKey(ParkingSpot, on_delete=models.PROTECT, related_name="bookings")
     borrower = models.ForeignKey(
         "accounts.User",
         on_delete=models.PROTECT,
@@ -135,9 +127,7 @@ class Booking(models.Model):
         ("cancelled_owner", "Cancelled by Owner"),
         ("cancelled_admin", "Cancelled by Admin"),
     ]
-    status = models.CharField(
-        max_length=20, choices=STATUS_CHOICES, default="tentative"
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="tentative")
     tentative_expires_at = models.DateTimeField(null=True, blank=True)  # now() + 5 min
     cancel_reason = models.TextField(blank=True)
     penalty_hours = models.PositiveIntegerField(default=0)  # set on owner-cancel
@@ -163,6 +153,4 @@ class Booking(models.Model):
         ]
 
     def __str__(self):
-        return (
-            f"Booking {self.pk} spot={self.spot_id} {self.time_range} [{self.status}]"
-        )
+        return f"Booking {self.pk} spot={self.spot_id} {self.time_range} [{self.status}]"

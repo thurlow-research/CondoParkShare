@@ -33,27 +33,19 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        events = [
-            e.strip() for e in (options.get("event") or "").split(",") if e.strip()
-        ]
+        events = [e.strip() for e in (options.get("event") or "").split(",") if e.strip()]
         now_dt = now()
 
         # ------------------------------------------------------------------
         # tentative_cleanup — also runs alongside starts/completions at :00
         # ------------------------------------------------------------------
-        if (
-            "tentative_cleanup" in events
-            or "starts" in events
-            or "completions" in events
-        ):
+        if "tentative_cleanup" in events or "starts" in events or "completions" in events:
             expired = Booking.objects.filter(
                 status="tentative",
                 tentative_expires_at__lt=now_dt,
             ).update(status="cancelled_admin")
             if options["verbosity"] >= 2:
-                self.stdout.write(
-                    f"tentative_cleanup: {expired} expired hold(s) cancelled."
-                )
+                self.stdout.write(f"tentative_cleanup: {expired} expired hold(s) cancelled.")
 
         # ------------------------------------------------------------------
         # starts — confirmed bookings whose start falls in (now-1h, now]
@@ -132,8 +124,4 @@ class Command(BaseCommand):
                 self.stdout.write(f"warning_15: {len(warnings)} warning(s) sent.")
 
         if options["verbosity"] >= 1:
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f'notify_bookings: processed events={events or "(none)"}.'
-                )
-            )
+            self.stdout.write(self.style.SUCCESS(f'notify_bookings: processed events={events or "(none)"}.'))
