@@ -19,14 +19,15 @@ SECRET_KEY = env("SECRET_KEY")
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS")
 
-SECURE_SSL_REDIRECT = True
-# SECURE_PROXY_SSL_HEADER is intentional: Caddy (the front proxy) sets
-# X-Forwarded-Proto: https before forwarding to gunicorn on :8001.
-# Django trusts this header to mark the request as HTTPS, which is required
-# for SECURE_SSL_REDIRECT to redirect correctly and for CSRF/session cookies
-# to be sent over HTTPS only.  Only set this when the proxy is trusted and
-# the app port (:8001) is NOT directly internet-reachable (see Caddyfile +
-# docker-compose.yml — the db and web containers are on an internal network).
+# Caddy terminates TLS externally — Django only sees plain HTTP from the proxy.
+# SECURE_SSL_REDIRECT must be False: Caddy enforces HTTPS, not Django.
+# Enabling it here would cause redirect loops on internal health checks and
+# any direct :8001 access (deploy-verify, docker exec, etc.).
+SECURE_SSL_REDIRECT = False
+
+# SECURE_PROXY_SSL_HEADER tells Django that requests arriving with
+# X-Forwarded-Proto: https (set by Caddy) should be treated as HTTPS.
+# Required for secure cookies and CSRF to work correctly through the proxy.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # Production cache — must be a shared backend for rate limiting to be effective.
