@@ -1,4 +1,3 @@
-<!-- HOS:ORCHESTRATOR start -->
 ## Session start — state your identity first
 
 At the start of every session, before any task, disclose:
@@ -24,6 +23,7 @@ Supervised-by: ScottThurlow
 
 ---
 
+<!-- HOS:ORCHESTRATOR start -->
 ## Oversight: you are the orchestrator
 
 This project uses the Human Oversight System (HOS). **Read `AGENTS.md` before any build task.**

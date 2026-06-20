@@ -40,10 +40,20 @@
 #   OVERSIGHT_AGY_THRESHOLD=0.30    fire agy when composite score >= this
 #   OVERSIGHT_CODEX_THRESHOLD=0.55  fire codex when composite score >= this
 #
+# DIFF-CENTRIC CONTEXT (SPEC-379): --diff-only is DEFAULT ON. Reviewers receive the
+# diff as primary input — never the full file tree. Evidence (Kumar 2026 / SWE-PRBench)
+# shows that providing more-than-diff context REDUCES reviewer detection rates. Pass
+# --no-diff-only to disable (prints a startup warning). When --diff-only is on and a
+# reviewer response asks for full-repository context, an ADVISORY entry is appended to
+# the run's output file (non-blocking; does not change verdict or exit code).
+#
 # Usage:
 #   ./scripts/run_second_review.sh --step 3 --score 0.67
 #   ./scripts/run_second_review.sh --diff HEAD~1 --score 0.45
 #   ./scripts/run_second_review.sh --files a.py b.py --score 0.71
+#   ./scripts/run_second_review.sh --step 3 --no-diff-only   # disable diff-centric (warns)
+#   --diff-only       (default) reviewers get only the diff; advisory on context requests
+#   --no-diff-only    disable diff-centric mode — full context allowed (NOT recommended)
 #
 # Prerequisites: agy authenticated (`agy` login), codex authenticated (`codex` login)
 
@@ -62,21 +72,79 @@ SCORE=""
 TIER=""
 DIFF_REF=""
 FILES=()
+DIFF_ONLY=1   # SPEC-379: diff-centric review is DEFAULT ON (Kumar 2026 / SWE-PRBench)
+# SPEC-78: ledger file resolved after STEP is confirmed; see post-parse dispatch below.
+LEDGER_FILE=""
+_SUBCMD=""
+_REC_FILES=""
+_REC_CLASS=""
+_REC_DISP=""
+
+# SPEC-219: the reviewed commit range, recorded in every report header so the
+# oversight-evaluator can verify the second review covered the step's canonical
+# base_sha..head_sha. Default to the absent-range sentinel `none` (architect
+# binding B2) so the field is NEVER emitted empty, on any path. Resolved to a
+# full-SHA pair, `UNCOMMITTED`, or `none` at diff-derivation time (binding B3).
+REVIEWED_RANGE="none"
+
+# SPEC-379 R4 — advisory pattern list (case-insensitive). When --diff-only is on and a
+# reviewer's response contains one of these, an ADVISORY (non-blocking) is logged.
+# This is the single named location for the pattern list in this script.
+DIFF_ONLY_REQUEST_PATTERNS='full repo|all files|entire codebase|repository context|all source files|project files'
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --score)   SCORE="$2";    shift 2 ;;
-        --tier)    TIER="$2";     shift 2 ;;
-        --step)    STEP="$2";     shift 2 ;;
-        --diff)    DIFF_REF="$2"; shift 2 ;;
-        --files)   shift; while [[ $# -gt 0 && "$1" != --* ]]; do FILES+=("$1"); shift; done ;;
-        *)         shift ;;
+        --score)        SCORE="$2";    shift 2 ;;
+        --tier)         TIER="$2";     shift 2 ;;
+        --step)         STEP="$2";     shift 2 ;;
+        --diff)         DIFF_REF="$2"; shift 2 ;;
+        --files)        shift; while [[ $# -gt 0 && "$1" != --* ]]; do FILES+=("$1"); shift; done ;;
+        --diff-only)    DIFF_ONLY=1; shift ;;
+        --no-diff-only) DIFF_ONLY=0; shift ;;
+        # SPEC-78: ledger subcommands. --step must be supplied before these.
+        --record)
+            _SUBCMD="record"
+            _REC_FILES="${2:-}"; _REC_CLASS="${3:-}"; _REC_DISP="${4:-}"
+            shift; [[ $# -ge 1 ]] && shift; [[ $# -ge 1 ]] && shift; [[ $# -ge 1 ]] && shift ;;
+        --reset)
+            _SUBCMD="reset"; shift ;;
+        *)              shift ;;
     esac
 done
+
+# SPEC-379 R2 — opting out of diff-centric mode emits a startup warning.
+if [[ "$DIFF_ONLY" -eq 0 ]]; then
+    echo "[WARN] --diff-only disabled: full-file context enabled. Evidence (Kumar 2026 / SWE-PRBench) shows this can reduce reviewer detection rates." >&2
+fi
 
 if [[ -z "$STEP" ]]; then
     echo "Error: --step <N> is required (used to name output and match oversight-evaluator lookup)" >&2
     exit 1
+fi
+
+# SPEC-78: resolve ledger path now that STEP is confirmed.
+LEDGER_FILE="${OUT_DIR}/step${STEP}-ledger.jsonl"
+
+# SPEC-78: post-parse dispatch for --record and --reset subcommands.
+# These short-circuit before any reviewer invocation or diff-derivation.
+if [[ "$_SUBCMD" == "record" ]]; then
+    [[ -z "$_REC_FILES" || -z "$_REC_CLASS" || -z "$_REC_DISP" ]] && {
+        echo "Usage: run_second_review.sh --step <N> --record <files> <class> <disposition>" >&2
+        echo "  disposition: fixed | filed:#<N> | residual | noise" >&2
+        exit 1
+    }
+    mkdir -p "$OUT_DIR"
+    python3 "$(dirname "$0")/oversight/validation_logic.py" record \
+        --ledger "$LEDGER_FILE" \
+        --files "$_REC_FILES" \
+        --class "$_REC_CLASS" \
+        --disposition "$_REC_DISP"
+    exit $?
+fi
+if [[ "$_SUBCMD" == "reset" ]]; then
+    rm -f "$LEDGER_FILE"
+    echo "reset: removed ledger for step ${STEP} (${LEDGER_FILE})"
+    exit 0
 fi
 
 # Read score from validator summary if not provided
@@ -99,20 +167,14 @@ RUN_CODEX=false
 AGY_AVAILABLE=false
 CODEX_AVAILABLE=false
 
-# Normalize tier to upper for comparison.
-TIER_UC=$(printf '%s' "$TIER" | tr '[:lower:]' '[:upper:]')
-
-# agy is mandatory at MEDIUM+ (tier) or score ≥ AGY_THRESHOLD.
-case "$TIER_UC" in MEDIUM|HIGH|CRITICAL) RUN_AGY=true ;; esac
-python3 -c "
-s=float('$SCORE'); t=float('$AGY_THRESHOLD')
-exit(0 if s >= t else 1)" 2>/dev/null && RUN_AGY=true || true
-
-# codex is mandatory at HIGH+ (tier) or score ≥ CODEX_THRESHOLD.
-case "$TIER_UC" in HIGH|CRITICAL) RUN_CODEX=true ;; esac
-python3 -c "
-s=float('$SCORE'); t=float('$CODEX_THRESHOLD')
-exit(0 if s >= t else 1)" 2>/dev/null && RUN_CODEX=true || true
+# Reviewer selection (SPEC-331): the threshold comparison and tier-floor rules
+# live in scripts/oversight/second_review_logic.py (named, unit-testable). The
+# module prints RUN_AGY=true|false and RUN_CODEX=true|false for us to eval. Tier
+# normalization and the >= threshold comparison are done inside the module.
+SELECT_OUT=$(python3 "$(dirname "$0")/oversight/second_review_logic.py" \
+    select-reviewers --score "$SCORE" --tier "$TIER" \
+    --agy-threshold "$AGY_THRESHOLD" --codex-threshold "$CODEX_THRESHOLD")
+eval "$SELECT_OUT"   # sets RUN_AGY / RUN_CODEX to true|false
 
 if ! $RUN_AGY && ! $RUN_CODEX; then
     echo "run_second_review: score=$SCORE below both thresholds (agy≥$AGY_THRESHOLD, codex≥$CODEX_THRESHOLD) and tier=${TIER:-none} below MEDIUM — skip"
@@ -123,6 +185,7 @@ if ! $RUN_AGY && ! $RUN_CODEX; then
 # Second Review — Step ${STEP}
 Timestamp: ${TS}
 verdict: skipped
+reviewed_range: none
 reason: composite score=${SCORE} below both thresholds (agy≥${AGY_THRESHOLD}, codex≥${CODEX_THRESHOLD}) and tier=${TIER:-none} below MEDIUM
 agy_threshold: ${AGY_THRESHOLD}
 codex_threshold: ${CODEX_THRESHOLD}
@@ -172,13 +235,75 @@ mkdir -p "$OUT_DIR"
 TIMESTAMP=$(date +%Y%m%dT%H%M%S)
 OUTFILE="$OUT_DIR/step${STEP}-${TIMESTAMP}.md"
 
-# --- Build diff content ---
-if [[ -n "$DIFF_REF" ]]; then
+# --- Build diff content + capture reviewed range (SPEC-219) ---
+# REVIEWED_RANGE is resolved in the SAME if/elif/else that derives DIFF_CONTENT so
+# the recorded range and the diff source can never diverge (binding B3), and the
+# UNCOMMITTED/none sentinels are mutually exclusive by construction (binding B4):
+# only one branch runs. All SHAs are full 40-char (git rev-parse / get_step_range).
+if [[ -n "$DIFF_REF" && "$DIFF_REF" == *..* ]]; then
+    # Path: --diff <A>..<B> (range form). BASE=rev-parse A, HEAD=rev-parse B.
     DIFF_CONTENT=$(git diff "$DIFF_REF" 2>/dev/null || echo "")
+    _RANGE_A="${DIFF_REF%%..*}"
+    _RANGE_B="${DIFF_REF##*..}"
+    _BASE_SHA=$(git rev-parse "$_RANGE_A" 2>/dev/null || echo "")
+    _HEAD_SHA=$(git rev-parse "$_RANGE_B" 2>/dev/null || echo "")
+    [[ -n "$_BASE_SHA" && -n "$_HEAD_SHA" ]] && REVIEWED_RANGE="${_BASE_SHA}..${_HEAD_SHA}"
+elif [[ -n "$DIFF_REF" ]]; then
+    # Path 1: --diff <ref> (single ref). git diff <ref> compares <ref> to the tree.
+    # BASE=rev-parse <ref>, HEAD=rev-parse HEAD — NEW calls at derivation time (B3).
+    DIFF_CONTENT=$(git diff "$DIFF_REF" 2>/dev/null || echo "")
+    _BASE_SHA=$(git rev-parse "$DIFF_REF" 2>/dev/null || echo "")
+    _HEAD_SHA=$(git rev-parse HEAD 2>/dev/null || echo "")
+    [[ -n "$_BASE_SHA" && -n "$_HEAD_SHA" ]] && REVIEWED_RANGE="${_BASE_SHA}..${_HEAD_SHA}"
 elif [[ ${#FILES[@]} -gt 0 ]]; then
+    # Path 3 (scoped): --files ... → HEAD-vs-worktree for named files. A dirty
+    # worktree means the review sees uncommitted state → UNCOMMITTED (BC-219-3).
     DIFF_CONTENT=$(git diff HEAD -- "${FILES[@]}" 2>/dev/null || cat "${FILES[@]}" 2>/dev/null || echo "")
+    if ! git diff --quiet HEAD -- "${FILES[@]}" 2>/dev/null; then
+        REVIEWED_RANGE="UNCOMMITTED"
+    else
+        _HEAD_SHA=$(git rev-parse HEAD 2>/dev/null || echo "")
+        [[ -n "$_HEAD_SHA" ]] && REVIEWED_RANGE="${_HEAD_SHA}..${_HEAD_SHA}"
+    fi
 else
-    DIFF_CONTENT=$(git diff HEAD 2>/dev/null || echo "")
+    # --step N path: canonical step range via the shared helper (SPEC-220 / binding
+    # B1). Used when no --diff/--files narrows the diff — the run relies on the
+    # step's canonical range. The helper owns range derivation; we own the
+    # merge-base fallback for a leading-empty base and the empty→none sentinel.
+    if [[ -f "$(dirname "$0")/oversight/lib/step_range.sh" ]]; then
+        # shellcheck source=scripts/oversight/lib/step_range.sh
+        . "$(dirname "$0")/oversight/lib/step_range.sh"
+        _STEP_RANGE=$(get_step_range "$STEP" 2>/dev/null || echo "")
+    else
+        _STEP_RANGE=""
+    fi
+    if [[ -z "$_STEP_RANGE" ]]; then
+        # Step N has no event in the log → no range. Do NOT invoke a reviewer; emit
+        # the no-content sentinel with reviewed_range: none (binding B2, AC-12).
+        echo "run_second_review: step ${STEP} has no range in audit log — writing skipped (none) sentinel"
+        mkdir -p "$OUT_DIR"
+        TS=$(date +%Y%m%dT%H%M%S)
+        cat > "$OUT_DIR/step${STEP}-${TS}.md" <<EOF
+# Second Review — Step ${STEP}
+Timestamp: ${TS}
+verdict: skipped
+highest_severity: none
+unresolved_findings: 0
+reviewed_range: none
+reason: no commit range for step ${STEP} in audit log
+EOF
+        exit 0
+    fi
+    _BASE_SHA="${_STEP_RANGE%%..*}"
+    _HEAD_SHA="${_STEP_RANGE##*..}"
+    if [[ -z "$_BASE_SHA" ]]; then
+        # Leading-empty base (step 1, or step N-1 has no event). Merge-base fallback
+        # — byte-identical to the SPEC-220 evaluator so both resolve BASE the same
+        # way (binding B1).
+        _BASE_SHA=$(git merge-base HEAD "$(git rev-parse HEAD~1 2>/dev/null || echo HEAD)")
+    fi
+    REVIEWED_RANGE="${_BASE_SHA}..${_HEAD_SHA}"
+    DIFF_CONTENT=$(git diff "${_BASE_SHA}..${_HEAD_SHA}" 2>/dev/null || echo "")
 fi
 
 if [[ -z "$DIFF_CONTENT" ]]; then
@@ -191,6 +316,7 @@ Timestamp: ${TS}
 verdict: skipped
 highest_severity: none
 unresolved_findings: 0
+reviewed_range: none
 reason: no diff content detected
 EOF
     exit 0
@@ -216,8 +342,11 @@ echo ""
     printf "# Second Review — Step %s\n" "$STEP"
     printf "Score: %s | Timestamp: %s\n" "$SCORE" "$TIMESTAMP"
     printf "verdict: pending\n"
+    printf "reviewed_range: %s\n" "$REVIEWED_RANGE"
     printf "highest_severity: none\n"
     printf "unresolved_findings: 0\n"
+    printf "blocking_count: 0\n"
+    printf "new_blocking_count: 0\n"
     printf "agy_threshold: %s | codex_threshold: %s\n\n" "$AGY_THRESHOLD" "$CODEX_THRESHOLD"
 } > "$OUTFILE"
 
@@ -322,6 +451,29 @@ for cand in objects(raw):
         sys.exit(0)
 sys.exit(1)
 PYEOF
+}
+
+# ── SPEC-379 R4: advisory when a reviewer requests full-repository context ────
+# Non-blocking. Appends an ADVISORY block to $OUTFILE (the .claudetmp/second-review/
+# file the oversight-evaluator reads). Does NOT change verdict, severity, or exit code.
+log_context_advisory() {
+    local reviewer="$1" response="$2"
+    [[ "$DIFF_ONLY" -eq 1 ]] || return 0
+    local match
+    match=$(printf '%s' "$response" | grep -ioE "$DIFF_ONLY_REQUEST_PATTERNS" | head -1 || true)
+    [[ -n "$match" ]] || return 0
+    {
+        echo "## [ADVISORY] Full-context request — diff-centric mode (SPEC-379)"
+        echo '```'
+        echo "[ADVISORY] Reviewer requested full-file/full-repository context while --diff-only is on."
+        echo "Reviewer: ${reviewer}"
+        echo "Matched pattern: ${match}"
+        echo "Action: Full-context request not fulfilled. If a specific artifact is needed,"
+        echo "re-invoke with the named file passed as targeted context."
+        echo '```'
+        echo ""
+    } >> "$OUTFILE"
+    echo "  [ADVISORY] ${reviewer} requested full-repo context (pattern: '${match}') — logged, non-blocking"
 }
 
 # ── agy: correctness + spec adherence ───────────────────────────────────────
@@ -504,6 +656,7 @@ if $RUN_AGY && $AGY_AVAILABLE; then
         echo ""
     } >> "$OUTFILE"
     create_finding_issues "agy" "$AGY_OUT"
+    log_context_advisory "agy" "$AGY_OUT"
     echo "  done"
 
 elif $RUN_AGY && ! $AGY_AVAILABLE && $RUN_CODEX && $CODEX_AVAILABLE; then
@@ -519,6 +672,7 @@ elif $RUN_AGY && ! $AGY_AVAILABLE && $RUN_CODEX && $CODEX_AVAILABLE; then
         echo ""
     } >> "$OUTFILE"
     create_finding_issues "codex-fallback" "$FALLBACK_OUT"
+    log_context_advisory "codex-fallback" "$FALLBACK_OUT"
     echo "  done (fallback)"
 else
     [[ ! $AGY_AVAILABLE ]] && echo "  SKIP agy: not available"
@@ -537,6 +691,7 @@ if $RUN_CODEX && $CODEX_AVAILABLE && ! ( $RUN_AGY && ! $AGY_AVAILABLE ); then
         echo ""
     } >> "$OUTFILE"
     create_finding_issues "codex" "$CODEX_OUT"
+    log_context_advisory "codex" "$CODEX_OUT"
     echo "  done"
 elif $RUN_CODEX && ! $CODEX_AVAILABLE; then
     echo "  SKIP codex: not available"
@@ -546,117 +701,18 @@ fi
 echo ""
 
 # ── Finalize machine-readable verdict header ─────────────────────────────────
-# Parse all reviewer JSON blocks to determine aggregate verdict and severity.
-python3 - "$OUTFILE" <<'PYEOF'
-import json, re, sys
-path = sys.argv[1]
-try:
-    content = open(path).read()
-except Exception:
-    sys.exit(0)
+# Step 1 (SPEC-331): second_review_logic.py rewrites verdict, highest_severity,
+# and unresolved_findings from the prose/JSON classifier. The module reads
+# $OUTFILE and rewrites it in place.
+python3 "$(dirname "$0")/oversight/second_review_logic.py" aggregate --file "$OUTFILE"
 
-severities = ["critical", "high", "medium", "low", "none"]
-SEV_RANK = {s: i for i, s in enumerate(severities)}
-
-# Parse by REVIEWER SECTION (## header), not by a bare ```json regex. agy is an
-# agentic CLI: it returns a narrated transcript + a markdown report, not the
-# strict JSON the prompt requested (HOS#113). The old parser required a fenced
-# block starting with `{`, found none, and fail-closed every prose review as
-# `error` — throwing away a genuine independent review. Section parsing also
-# survives the reviewer emitting its own ``` code fences.
-sections = re.split(r'(?m)^## ', content)[1:]   # each starts after "## "
-
-def fenced_body(text):
-    """Content inside the outer ```json ... ``` if present, else the whole text."""
-    m = re.search(r'```(?:json)?\s*\n(.*)\n```', text, re.DOTALL)
-    return (m.group(1) if m else text).strip()
-
-def classify_prose(text):
-    """Best-effort verdict/severity from a non-JSON markdown review report.
-    Returns (verdict, severity): verdict in approve|request_changes|unparseable."""
-    low = text.lower()
-    risk = re.search(r'\brisk:\s*(critical|high|medium|low|none)\b', low)
-    blocking = re.search(r'must[ -]?fix|tier\s*1\b|request[_ ]changes|\bblocking\b|\bcritical\b', low)
-    approve = re.search(r'\bverdict:\s*approve\b|no (issues|findings|problems)|lgtm|looks good|\bapprove\b', low)
-    if risk and risk.group(1) in ("critical", "high"):
-        return "request_changes", risk.group(1)
-    if blocking:
-        sev = "critical" if "critical" in low else "high"
-        return "request_changes", sev
-    if approve or (risk and risk.group(1) in ("low", "none")):
-        return "approve", (risk.group(1) if risk else "none")
-    return "unparseable", (risk.group(1) if risk else "none")
-
-reviewers = []   # (name, verdict, severity, finding_count, parsed_from)
-for sec in sections:
-    head = sec.splitlines()[0] if sec.splitlines() else ""
-    hl = head.lower()
-    name = "agy" if hl.startswith("agy") else ("codex" if hl.startswith("codex") else None)
-    if name is None:
-        continue                      # not a reviewer section (verdict header etc.)
-    if "skipped" in hl:
-        continue                      # a skipped reviewer is handled by the pre-check
-    body = fenced_body(sec[len(head):])
-    if not body:
-        reviewers.append((name, "error", "none", 0, "empty"))   # true crash / no output
-        continue
-    # Structured path: the body is valid JSON exactly as the prompt asked.
-    try:
-        data = json.loads(body)
-    except Exception:
-        v, sev = classify_prose(body)
-        fc = len(re.findall(r'(?m)^\s*#{1,4}\s', body)) if v == "request_changes" else 0
-        reviewers.append((name, v, sev, fc, "prose"))
-        continue
-    if data.get("verdict") == "error" or data.get("error"):
-        reviewers.append((name, "error", "none", 0, "json"))
-        continue
-    v = "request_changes" if data.get("verdict") == "request_changes" else "approve"
-    sev, fc = "none", 0
-    for f in data.get("findings", []):
-        s = str(f.get("severity", "low")).lower()
-        if SEV_RANK.get(s, 4) < SEV_RANK[sev]:
-            sev = s
-        if s in ("critical", "high"):
-            fc += 1
-    reviewers.append((name, v, sev, fc, "json"))
-
-# Aggregate. Precedence: error > request_changes > unparseable > approve.
-#   error        — a fired reviewer genuinely crashed / produced no output.
-#                  Fails closed (must not silently become a PASS).
-#   request_changes — at least one reviewer flagged blocking issues.
-#   unparseable  — a reviewer produced a review we could not structure. This is
-#                  DISTINCT from error: the review content exists and is preserved
-#                  in this file for a human to read. It must NOT silently pass and
-#                  must NOT be misread as the reviewer crashing.
-#   approve      — all fired reviewers approved.
-if not reviewers:
-    verdict, highest, finding_count = "error", "none", 0
-else:
-    highest = "none"
-    finding_count = 0
-    for _, _, sev, fc, _ in reviewers:
-        if SEV_RANK.get(sev, 4) < SEV_RANK[highest]:
-            highest = sev
-        finding_count += fc
-    verds = [v for _, v, _, _, _ in reviewers]
-    if "error" in verds:
-        verdict = "error"
-    elif "request_changes" in verds:
-        verdict = "request_changes"
-    elif "unparseable" in verds:
-        verdict = "unparseable"
-    else:
-        verdict = "approve"
-
-new_content = re.sub(r'^verdict: pending$', f'verdict: {verdict}', content, flags=re.M)
-new_content = re.sub(r'^highest_severity: none$', f'highest_severity: {highest}', new_content, flags=re.M)
-new_content = re.sub(r'^unresolved_findings: 0$', f'unresolved_findings: {finding_count}', new_content, flags=re.M)
-open(path, 'w').write(new_content)
-prose_note = " (parsed from prose — agy returned a markdown report, not JSON)" \
-    if any(pf == "prose" for *_ , pf in reviewers) else ""
-print(f"  verdict={verdict} highest_severity={highest} unresolved={finding_count}{prose_note}")
-PYEOF
+# Step 2 (SPEC-78 C1): validation_logic.py process rewrites new_blocking_count
+# (and re-keys verdict) against the step-scoped convergence ledger. This is the
+# only place that reads the ledger — imported from validation_logic.py, never
+# reimplemented here (C1). A missing ledger is treated as empty (zero seen
+# fingerprints), so first-run behavior is unchanged.
+python3 "$(dirname "$0")/oversight/validation_logic.py" process \
+    --file "$OUTFILE" --ledger "$LEDGER_FILE"
 
 echo "Second review complete: $OUTFILE"
 echo "Oversight-evaluator reads this before determining PROCEED/CONDITIONAL/ESCALATE."

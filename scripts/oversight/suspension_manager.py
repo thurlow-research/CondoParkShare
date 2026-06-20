@@ -115,6 +115,124 @@ def acknowledged_security(text: str) -> bool:
     return False
 
 
+def _iter_noncomment_lines(text: str):
+    """Yield stripped lines that are outside HTML comment blocks and not '#' comments.
+
+    Mirrors parse_suspensions()'s crude-but-correct comment tracking — the template
+    keeps its examples inside <!-- --> and as '#'-prefixed lines, and those must be
+    ignored (a human enables a field by un-commenting it).
+    """
+    in_comment = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if "<!--" in stripped and "-->" not in stripped:
+            in_comment = True
+            continue
+        if "-->" in stripped:
+            in_comment = False
+            continue
+        if in_comment:
+            continue
+        if stripped.startswith("#"):
+            continue
+        yield stripped
+
+
+_TRUTHY = ("1", "true", "yes", "on")
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def parse_per_step_scope(text: str) -> tuple[bool, list[str]]:
+    """Parse `per_step_scope:` and `steps:` from a gate-suspension file (SPEC-83 R1).
+
+    Returns (per_step_scope, steps). HTML-commented and '#'-commented lines are
+    ignored (template examples). Both block-list (`  - step-3`) and inline
+    (`steps: [step-3, step-4]`) forms are accepted. Step IDs are returned verbatim
+    (byte-exact, case-sensitive — the caller matches with `==`).
+    """
+    per_step = False
+    steps: list[str] = []
+    in_block_list = False
+    for stripped in _iter_noncomment_lines(text):
+        low = stripped.lower()
+        if low.replace(" ", "").startswith("per_step_scope:"):
+            val = stripped.split(":", 1)[1].strip().lower()
+            per_step = val in _TRUTHY
+            in_block_list = False
+            continue
+        if low.startswith("steps:"):
+            rest = stripped.split(":", 1)[1].strip()
+            if rest.startswith("[") and rest.endswith("]"):
+                # inline form: steps: [step-3, step-4]
+                inner = rest[1:-1].strip()
+                if inner:
+                    steps.extend(
+                        s.strip().strip("'\"") for s in inner.split(",") if s.strip()
+                    )
+                in_block_list = False
+            elif rest:
+                # `steps: step-3` single inline value (no brackets)
+                steps.append(rest.strip("'\""))
+                in_block_list = False
+            else:
+                in_block_list = True  # block-list entries follow on subsequent lines
+            continue
+        if in_block_list:
+            if stripped.startswith("- "):
+                steps.append(stripped[2:].strip().strip("'\""))
+                continue
+            in_block_list = False  # non-list line ends the block
+    return per_step, steps
+
+
+def validate_per_step_scope(text: str, step_id: str) -> dict:
+    """Classify the per-step scope fields against a step ID (SPEC-83 R2.2a / R1.6).
+
+    Returns:
+      {per_step_scope: bool, malformed: bool, covers_step: bool, steps: [str]}
+
+    - per_step_scope False (blanket/absent) → not malformed, not covering.
+    - per_step_scope True + empty/absent steps → malformed True (R1.6 distinct FAIL).
+    - per_step_scope True + non-empty steps → covers_step = (step_id in steps), exact match.
+
+    Does NOT check the tier or security-suspension-acknowledged — that stays with the
+    evaluator (R2.3). Pure classifier of the scope fields.
+    """
+    per_step, steps = parse_per_step_scope(text)
+    malformed = per_step and not steps
+    covers = per_step and not malformed and step_id in steps
+    return {
+        "per_step_scope": per_step,
+        "malformed": malformed,
+        "covers_step": covers,
+        "steps": steps,
+    }
+
+
+def check_grandfathered_until(text: str, today: str | None = None) -> dict:
+    """Resolve the `grandfathered_until:` transition date (SPEC-83 R3).
+
+    Reuses the `review-by:` date idiom: lexicographic YYYY-MM-DD comparison against
+    today. `today` defaults to _today() (injectable for tests).
+
+    Returns {present: bool, date: str|None, status: str} where status is one of:
+      "absent"    — no grandfathered_until line → no grandfathering (FAIL applies)
+      "future"    — date strictly after today  → WARN + CONDITIONAL_PROCEED
+      "expired"   — date today or in the past  → FAIL (period over)
+      "malformed" — value not YYYY-MM-DD       → FAIL (fail-closed)
+    """
+    today = today or _today()
+    for stripped in _iter_noncomment_lines(text):
+        if stripped.lower().replace(" ", "").startswith("grandfathered_until:"):
+            val = stripped.split(":", 1)[1].strip()
+            if not _DATE_RE.match(val):
+                return {"present": True, "date": val or None, "status": "malformed"}
+            # strictly-future = grandfathered; today or past = expired (period over)
+            status = "future" if val > today else "expired"
+            return {"present": True, "date": val, "status": status}
+    return {"present": False, "date": None, "status": "absent"}
+
+
 def _read_config_bool(name: str, default: bool) -> bool:
     val = os.environ.get(name)
     if val is None:
@@ -270,13 +388,113 @@ def _append_reenable_log(text: str, gates: list[str]) -> str:
     return text.rstrip() + "\n\n## Re-enable log\n\n" + rows
 
 
+def _read_reason_category(suspension_file: str) -> str:
+    """Read reason_category from gate-suspension.md; return 'unspecified' if absent."""
+    try:
+        text = Path(suspension_file).read_text(encoding="utf-8", errors="replace")
+        for line in text.splitlines():
+            low = line.strip().lower()
+            if low.startswith("reason_category:"):
+                val = line.split(":", 1)[1].strip().strip("'\"").upper()
+                if val and not val.startswith("["):  # skip template placeholders
+                    return val
+    except (OSError, UnicodeDecodeError):
+        pass
+    return "unspecified"
+
+
+def cmd_emit_audit(
+    gate: str,
+    authorized_by: str | None,
+    step: str | None = None,
+    suspension_file: str = SUSPENSION_FILE,
+) -> int:
+    """Append a `gate-suspended` event to audit/oversight-log.jsonl.
+
+    Canonical home for the audit JSON that check_suspension.sh used to build by
+    hand with printf (HOS#337). Now includes the three OVERSIGHT-CONTRACT §6a
+    fields deferred from #337: step, suspension_file, reason_category (#397).
+    No-op when audit/ is absent (the guard lives in emit_audit). Best-effort:
+    always exits 0.
+    """
+    emit_audit(
+        {
+            "event": "gate-suspended",
+            "gate": gate,
+            "authorized_by": authorized_by or "unknown",
+            "step": step or "unknown",
+            "suspension_file": suspension_file,
+            "reason_category": _read_reason_category(suspension_file),
+        }
+    )
+    return 0
+
+
+def cmd_is_suspended(gate: str) -> int:
+    """Exit 0 if gate is currently suspended, exit 1 otherwise.
+
+    Used by run_gates.sh to populate the 'suspended' field in gate-results.json
+    without sourcing the bash check_suspension.sh helper.
+    """
+    susp_path = Path(SUSPENSION_FILE)
+    if not susp_path.exists():
+        return 1
+    suspensions = parse_suspensions(susp_path.read_text())
+    return 0 if any(s.gate == gate for s in suspensions) else 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--census", action="store_true")
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--auto-remove", action="store_true")
     parser.add_argument("--quiet", action="store_true")
+    parser.add_argument(
+        "--is-suspended",
+        metavar="GATE",
+        help="Exit 0 if GATE is currently suspended, exit 1 otherwise.",
+    )
+    parser.add_argument(
+        "--emit-audit",
+        action="store_true",
+        help="Append a gate-suspended audit event (use with --gate / --authorized-by).",
+    )
+    parser.add_argument("--gate", metavar="GATE", help="Gate name for --emit-audit.")
+    parser.add_argument(
+        "--authorized-by",
+        metavar="VALUE",
+        help="Authorizer string for --emit-audit (default: unknown).",
+    )
+    parser.add_argument(
+        "--step",
+        metavar="STEP_ID",
+        default=None,
+        help="Build step the suspension applies to, for --emit-audit (#397).",
+    )
+    parser.add_argument(
+        "--suspension-file",
+        metavar="PATH",
+        default=SUSPENSION_FILE,
+        help=f"Path to the suspension record file (default: {SUSPENSION_FILE}).",
+    )
     args = parser.parse_args()
+
+    # Point query — does not need the suspension file to exist to parse.
+    if args.is_suspended:
+        return cmd_is_suspended(args.is_suspended)
+
+    # Audit emission — does not need the suspension file to exist; the caller
+    # already knows the gate is suspended by the time it emits.
+    if args.emit_audit:
+        if not args.gate:
+            print("--emit-audit requires --gate", file=sys.stderr)
+            return 2
+        return cmd_emit_audit(
+            args.gate,
+            args.authorized_by,
+            step=args.step,
+            suspension_file=args.suspension_file,
+        )
 
     susp_path = Path(SUSPENSION_FILE)
     if not susp_path.exists():

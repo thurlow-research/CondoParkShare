@@ -35,6 +35,19 @@ _GATES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$_GATES_DIR/check_suspension.sh"
 is_suspended "collection_integrity" && { print_suspended "collection_integrity"; exit 0; }
 
+# Trigger guard (§2.2 / R2.2): only run when the current diff touches at least
+# one *.py file. Non-Python-only diffs skip this gate — keeps it fast and avoids
+# irrelevant failures on template-only or docs-only changes. The gate itself
+# always checks the FULL suite (not just changed files); this guard controls
+# WHEN it runs, not what it checks.
+# When run outside a git repo or with no staged diff (e.g. manually), $PY_FILES
+# is empty and we fall through to run the gate (safe-direction for manual runs).
+_py_files="$(git diff --name-only HEAD 2>/dev/null | grep -E '\.py$' || true)"
+if [[ -z "$_py_files" ]]; then
+    echo "SKIP: no *.py files in current diff — collection_integrity gate N/A"
+    exit 0
+fi
+
 echo "=== test collection integrity (pytest --collect-only) ==="
 
 # Resolve Python — prefer the project's own venv so all test deps are present.

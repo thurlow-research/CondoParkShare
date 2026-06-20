@@ -7,7 +7,7 @@
 # Matches:
 #   /Users/<name>/...       macOS home dirs
 #   /home/<name>/...        Linux home dirs (excludes /home/runner — CI is OK)
-#   C:/Users/<name>/...     Windows home dirs (the backslash-separator form is what the pattern matches)
+#   C:/Users/<name>/...     Windows home dirs (shown with forward slashes to avoid self-match)
 #
 # Scans Python, shell, TOML, ini, cfg files — broader than the portability_check.py
 # validator (which scores risk) — this gate is the blocking Phase-1 check.
@@ -58,13 +58,33 @@ echo "=== portability check (machine-specific absolute paths) ==="
 # /home/runner is excluded — GitHub Actions / standard CI runner paths are portable.
 PAT='(/Users/[A-Za-z0-9._-]+/|/home/(?!runner/)[A-Za-z0-9._-]+/|[A-Za-z]:\\Users\\)'
 
-if HITS=$(grep -nEHP "$PAT" "${FILES[@]}" 2>/dev/null); then
+# Portable check via Python — grep -nEHP is not portable (BSD lacks -P, GNU treats -E/-P
+# as conflicting, macOS always exits non-zero, silently passing this gate). CWE-697 fix.
+HITS=$(python3 - "${FILES[@]}" << 'PYEOF'
+import re, sys
+PAT = re.compile(
+    r'/Users/[A-Za-z0-9._-]+/'
+    r'|/home/(?!runner/)[A-Za-z0-9._-]+/'
+    r'|[A-Za-z]:\\Users\\'
+)
+found = []
+for p in sys.argv[1:]:
+    try:
+        for i, line in enumerate(open(p, errors='replace'), 1):
+            if PAT.search(line):
+                found.append(f"{p}:{i}: {line.rstrip()}")
+    except Exception:
+        pass
+print('\n'.join(found))
+PYEOF
+) || { echo "GATE FAIL: portability check script error (Python unavailable?)"; exit $FAIL; }
+
+if [[ -n "$HITS" ]]; then
     echo "GATE FAIL: machine-specific absolute path(s) found"
     echo ""
     echo "$HITS"
     echo ""
     echo "Use BASE_DIR / Path(__file__).parent / env vars instead of hardcoded home paths."
-    echo "If this is a spec_from_file_location workaround, fix the root naming collision instead."
     exit $FAIL
 fi
 

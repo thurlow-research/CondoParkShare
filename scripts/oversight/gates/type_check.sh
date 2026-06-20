@@ -45,8 +45,16 @@ if [[ ! -x "$VENV_BIN/mypy" ]]; then
 fi
 
 if [[ ${#FILES[@]} -eq 0 ]]; then
-    echo "type_check: no Python files to check"
-    exit 0
+    # No files specified and --all not set: default to scanning all Python files
+    # rather than silently passing (a no-op pass is indistinguishable from a real pass).
+    echo "type_check: no files specified — defaulting to --all (full project scan)"
+    while IFS= read -r line; do FILES+=("$line"); done < <(find . -name "*.py" \
+        -not -path "./.venv/*" -not -path "./scripts/oversight/.venv/*" \
+        -not -path "./node_modules/*" -not -path "./.git/*")
+    if [[ ${#FILES[@]} -eq 0 ]]; then
+        echo "type_check: no Python files found in project — SKIP"
+        exit 0
+    fi
 fi
 
 echo "=== mypy ==="

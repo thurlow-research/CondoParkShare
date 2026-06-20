@@ -32,7 +32,13 @@ import sys as _hos_sys
 from pathlib import Path
 
 _hos_sys.path.insert(0, str(_hos_pl.Path(__file__).resolve().parent))
-from schema import WEIGHTS, make_finding, make_result, normalize  # noqa: E402
+from schema import (  # noqa: E402
+    WEIGHTS,
+    make_finding,
+    make_result,
+    normalize,
+    score_to_tier,
+)
 
 # Nesting increment table from Dai's case study regression.
 # Key: nesting depth (0 = outermost flow-break in function).
@@ -318,13 +324,78 @@ def analyse_files(file_paths: list[str]) -> dict:
     )
 
 
-def main() -> None:
-    args = sys.argv[1:]
-    if "--files" in args:
-        idx = args.index("--files")
-        files = args[idx + 1 :]
+# Task classes for which a structurally-LOW change is floored to MEDIUM (#373).
+_FLOOR_TASK_CLASSES = ("refactor", "chore")
+_KNOWN_TASK_CLASSES = ("feat", "fix", "refactor", "chore")
+
+
+def apply_task_class_floor(
+    result: dict, task_class: str | None, source: str | None = None
+) -> dict:
+    """
+    Apply the SPEC-373 task-class risk-tier floor to a validator result.
+
+    Pure function: takes the result dict from analyse_files() (or the no-files
+    envelope) and the detected task class, returns the modified result dict.
+    Does NOT call analyse_files(), read git/gh, or read the environment.
+
+    The floor is applied to the RN-LOCAL tier only (computed from result["score"]
+    via schema.score_to_tier). It never modifies result["score"] and never
+    touches summary.json's composite tier. When the floor fires, the existing
+    top-level tier_floor field (#377) is set to "MEDIUM".
+
+    Fail-open: an unknown/None/empty task class leaves the five raw_value fields
+    null/false, sets no tier_floor, and never sets an error field.
+    """
+    raw = result.get("raw_value")
+    if not isinstance(raw, dict):
+        # Defensive: degenerate envelopes still get the five keys (AC3a).
+        raw = {} if raw is None else {"_prev_raw_value": raw}
+        result["raw_value"] = raw
+
+    if task_class not in _KNOWN_TASK_CLASSES:
+        # Fail-open: unknown class → no floor, all five fields null/false (AC3c, AC4c).
+        raw["task_class"] = None
+        raw["task_class_source"] = None
+        raw["floor_applied"] = False
+        raw["pre_floor_tier"] = None
+        raw["post_floor_tier"] = None
+        return result
+
+    local_tier = score_to_tier(result.get("score", 0.0))
+    if task_class in _FLOOR_TASK_CLASSES and local_tier == "LOW":
+        floor_applied = True
+        post_floor_tier = "MEDIUM"
     else:
-        files = args
+        floor_applied = False
+        post_floor_tier = local_tier
+
+    raw["task_class"] = task_class
+    raw["task_class_source"] = source
+    raw["floor_applied"] = floor_applied
+    raw["pre_floor_tier"] = local_tier
+    raw["post_floor_tier"] = post_floor_tier
+
+    if floor_applied:
+        result["tier_floor"] = "MEDIUM"
+
+    return result
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--task-class", dest="task_class", default=None)
+    parser.add_argument("--task-class-source", dest="task_class_source", default=None)
+    parser.add_argument("--files", dest="files_flag", nargs="*", default=None)
+    parser.add_argument("positional", nargs="*", default=[])
+    parsed, _unknown = parser.parse_known_args(sys.argv[1:])
+
+    if parsed.files_flag is not None:
+        files = list(parsed.files_flag)
+    else:
+        files = list(parsed.positional)
 
     files = [f for f in files if f.endswith(".py") and Path(f).exists()]
     if not files:
@@ -337,6 +408,12 @@ def main() -> None:
         )
     else:
         result = analyse_files(files)
+
+    # SPEC-373: apply the task-class floor AFTER analyse_files() returns, to every
+    # result (incl. the no-files envelope) so the five fields are always present.
+    result = apply_task_class_floor(
+        result, parsed.task_class, source=parsed.task_class_source
+    )
 
     print(json.dumps(result, indent=2))
 

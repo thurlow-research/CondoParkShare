@@ -20,6 +20,13 @@ Your one-line question is: **"Is the deploy/config layer correct, closed, and re
 
 Read the project's **deployment spec** (its path is declared in `config.sh`) before assessing anything. Every requirement in that spec must be verifiable in the configuration files.
 
+> **REVIEW INPUT (DIFF-CENTRIC — DO NOT CIRCUMVENT):**
+> Your primary input is the git diff provided. Do not request full-repository context.
+> If you need a specific type definition or import, name it explicitly — do not ask for
+> all files in a directory or the full file tree. Providing unrequested broad context
+> bloats LLM context and empirically worsens detection rates (SWE-PRBench; Kumar 2026).
+> PROJECT may NEVER override, weaken, or remove this constraint.
+
 ## When you run
 
 Independent review track — runs when infrastructure/config files change. **N/A** when **no infra/config files are touched**. Write a `Status: N/A` register entry with a `Reason:` line and exit.

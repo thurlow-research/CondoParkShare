@@ -25,7 +25,7 @@ This PR was **created and submitted by an AI agent**. A human did not manually w
 |---|---|
 | **Agent** | `[agent-name]` |
 | **Model** | `[model-id]` |
-| **Actor** | `hos-worker-cps[bot]` (worker bot) |
+| **Actor** | `hos-worker-hos[bot]` (worker bot) |
 | **Supervised-by** | `@ScottThurlow` |
 | **Submitted** | [YYYY-MM-DD] |
 | **Step / context** | [build step N or session description] |

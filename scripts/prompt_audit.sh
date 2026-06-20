@@ -6,8 +6,25 @@
 #   ./scripts/prompt_audit.sh --risk HIGH  # filter by risk level
 #   ./scripts/prompt_audit.sh --pending    # show artifacts with Pending review status
 #   ./scripts/prompt_audit.sh --stats      # summary statistics
+#
+# SPEC-338 (#338): this script is a launcher. It runs ONE `git log` per mode
+# (collision-proof %x1e record / %x1f field separators) and pipes the output to
+# scripts/oversight/prompt_audit_logic.py, which holds all parsing/aggregation
+# logic. The shell never parses commit bodies; Python never spawns git.
 
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOGIC="$SCRIPT_DIR/oversight/prompt_audit_logic.py"
+
+# Prefer the oversight venv python if present, else system python3 (same pattern
+# as run_tests_inner_loop.sh) so the launcher works in and out of the venv.
+VENV_PY="$SCRIPT_DIR/oversight/.venv/bin/python"
+if [[ -x "$VENV_PY" ]]; then
+  PYTHON="$VENV_PY"
+else
+  PYTHON="python3"
+fi
 
 MODE="list"
 RISK_FILTER=""
@@ -27,11 +44,12 @@ if [[ "$MODE" == "list" ]]; then
   echo ""
   if [[ -n "$RISK_FILTER" ]]; then
     git log --grep="AI-Risk: ${RISK_FILTER}" \
-      --pretty=format:"%h %ad %s" --date=short | head -40
+      --pretty=format:"%x1e%h%x1f%ad%x1f%s" --date=short \
+      | "$PYTHON" "$LOGIC" list --limit 40
   else
     git log --grep="Prompt-Artifact:" \
-      --pretty=format:"%h %ad %s%n  $(git log --pretty=format:'%b' -1 %H 2>/dev/null | grep 'AI-Risk:' || echo '')" \
-      --date=short | head -60
+      --pretty=format:"%x1e%H%x1f%ad%x1f%s%x1f%b" --date=short \
+      | "$PYTHON" "$LOGIC" list --limit 60
   fi
 fi
 
@@ -43,15 +61,7 @@ if [[ "$MODE" == "pending" ]]; then
     echo "  No prompts/ directory found."
     exit 0
   fi
-  COUNT=0
-  while IFS= read -r -d '' f; do
-    if grep -q "⬜ Pending" "$f" 2>/dev/null; then
-      echo "  $f"
-      COUNT=$((COUNT + 1))
-    fi
-  done < <(find prompts -name "*.md" -print0 2>/dev/null)
-  echo ""
-  echo "  ${COUNT} artifact(s) pending review"
+  "$PYTHON" "$LOGIC" pending --prompts-dir prompts
 fi
 
 # ── Stats ──────────────────────────────────────────────────────────────────────
@@ -60,23 +70,11 @@ if [[ "$MODE" == "stats" ]]; then
   echo "══════════════════════════"
   echo ""
 
-  TOTAL_COMMITS=$(git log --grep="Prompt-Artifact:" --oneline 2>/dev/null | wc -l | tr -d ' ')
-  echo "AI-assisted commits (all time): ${TOTAL_COMMITS}"
-
-  for risk in LOW MEDIUM HIGH CRITICAL; do
-    COUNT=$(git log --grep="AI-Risk: ${risk}" --oneline 2>/dev/null | wc -l | tr -d ' ')
-    echo "  ${risk}: ${COUNT}"
-  done
-
-  echo ""
-  if [[ -d "prompts" ]]; then
-    TOTAL_ARTIFACTS=$(find prompts -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
-    PENDING=$(grep -rl "⬜ Pending" prompts 2>/dev/null | wc -l | tr -d ' ')
-    APPROVED=$(grep -rl "APPROVED" prompts 2>/dev/null | wc -l | tr -d ' ')
-    echo "Prompt artifacts: ${TOTAL_ARTIFACTS}"
-    echo "  Pending review: ${PENDING}"
-    echo "  Approved:       ${APPROVED}"
-  else
-    echo "No prompts/ directory found."
-  fi
+  # Single git pass: UNION of Prompt-Artifact: and AI-Risk: commits (two --grep
+  # = OR). Python derives total_commits from records carrying a Prompt-Artifact
+  # trailer and by_risk from the AI-Risk trailer — exact parity with the legacy
+  # two-pass counting, from ONE git invocation (SPEC-338 §3.2).
+  git log --grep="Prompt-Artifact:" --grep="AI-Risk:" \
+    --pretty=format:"%x1e%H%x1f%ad%x1f%s%x1f%b" --date=short \
+    | "$PYTHON" "$LOGIC" stats --prompts-dir prompts
 fi

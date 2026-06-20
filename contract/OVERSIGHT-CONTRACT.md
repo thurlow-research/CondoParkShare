@@ -9,10 +9,29 @@ This document defines what any compliant agent team must produce for the Human O
 All files live relative to the project root. The HOS reads these locations; compliant teams must write to them.
 
 ```
+signoffs/                            ← COMMITTED to project repo (not gitignored)
+  README.md
+  <step-id>/                        ← one subdirectory per build step (id from step-manifest.yaml)
+    <role>.stamp                    ← one stamp per role per step; committed. The gate
+                                       (signoff_gate.py) reads its git commit timestamp.
+                                       Per-step subdirectories keep concurrent PRs for
+                                       different steps from colliding (#366).
+
 audit/                               ← COMMITTED to project repo (not gitignored)
   oversight-log.jsonl               ← append-only audit trail; one JSON event per line
   step-{N}-summary.md               ← human-readable per-step report (generated at merge)
   escaped-defects.md                ← consolidated escaped-defect record
+
+contract/
+  tier-overrides/                    ← COMMITTED. HUMAN ONLY — agents must not create or
+    step{N}-human-tier-override.md      modify any file here (SPEC-83). Per-step human
+                                        authorization to suspend security/privacy on a
+                                        HIGH-tier security-relevant step. Required fields:
+                                        step, role (security|privacy), authorized_by,
+                                        date (YYYY-MM-DD), head_sha (must equal the
+                                        evaluated HEAD — the override is commit-bound),
+                                        reason. The oversight-evaluator READS it during
+                                        Phase 1 Condition 12; it never writes it.
 
 .claudetmp/                          ← ephemeral working state (gitignored)
   signoffs/
@@ -28,6 +47,10 @@ audit/                               ← COMMITTED to project repo (not gitignor
   oversight/
     validators/
       summary.json               ← composite risk score (written by run_validators.sh)
+      gate-results.json          ← gate runner output (written by run_gates.sh); required
+                                    when step manifest declares gates_required: true.
+                                    Array of: {"gate","exit_code","suspended","script","ts"}
+                                    Read by oversight-evaluator Phase 1 (REQ-GATE-NN-16/08/17).
       {dimension}.json           ← per-validator output
       risk-assessment.md         ← validated risk tier + inspection brief (written by
                                     risk-assessor agent, read by oversight-evaluator)
@@ -39,7 +62,16 @@ audit/                               ← COMMITTED to project repo (not gitignor
     step{N}-human-authorization.md ← CRITICAL steps only: human creates this file
                                     BEFORE running oversight-evaluator to authorize
                                     proceeding. Evaluator reads it during Phase 1.
-                                    Required content: date + decision text.
+                                    Required fields: Authorized: (date), Decision:
+                                    (text), Authorized by: (name), and reviewed_files:
+                                    (YAML-style list of ≥1 diff-relative path the human
+                                    reviewed — SPEC-267). The reviewed_files: list must
+                                    overlap the diff for the file to clear the
+                                    structural-override skip (§7 condition 10).
+                                    Files committed before SPEC-267 ship are
+                                    grandfathered: a missing reviewed_files: field is a
+                                    COMPLIANCE WARN, not FAIL. Files authored after ship
+                                    that omit the field are a COMPLIANCE FAIL.
     human-tier-override.md       ← created by human to authorize lowering a risk tier
                                     below the coder's declaration. Risk-assessor reads
                                     this before accepting a lower tier. Without it the
@@ -154,6 +186,38 @@ Notes: {one paragraph: what was found and how resolved. Empty if clean.}
 
 **`Critical_findings_resolved`** is required for `security` and `privacy` roles; optional (N/A) for all others. When `true`, it signals that the evaluator should add the finding to the conditional-items list for human review before merge — it is a Phase 2 quality signal, not a Phase 1 compliance check.
 
+**`Out_of_scope_commits:`** (optional structured field — any reviewer role, SPEC-328)
+When a reviewer identifies a commit that does not belong in the PR (content not traceable to the PR's stated issue), the reviewer populates this field with one entry per flagged commit. Its presence forces `Status: ESCALATED` — a reviewer MUST NOT set `Status: APPROVED` while this field is populated. The field is absent or explicitly `none` in the clean state. Format:
+
+```
+Out_of_scope_commits:
+  - sha: <short SHA or full SHA>
+    files: [<list of affected file paths>]
+    stated_issue: <issue number or "unknown">
+    reason: <one sentence — why this commit does not belong in this PR>
+```
+
+The `Out_of_scope_commits:` field is cleared ONLY by the originating reviewer (the reviewer whose entry carries the flag) after re-reviewing the updated diff and confirming the out-of-scope commit is no longer in the PR's diff. No other agent, artifact, or automated process edits the originating reviewer's register entry to clear this flag. A human authorization via GitHub issue (SPEC-328 R2.5) does not cause the field to be edited — the overseer evaluates the field and the authorization surface independently; the field persists as written by the reviewer.
+
+**`Notifications_acknowledged`** (SPEC-85) is **required for the `ui`, `a11y`, and `ops` roles** and optional (may be omitted or recorded as `N/A`) for every other role — `code-review`, `security`, `privacy`, `test-unit`, `test-system`, `process`, `infra`, `reliability` do not receive designer notifications and need not include it. It records the inter-agent notification artifacts (`.claudetmp/notifications/step{N}/{from}-to-{to}-{ts}.md`, §1) the reviewer read and acted on before signing off:
+
+```markdown
+Notifications_acknowledged: none | {count} — {comma-separated file basenames}
+```
+
+- `none` — no notification directory existed for this step, OR the directory contained no file addressed to this reviewer (`To:` did not match). No action was required. `none` is a *recorded* value (the reviewer affirmatively checked), distinct from an absent/empty field.
+- `{count} — {basenames}` — the reviewer read and acknowledged this many notification files, named by basename. The count must equal the number of basenames listed, and each basename must exist in `.claudetmp/notifications/step{N}/`.
+
+Examples:
+
+```markdown
+Notifications_acknowledged: none
+Notifications_acknowledged: 1 — ux-designer-to-ui-reviewer-20260617T143200Z.md
+Notifications_acknowledged: 2 — ux-designer-to-a11y-reviewer-20260617T143200Z.md, ux-designer-to-a11y-reviewer-20260617T153000Z.md
+```
+
+The `oversight-evaluator` reads this field in Phase 1 (§7) when a notification file exists for the step and names a required reviewer role: an absent/empty field on such a role is a COMPLIANCE WARN, upgraded to a COMPLIANCE FAIL when the unacknowledged notification carries `Blocking: yes`. A notification addressed to a role that is **not** in the step's `required_signoffs` does not trigger any compliance item (the evaluator scopes the check to required roles).
+
 **`Human_resolution`** is required only when `Status: ESCALATED`. Format: `{ISO date} — {decision text}`. The oversight-evaluator reads this field to confirm human resolution is on record before clearing the compliance check. Example: `Human_resolution: 2026-06-11 — Reviewed 5-round loop; architect decision is sound, proceed`.
 
 **`Status: CONDITIONAL`** passes Phase 1 compliance but automatically causes the oversight-evaluator to recommend at least `CONDITIONAL_PROCEED` — a human must verify the conditional item before merge.
@@ -190,6 +254,29 @@ A project may temporarily suspend specific gates/roles during brownfield onboard
 
 Gate script names for suspension: `lint`, `security`, `secrets`, `types`, `template-refs`, `portability`, `django`
 Sign-off role names match `required_signoffs` in `step-manifest.yaml`
+
+**Per-step authorization for HIGH-tier security-relevant steps (SPEC-83):** A blanket
+`security`/`privacy` suspension is **not sufficient** for a HIGH-tier step that touches a
+security-relevant surface (auth, payments, destructive migrations, PII — the
+`change_classifier.py` tier-floor surfaces). Such a step requires per-step human authorization
+via one of two paths, both human-set:
+
+- **(a) Per-step-scoped suspension** in `contract/gate-suspension.md`: `per_step_scope: true`
+  plus a non-empty `steps:` list naming the covered step IDs (matching `step-manifest.yaml`
+  `id:` fields, exact match). `security-suspension-acknowledged: yes` is still required
+  alongside the scoping. `per_step_scope` defaults to `false` (blanket) when absent —
+  backward compatible. `per_step_scope: true` with an empty/absent `steps:` list is a
+  COMPLIANCE FAIL (malformed authorization).
+- **(b) Per-step human-tier-override** at `contract/tier-overrides/step{N}-human-tier-override.md`
+  (committed, HUMAN ONLY) — bound to the evaluated HEAD by its `head_sha` field.
+
+A blanket suspension on such a step without per-step authorization is a COMPLIANCE FAIL, unless
+a human-set `grandfathered_until: YYYY-MM-DD` field (future date) is present in
+`gate-suspension.md` — which downgrades the FAIL to a COMPLIANCE WARN + CONDITIONAL_PROCEED for
+the transition period. An absent `grandfathered_until` = no grandfathering (FAIL applies); a
+past/expired date = FAIL. CRITICAL-tier steps may never have `security`/`privacy` suspended
+regardless of per-step authorization (the absolute prohibition, §2a, wins). LOW/MEDIUM tier and
+HIGH-tier non-security-relevant suspensions are unchanged.
 
 ---
 
@@ -307,9 +394,10 @@ Both requirements apply to all projects that install this framework.
 | Event | Meaning | Emitted by | Key fields |
 |---|---|---|---|
 | `step-head` | Records a step's HEAD SHA so the next step finds its base | oversight-evaluator | `step`, `head_sha` |
+| `step-head-final` | Records a step's **post-panel** final HEAD SHA (after PR merge, or after a Phase-10 close with no PR) — the authoritative base anchor for the next step. The next step's evaluator prefers it over `step-head` (SPEC-220). | oversight-orchestrator | `step`, `head_sha` (full 40-char), `merged` (`true` on PR-merge path / `false` on ESCALATE-no-PR path), `panel_fix_commits` (advisory, optional), `timestamp` |
 | `human-authorization` | A human authorization gate was satisfied — pins the content hash, decision, and claimed authorizer into committed history | oversight-evaluator | `step`, `artifact`, `content_sha256`, `authorized_by`, `decision` |
 | `validator-failure` | A validator/gate exhausted retries (timeout or crash) | run_with_retry.sh | `validator`, `required`, `attempts`, `final_outcome` (failed\|skipped), `last_error` |
-| `gate-suspended` | A required role/gate was waived because it is suspended | oversight-evaluator | `gate`, `step`, `authorized_by`, `suspension_file` |
+| `gate-suspended` | A required role/gate was waived because it is suspended | oversight-evaluator | `gate`, `step`, `authorized_by`, `suspension_file`, `reason_category` (`EMERGENCY \| PLANNED_MAINTENANCE \| FALSE_POSITIVE \| OTHER`); optional `per_step_authorized` (bool, SPEC-83 — `true` when the HIGH-tier security-relevant suspension was accepted via per-step scoping or a per-step override rather than a blanket acknowledgment) |
 | `gate-na` | An orchestrator determined a reviewer is not applicable to the diff | post-change-sweep | `gate`, `step`, `reason`, `determined_by` |
 | `gate-rerun` | A step was re-run because one of its inputs changed | reactive re-run mechanism | `gate`, `step`, `trigger`, `previous_run` |
 | `gate-auto-reenabled` | A suspended gate was auto-removed after consistent passes | suspension auto-removal | `gate`, `step`, `consecutive_passes` |
@@ -317,8 +405,92 @@ Both requirements apply to all projects that install this framework.
 | `sampling-audit` | A statistical sampling red-team run completed | run_redteam_sample.sh | `pool_size`, `sample_size`, `tier_escapes`, `escape_rate_pct` |
 | `na-invalidated` | An independent re-derivation rejected a `Status: N/A` waiver because the role's domain was in fact changed | oversight-evaluator | `role`, `step`, `evidence` |
 | `structural-override` | A structural-override signature was detected in a change not labeled `structural` (a self-classification escape, caught pre-PR) | oversight-evaluator | `signal`, `step`, `file`, `covered` (bool) |
+| `tier-floor-mismatch` | The evaluator's independent tier-floor re-derivation (`change_classifier.py --tier-floor`) exceeded the self-reported `validated_tier` (loosening), with no `human-tier-override.md` present — §7 condition 11 (#94) | oversight-evaluator | `step`, `re_derived_floor`, `self_reported_tier`, `evidence` (array of `{rule, file, pattern}`) |
+| `human-tier-override` | A committed, commit-bound per-step human override (`contract/tier-overrides/step{N}-human-tier-override.md`) was accepted to waive a HIGH-tier security/privacy review for a specific step — §7 Condition 12 (SPEC-83) | oversight-evaluator | `step`, `role` (`security \| privacy`), `artifact`, `authorized_by`, `head_sha` (the evaluated HEAD the override is bound to) |
+| `governance-artifact-bot-commit` | The most recent commit touching a human-only governance artifact (`step{N}-human-authorization.md`, `contract/gate-suspension.md`, a `contract/tier-overrides/…` override, or the legacy `.claudetmp/oversight/step{N}-human-tier-override.md`) was authored by a known bot account — a tamper-evidence signal (COMPLIANCE WARN → CONDITIONAL_PROCEED), SPEC-82 | oversight-evaluator | `step`, `artifact`, `bot_email`, `bot_name`, `commit_sha` (abbreviated) |
+| `governance-artifact-untracked` | A human-only governance artifact exists on disk but has no git commit history (untracked / never committed) — a tamper-evidence signal (COMPLIANCE WARN → CONDITIONAL_PROCEED), SPEC-82 | oversight-evaluator | `step`, `artifact` |
+| `conditional_proceed` | The orchestrator opened a CONDITIONAL_PROCEED PR — the step's process record. Carries the conditional-item count and the count of merge-blocking review threads posted (SPEC-222 R4.3). Read by the evaluator's CONDITIONAL_PROCEED thread-compliance checks (R3.1/R3.4). `conditional_threads_opened` is `0` until SPEC-222 R1 (per-item thread posting) ships — pending #399 + R1.5 API verification. | oversight-orchestrator | `step`, `pr`, `conditional_items`, `conditional_threads_opened`, `review_requested` |
 | `hos-prune` | A file removed from the framework during an install/upgrade was archived (provenance + content hash recorded) | hos_install.sh | `file`, `archived_to`, `release`, `sha256` |
-| `pr-bounced` | Overseer returned PR to worker for register/completeness gaps; PR left open, assigned to worker, not a task failure | overseer (`record_pr_bounce`) | `pr`, `cid`, `bounce_number`, `failures` (check_id list), `assigned_to`, `repo`, `timestamp` |
+| `pr-bounced` | Overseer returned PR to worker for register/completeness gaps; PR left open, assigned to worker, not a task failure | overseer (`record_pr_bounce`) | `pr`, `cid`, `bounce_number`, `failures` (check_id list), `assigned_to`, `repo`, `timestamp`, `reason_category` (`REGISTER_GAP \| COMPLIANCE_FAILURE \| SPEC_AMBIGUITY \| OTHER`), `summary` |
+| `human-required` | Overseer escalated a PR to a human (label `needs-human` + §8.2 comment); PR left open. Logs a non-merge disposition the overseer already performs so all non-merge dispositions are queryable/categorizable. | overseer | `pr`, `step`, `reason_category` (`FINDINGS_NOT_RESOLVED \| ESCALATION \| GATE_UNSATISFIED \| OTHER`), `summary`, `agent`, `comment_posted` |
+| `out-of-scope-commit` (phase: `detected`) | A reviewer flagged one or more commits as not belonging in the PR; the overseer bounced or escalated and confirmed the comment was posted before appending this event. The detection event is NOT a standalone event emitted independently — it is appended in the same halt-on-failure unit as the bounce or escalation comment post (SPEC-328 R4.1). `comment_posted` is always `true` in a committed detection event. | overseer | `pr`, `step`, `flagged_by`, `commits` (array of `{sha, files, stated_issue}`), `disposition` (`bounced\|escalated`), `comment_posted` (always `true`) |
+| `out-of-scope-commit` (phase: `resolved`) | The out-of-scope commit was resolved — either by cross-branch PR with revert (worker completed R3.2 workflow) or by human authorization via GitHub issue (R2.5 verification passed). Emitted as a separate standalone event when resolution is confirmed. | overseer or worker | `pr`, `step`, `resolution` (`cherry-pick-pr-opened\|human-accepted`), `authorized_by`, `authorizing_issue` (required when `human-accepted`; null when `cherry-pick-pr-opened`), `cross_branch_pr` (required when `cherry-pick-pr-opened`; null when `human-accepted`), `commits` |
+
+The two non-merge dispositions carry structured rationale (SPEC-378). The `reason_category` and `summary` values in each event MUST match the values written into the corresponding PR comment (the `pr-bounced` bounce comment via `record_pr_bounce()`, the `human-required` §8.2 escalation comment). The `summary` is a templated one-sentence description, not model-generated. Both events are appended only after the comment is confirmed posted (`comment_posted: true`); if the comment post or the audit append fails, the overseer halts rather than finalizing the disposition (audit-trail completeness). The `human-required` `GATE_UNSATISFIED` value is the SPEC-378 `HUMAN_REQUIRED` reason renamed (architect binding) to avoid colliding with the disposition name. Extended `pr-bounced` schema:
+
+```json
+{
+  "event": "pr-bounced",
+  "pr": "<PR number or URL>",
+  "cid": "<worker correlation id>",
+  "bounce_number": "<integer>",
+  "failures": ["<check_id>", "..."],
+  "assigned_to": "<hos-worker-hos[bot]>",
+  "repo": "<owner/repo>",
+  "timestamp": "<ISO-8601>",
+  "reason_category": "REGISTER_GAP | COMPLIANCE_FAILURE | SPEC_AMBIGUITY | OTHER",
+  "summary": "<same one-sentence summary as the bounce comment>",
+  "comment_posted": true
+}
+```
+
+New `human-required` schema:
+
+```json
+{
+  "event": "human-required",
+  "pr": "<PR number or URL>",
+  "step": "<step id>",
+  "reason_category": "FINDINGS_NOT_RESOLVED | ESCALATION | GATE_UNSATISFIED | OTHER",
+  "summary": "<same one-sentence summary as the §8.2 comment>",
+  "agent": "overseer",
+  "timestamp": "<ISO-8601>",
+  "comment_posted": true
+}
+```
+
+New `out-of-scope-commit` (phase: `detected`) schema (SPEC-328):
+
+```json
+{
+  "event": "out-of-scope-commit",
+  "phase": "detected",
+  "pr": "<PR number or URL>",
+  "step": "<step id>",
+  "flagged_by": "<reviewer agent name>",
+  "commits": [
+    {
+      "sha": "<commit SHA>",
+      "files": ["<file path>", "..."],
+      "stated_issue": "<issue number or unknown>"
+    }
+  ],
+  "disposition": "bounced | escalated",
+  "timestamp": "<ISO-8601>",
+  "comment_posted": true
+}
+```
+
+`comment_posted` is always `true` in a committed detection event — a detection event with `comment_posted: false` is not a valid log entry and MUST NOT be written. The detection event is appended only after the bounce or escalation comment is confirmed posted; if the comment post fails, the detection event is not written and the overseer halts.
+
+New `out-of-scope-commit` (phase: `resolved`) schema (SPEC-328):
+
+```json
+{
+  "event": "out-of-scope-commit",
+  "phase": "resolved",
+  "pr": "<PR number or URL>",
+  "step": "<step id>",
+  "resolution": "cherry-pick-pr-opened | human-accepted",
+  "authorized_by": "<human name or agent name>",
+  "authorizing_issue": "<GitHub issue number — required when human-accepted; null when cherry-pick-pr-opened>",
+  "cross_branch_pr": "<PR number of the cross-branch PR — required when cherry-pick-pr-opened; null when human-accepted>",
+  "commits": ["<sha>", "..."],
+  "timestamp": "<ISO-8601>"
+}
+```
+
+`cross_branch_pr` and `authorizing_issue` are mutually exclusive for a given resolution value: `cherry-pick-pr-opened` requires `cross_branch_pr` and omits `authorizing_issue`; `human-accepted` requires `authorizing_issue` and omits `cross_branch_pr`. The `human-accepted` resolution is only written after the overseer's GitHub API verification (SPEC-328 R2.5 C3/C4) confirms a qualifying human authorization comment exists.
 
 **Why this matters (ratchet + audit completeness):** the three "non-APPROVED" states — `gate-suspended` (human chose to skip), `gate-na` (not applicable), `validator-failure` (tried and failed) — are genuinely different and currently invisible if not logged. A complete audit trail records all of them. Note the ratchet: `gate-suspended` requires a human (`authorized_by`); `gate-auto-reenabled` does not (re-enabling is the safe direction). See `research/findings/ratchet-principle.md` and `research/findings/explicit-na-audit-entries.md`.
 
@@ -337,11 +509,20 @@ The `oversight-evaluator` agent checks compliance before quality evaluation. Com
 7. **Effective human gate** (`manifest.human_gate_required == true` **OR** validated tier == CRITICAL): `.claudetmp/oversight/step{N}-human-authorization.md` must exist and be non-empty BEFORE the evaluator runs; if missing, compliance fails immediately. The requirement is **re-derived from the validated tier**, not trusted from the manifest flag — `risk-assessor` ratchets the tier but nothing ratchets the flag, so a re-derived-CRITICAL step with `human_gate_required: false` must still hit the gate (same anti-gaming principle as conditions 9–10).
 7a. `.claudetmp/oversight/validators/risk-assessment.md` must exist and establish a validated tier on every per-step build evaluation. If absent → **COMPLIANCE FAIL** (the validated tier is a required input; the evaluator cannot substitute for risk-assessor's deterministic floor, required-reviewers set, prompt-fidelity, dep-mapper, or risk-historian — failing closed is the safe direction). A fallback to `max(manifest risk_tier, MEDIUM)` is permitted **only** under an explicit human authorization artifact for brownfield/emergency use; without it, absence is a hard fail. An undetermined tier may never silently downgrade the tier-gated checks (second-review, prompt-artifact, conditions 9–10) to no-ops.
 7b. **Risk-assessment scope + blocking findings (#204)** — when `risk-assessment.md` is present, its header must record `base_sha`/`head_sha`/`files_assessed` and a `blocking_findings:` list. (i) If its `base_sha..head_sha` does not equal the register header's range, or `files_assessed` omits files the step diff changed → **COMPLIANCE FAIL** (the assessment was scoped to a different — possibly empty — file set, since a post-commit `git diff HEAD` is empty; the validated tier and required-reviewers set are therefore untrustworthy). (ii) Any `blocking_findings` entry with `resolution: unresolved` (or `escalated:` naming an absent/empty human artifact) → **COMPLIANCE FAIL**. This gives a blocking finding (e.g. non-suspended dep-mapper `Data confidence: LOW` at HIGH+) the consumer it previously lacked — before #204 it was recorded nowhere and could not stop the PR. Same anti-gaming shape as 9–10: a self-reported value that gates oversight is verified against the diff/register, not trusted blind.
+7c. **Gate results + deterministic critical threshold (SPEC-375):**
+    - REQ-GATE-NN-16: if step manifest declares `gates_required: true` and `gate-results.json` is absent (or empty) → **COMPLIANCE FAIL** (`scripts/oversight/run_gates.sh` must run before evaluation on such steps).
+    - REQ-GATE-NN-08: for each record in `gate-results.json` where `exit_code != 0` AND `suspended == false`, the failure is deterministic and must appear unresolved in human-facing output → if absent → **COMPLIANCE FAIL**. Suspended gates (`suspended == true`) are waived by human authorization and must NOT be counted.
+    - REQ-GATE-NN-17: if `summary.json` `composite_score >= 0.78` → **COMPLIANCE FAIL** (deterministic CRITICAL regardless of `blocking_findings` field content — anti-gaming: a validator run cannot self-report a lower tier after the fact).
+    Use `scripts/automation/lib/gate_compliance.py` (`check_gate_compliance()`) for the programmatic evaluation.
 8. MEDIUM+ commits missing `Prompt-Artifact:` git trailer → **COMPLIANCE WARN** (not hard fail — add to conditional items; human confirms intent was captured another way). If the trailer references a path that does not exist → **COMPLIANCE FAIL**
 9. A `Status: N/A` entry for a role whose domain the diff actually touched (independent re-derivation via `change_classifier.py`, scoped to the N/A'd roles) → **COMPLIANCE FAIL** (the waiver is not credible; require a real sign-off). See §2a and the evaluator's "Independent diff re-derivation."
-10. A structural-override signature (§2a) present in the diff with no covering human-authorization artifact → **COMPLIANCE FAIL** (a change that forces `structural` reached pre-PR without the human gate). Checked **only in the loosening direction**: skipped when the step already cleared a human gate or the change was already classified `structural` with authorization.
+10. A structural-override signature (§2a) present in the diff with no covering human-authorization artifact → **COMPLIANCE FAIL** (a change that forces `structural` reached pre-PR without the human gate). Checked **only in the loosening direction**: skipped when the change was already classified `structural` with authorization, **or** when the step's `step{N}-human-authorization.md` carries a `reviewed_files:` enumeration that overlaps the diff (SPEC-267). The skip is no longer justified by the auth file's mere existence — it requires *coverage*: the `reviewed_files:` list (paths relative to the project root, exact-match against `git diff --name-only`, no prefix/basename match) must contain at least one file present in the diff. An auth file with an absent, empty, or entirely non-overlapping `reviewed_files:` list does **not** clear the skip — condition 10 runs as if no authorization existed. Independently of the skip decision, a present auth file missing the `reviewed_files:` field is a **COMPLIANCE WARN** when the file was committed before SPEC-267 ship (grandfathered legacy) and a **COMPLIANCE FAIL** when authored after ship; this audit signal is separate from the skip denial, which is unconditional whenever the enumeration does not overlap the diff.
 
-Conditions 9–10 are **anti-gaming** checks: they re-derive — independently of the actor that produced the change — the two determinations that can loosen oversight (an N/A waiver, an `additive`/`clarifying` self-label). They never run when upstream asked for *more* review; spending verification cost only in the loosening direction is itself the ratchet.
+**Condition 11 (tier-floor) — independent tier-floor re-derivation (#94, SPEC-94):** the evaluator runs `change_classifier.py --tier-floor` over the step's `base_sha..head_sha` and compares the deterministically re-derived **minimum** tier floor to the self-reported `validated_tier`. If `validated_tier` is below the re-derived floor (the loosening direction) AND `.claudetmp/oversight/human-tier-override.md` does not exist → **COMPLIANCE FAIL** (the message names the re-derived floor, the self-reported tier, and the specific files/patterns that triggered the floor). Checked **only in the loosening direction**: when `validated_tier >= floor`, or when the human tier-override artifact exists (a human explicitly authorized a lower tier), no check is performed. The floor is a lower bound — `risk-assessor` may compute a higher tier; this catches an *under*-computed one. Same anti-gaming shape as conditions 9–10. Emits a `tier-floor-mismatch` audit event (§6a) when it fires. The floor rule set (payment/financial paths → CRITICAL, auth/session paths and migrations and PII → HIGH, application-code files → MEDIUM) is kept **separate** from the composite-score validators (ARCH-Q-1); `human-tier-override.md` is a human-only artifact the evaluator may only read.
+
+(The condition below is a separate, pre-existing SPEC-378 item — not the tier-floor check.) **Gate-suspension `reason_category` (SPEC-378 R2.3):** a `contract/gate-suspension.md` file present but missing the `reason_category` field → **COMPLIANCE WARN** (not FAIL). The field is required in new suspension files (enum `EMERGENCY | PLANNED_MAINTENANCE | FALSE_POSITIVE | OTHER`); legacy files created before SPEC-378 are grandfathered so projects can migrate without breaking brownfield remediations. A present-but-invalid `reason_category` value (not in the enum) → **COMPLIANCE WARN** with the offending value named. Agents must not create or modify `contract/gate-suspension.md` (existing invariant); `reason_category` is set by the human who creates the file.
+
+Conditions 9–11 are **anti-gaming** checks: they re-derive — independently of the actor that produced the change — the determinations that can loosen oversight (an N/A waiver, an `additive`/`clarifying` self-label, and the self-reported risk tier). They never run when upstream asked for *more* review; spending verification cost only in the loosening direction is itself the ratchet.
 
 **Pre-merge bounce (overseer):** The overseer re-checks conditions 1–3 and 7b before applying the merge-authority matrix. Failure returns the PR to the worker as a `pr-bounced` event; the per-cid failure counter is untouched. The worker's pre-PR gate (REQ-W-15) checks the same conditions one step earlier as the primary enforcement point; the overseer bounce is the backstop.
 

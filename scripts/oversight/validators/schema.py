@@ -23,6 +23,7 @@ def make_result(
     checklist_items: list[str] | None = None,
     findings: list | None = None,
     error: str | None = None,
+    tier_floor: str | None = None,
 ) -> dict:
     """
     Standard output envelope for every validator.
@@ -34,6 +35,9 @@ def make_result(
     checklist_items : inspection questions for reviewers (CID-style)
     findings  : structured findings with full context
     error     : non-None if the validator failed to run
+    tier_floor: discrete risk-tier promotion signal (e.g. "HIGH") that the
+                risk-assessor reads independently of the numeric score; None
+                when no floor applies. Stored as-is; not validated here. (#377)
     """
     return {
         "dimension": dimension,
@@ -44,6 +48,7 @@ def make_result(
         "checklist_items": checklist_items or [],
         "findings": findings or [],
         "error": error,
+        "tier_floor": tier_floor,
     }
 
 
@@ -68,6 +73,7 @@ WEIGHTS = {
     "portability": 0.06,
     "ip_check": 0.08,
     "prompt_ambiguity": 0.07,
+    "diff_size": 0.0,  # inert in composite; floor is a discrete signal (#377)
 }
 
 # Score thresholds that map to risk tier.
