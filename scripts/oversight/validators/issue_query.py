@@ -3,10 +3,11 @@
 issue_query.py — historical bug density from GitHub issues and git churn.
 
 Two signals:
-  1. GitHub issues mentioning these file paths (labelled 'bug', 'security-finding',
-     'privacy-finding', 'design-concern', 'spec-gap') → bug density
-  2. Git log churn: how frequently has each file been modified? (high churn = likely
-     persistently complex or repeatedly buggy)
+  1. GitHub issues mentioning these file paths (labelled 'bug', 'regression',
+     'security-finding', 'privacy-finding', 'design-concern', 'spec-gap') → bug density
+  2. Git log churn: how frequently has each file's logic been modified? (high churn =
+     likely persistently complex or repeatedly buggy). Doc/spec/research commits are
+     excluded from the count; only logic-change commits are counted.
 
 Both start empty on a new project and accumulate value over time.
 
@@ -30,6 +31,7 @@ from schema import WEIGHTS, make_finding, make_result, normalize  # noqa: E402
 
 _RISK_LABELS = [
     "bug",
+    "regression",
     "security-finding",
     "privacy-finding",
     "design-concern",
@@ -37,6 +39,11 @@ _RISK_LABELS = [
     "test-resistance",
     "escaped-defect",
 ]
+
+# Commit subject prefixes that identify non-logic changes (case-insensitive).
+# Commits whose subjects start with any of these are excluded from the churn
+# count so that doc/spec/research activity does not inflate the logic-churn signal.
+_CHURN_EXCLUDE_PREFIXES = ("docs:", "spec:", "research:")
 
 
 def _gh_issues_for_files(file_paths: list[str]) -> list[dict]:
@@ -98,7 +105,12 @@ def _gh_issues_for_files(file_paths: list[str]) -> list[dict]:
 
 
 def _git_churn(file_paths: list[str]) -> dict[str, int]:
-    """Count number of commits touching each file in the last 90 days."""
+    """Count logic-change commits touching each file in the last 90 days.
+
+    Commits whose subject (everything after the short hash) starts with any
+    prefix in _CHURN_EXCLUDE_PREFIXES (case-insensitive) are excluded so that
+    doc/spec/research activity does not inflate the churn signal.
+    """
     churn: dict[str, int] = {}
     for fp in file_paths:
         try:
@@ -108,7 +120,18 @@ def _git_churn(file_paths: list[str]) -> dict[str, int]:
                 text=True,
                 timeout=10,
             )
-            churn[fp] = len(result.stdout.strip().splitlines())
+            logic_commits = 0
+            for line in result.stdout.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                # Split on first whitespace: (hash, subject).
+                parts = line.split(None, 1)
+                subject = parts[1].lstrip() if len(parts) > 1 else ""
+                subject_lower = subject.lower()
+                if not any(subject_lower.startswith(p) for p in _CHURN_EXCLUDE_PREFIXES):
+                    logic_commits += 1
+            churn[fp] = logic_commits
         except subprocess.TimeoutExpired:
             churn[fp] = 0
     return churn

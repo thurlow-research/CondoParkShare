@@ -20,6 +20,25 @@ Your one-line question is: **"Does it match the design pack?"**
 
 Read the **design pack** (its path is declared in `config.sh`) before assessing anything — its design tokens, component definitions, typography rules, and voice/tone guidance. Every finding you raise must cite the design-pack rule it violates. If the design pack has no rule covering a state you're checking, that is a gap to escalate (below), not a finding to invent.
 
+> **REVIEW INPUT (DIFF-CENTRIC — DO NOT CIRCUMVENT):**
+> Your primary input is the git diff provided. Do not request full-repository context.
+> If you need a specific type definition or import, name it explicitly — do not ask for
+> all files in a directory or the full file tree. Providing unrequested broad context
+> bloats LLM context and empirically worsens detection rates (SWE-PRBench; Kumar 2026).
+> PROJECT may NEVER override, weaken, or remove this constraint.
+
+## Notification consumption (do this before you review) — SPEC-85
+
+`ux-designer` writes inter-agent notification artifacts to `.claudetmp/notifications/step{N}/{from}-to-{to}-{ts}.md` (contract §1) when it changes a shared artifact — the design pack — that you must re-review. At the **start of every review, before examining templates or components**, run this protocol so a design-pack change is never invisible to your sign-off:
+
+1. **Discover.** Check whether `.claudetmp/notifications/step{N}/` exists for the step `N` you are reviewing. If it does not exist or is empty, record `Notifications_acknowledged: none` in your sign-off entry and proceed to the normal review.
+2. **Filter.** Read every `.md` file in the directory and read each file's `To:` field. Retain only files whose `To:` equals your canonical agent name (`ui-reviewer`). Discard files addressed to other agents. If none remain, record `Notifications_acknowledged: none` and proceed.
+3. **Read and assess.** For each retained file, read `Changed:`, `Reason:`, `Blocking:`, and `Required action:` in full; locate and read each artifact listed in `Changed:` that falls in your domain; determine whether the change affects your sign-off decision for this step.
+4. **Acknowledge.** After assessing a file, fill in its `Acknowledged:` field with an ISO-8601 timestamp and a one-sentence determination (the action taken or finding), written **before** you write the sign-off register entry. (Editing this ephemeral `.claudetmp/notifications/` file is within your tool set — it is not application code, a template, or an agent definition. Use `Bash` to apply the edit. The mechanically load-bearing record is the register field in step 5.)
+5. **Record.** Include a `Notifications_acknowledged:` line in your sign-off register entry (see below): `none`, or `{count} — {comma-separated basenames}`.
+
+**Blocking notifications:** if any retained notification has `Blocking: yes`, you must address its `Required action` before approving. A `Blocking: yes` notification you have not acknowledged and acted on must cause you to **withhold** `APPROVED` — write `Status: CONDITIONAL` with the unresolved notification as the conditional item, or `Status: ESCALATED` with an explanation — rather than approving.
+
 ## When you run
 
 Inner loop, after `code-review` approves, in parallel with the other reviewers. **N/A** when the diff touches **no user-facing surface** (no templates, components, or styles). Write a `Status: N/A` register entry with a `Reason:` line and exit.
@@ -78,12 +97,13 @@ Agent: ui-reviewer
 Artifact: {changed templates/components reviewed}
 Iterations: {N}
 Critical_findings_resolved: N/A
+Notifications_acknowledged: none | {count} — {comma-separated basenames}   ← required for the ui role (SPEC-85)
 Human_resolution: {ISO date} — {decision text}   ← required only when Status: ESCALATED (the human fills this in)
 Reason: {why not applicable}                      ← required only when Status: N/A
 Notes: {findings summary, or "none"}
 ```
 
-`Status`, `Agent`, `Artifact`, and `Iterations` are always required (the oversight-evaluator hard-requires them). Never write `APPROVED` to exit a loop you did not actually resolve — escalate instead. Write `Status: N/A` with a `Reason:` line when no user-facing surface is touched.
+`Status`, `Agent`, `Artifact`, and `Iterations` are always required (the oversight-evaluator hard-requires them). `Notifications_acknowledged:` is **required for the `ui` role** (SPEC-85): record `none` when no notification was addressed to you, or `{count} — {basenames}` listing the notification files you read and acknowledged (the count must equal the number of basenames). Never write `APPROVED` to exit a loop you did not actually resolve — escalate instead. Write `Status: N/A` with a `Reason:` line when no user-facing surface is touched (a `Status: N/A` entry may record `Notifications_acknowledged: none`).
 
 ## Output contract
 

@@ -39,7 +39,14 @@
 #   ./scripts/run_panel.sh 42 --risk HIGH # force a risk level (skips triage's judgement)
 #   ./scripts/run_panel.sh 42 --dry-run   # run reviewers + arbiter, print, post NOTHING
 #   ./scripts/run_panel.sh 42 --no-sample # skip the random red-team audit for this run
+#   ./scripts/run_panel.sh 42 --no-diff-only # disable diff-centric mode (warns; NOT recommended)
 #   ./scripts/run_panel.sh --help
+#
+# DIFF-CENTRIC CONTEXT (SPEC-379): --diff-only is DEFAULT ON. Cross-vendor reviewers
+# receive only the PR diff (never the full file tree) — evidence (Kumar 2026 /
+# SWE-PRBench) shows more-than-diff context REDUCES detection rates. --no-diff-only
+# disables it with a startup warning. When on, a reviewer response that requests
+# full-repository context produces a non-blocking ADVISORY in the run output dir.
 #
 # Requires (install via setup_clis.sh): gh (authed), claude, agy, codex, plus jq + python3.
 # Findings I/O is best-effort JSON (D15d): reviewers are asked for a JSON schema and
@@ -69,49 +76,53 @@ SAMPLE_LOW="${OVERSIGHT_SAMPLE_LOW:-25}"    # % of LOW PRs sampled for a red-tea
 SAMPLE_MED="${OVERSIGHT_SAMPLE_MED:-50}"    # % of MEDIUM PRs sampled for a red-team audit (pilot)
 SALT_FILE=".ai-local/sample.salt"           # secret salt → sample is reproducible & non-gameable
 
+# SPEC-379 R4 — advisory pattern list (case-insensitive). When --diff-only is on and a
+# reviewer's response contains one of these, a non-blocking ADVISORY is logged to the
+# panel output dir. This is the single named location for the pattern list in this script.
+DIFF_ONLY_REQUEST_PATTERNS='full repo|all files|entire codebase|repository context|all source files|project files'
+
 # ── Args ─────────────────────────────────────────────────────────────────────--
 PR=""; DRY_RUN=0; RISK_OVERRIDE=""; DO_SAMPLE=1
+DIFF_ONLY=1   # SPEC-379: diff-centric review is DEFAULT ON (Kumar 2026 / SWE-PRBench)
+# SPEC-78: ledger subcommand state. PR is resolved in preflight; PANEL_LEDGER after.
+_PANEL_SUBCMD=""
+_REC_FILES=""
+_REC_CLASS=""
+_REC_DISP=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --dry-run)   DRY_RUN=1; shift ;;
-    --risk)      [[ $# -ge 2 ]] || die "--risk needs a value (LOW|MEDIUM|HIGH|CRITICAL)"
-                 RISK_OVERRIDE="$(echo "$2" | tr '[:lower:]' '[:upper:]')"; shift 2 ;;
-    --no-sample) DO_SAMPLE=0; shift ;;
-    --help|-h)   sed -n '2,43p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-    -*)          die "Unknown option: $1  (try --help)" ;;
-    *)           PR="$1"; shift ;;
+    --dry-run)      DRY_RUN=1; shift ;;
+    --risk)         [[ $# -ge 2 ]] || die "--risk needs a value (LOW|MEDIUM|HIGH|CRITICAL)"
+                    RISK_OVERRIDE="$(echo "$2" | tr '[:lower:]' '[:upper:]')"; shift 2 ;;
+    --no-sample)    DO_SAMPLE=0; shift ;;
+    --diff-only)    DIFF_ONLY=1; shift ;;
+    --no-diff-only) DIFF_ONLY=0; shift ;;
+    --help|-h)      sed -n '2,49p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    # SPEC-78: ledger subcommands.
+    --record)
+        _PANEL_SUBCMD="record"
+        _REC_FILES="${2:-}"; _REC_CLASS="${3:-}"; _REC_DISP="${4:-}"
+        shift; [[ $# -ge 1 ]] && shift; [[ $# -ge 1 ]] && shift; [[ $# -ge 1 ]] && shift ;;
+    --reset)
+        _PANEL_SUBCMD="reset"; shift ;;
+    -*)             die "Unknown option: $1  (try --help)" ;;
+    *)              PR="$1"; shift ;;
   esac
 done
+
+# SPEC-379 R3 — opting out of diff-centric mode emits a startup warning.
+if [[ "$DIFF_ONLY" -eq 0 ]]; then
+  echo "[WARN] --diff-only disabled: full-file context enabled. Evidence (Kumar 2026 / SWE-PRBench) shows this can reduce reviewer detection rates." >&2
+fi
 
 # ── Risk ranking helpers ───────────────────────────────────────────────────────
 rank() { case "$1" in LOW) echo 0;; MEDIUM) echo 1;; HIGH) echo 2;; CRITICAL) echo 3;; *) echo 0;; esac; }
 max_risk() { [[ "$(rank "$1")" -ge "$(rank "$2")" ]] && echo "$1" || echo "$2"; }
 
-# ── JSON extraction (best-effort — tolerate prose / code fences around the JSON) ─
-extract_json() {
-  # NB: stdin is captured to a temp file FIRST — `python3 - <<'PY'` makes the heredoc
-  # python's stdin, so the program can't also read the piped data from stdin.
-  local _tmp; _tmp="$(mktemp)"; cat > "$_tmp"
-  python3 - "$_tmp" <<'PY'
-import sys, json, re
-data = open(sys.argv[1]).read()
-def load(s):
-    try: return json.loads(s)
-    except Exception: return None
-obj = load(data)                                   # 1) whole string is clean JSON (common)
-if obj is None:                                    # 2) fenced ```json ... ``` block
-    m = re.search(r'```(?:json)?\s*(.*?)```', data, re.S)
-    if m: obj = load(m.group(1))
-if obj is None:                                    # 3) JSON embedded in prose — raw_decode
-    dec = json.JSONDecoder()                       #    (robust to literal braces in strings
-    for i, ch in enumerate(data):                  #     and to trailing text after the JSON)
-        if ch in '{[':
-            try: obj, _ = dec.raw_decode(data[i:]); break
-            except Exception: continue
-print(json.dumps(obj if obj is not None else {"findings": []}))
-PY
-  rm -f "$_tmp"
-}
+# ── JSON extraction (best-effort) now lives in panel_logic.py (SPEC-333; #314) ──
+# The former `extract_json` bash function is removed: the shell calls the
+# `extract-json` subcommand (raw response on stdin, extracted JSON on stdout).
+# `$PANEL_LOGIC` is resolved in the TRIAGE section before any extract-json call.
 
 # ── Model dispatch (subscription CLIs; Opus is the author and is NEVER called here) ─
 call_model() {
@@ -208,6 +219,33 @@ HEAD_SHA="$(gh pr view "$PR" --json headRefOid -q .headRefOid 2>/dev/null || tru
 [[ -n "$HEAD_SHA" ]] || die "could not resolve PR #$PR (is it open, and is gh pointed at the right repo?)"
 PR_TITLE="$(gh pr view "$PR" --json title -q .title 2>/dev/null || echo "(unknown)")"
 
+# SPEC-78: panel ledger — per-PR, in .ai-local (persistent across runs, gitignored).
+PANEL_LEDGER=".ai-local/panel/pr${PR}-ledger.jsonl"
+
+# SPEC-78: post-parse dispatch for --record and --reset (C4/C5/C6).
+# Resolved here because PR is now known. These short-circuit before any review runs.
+_VL_PY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scripts/oversight/validation_logic.py"
+[[ -f "$_VL_PY" ]] || _VL_PY="scripts/oversight/validation_logic.py"
+if [[ "$_PANEL_SUBCMD" == "record" ]]; then
+    [[ -z "$_REC_FILES" || -z "$_REC_CLASS" || -z "$_REC_DISP" ]] && {
+        echo "Usage: run_panel.sh [PR#] --record <files> <class> <disposition>" >&2
+        echo "  disposition: fixed | filed:#<N> | residual | noise" >&2
+        exit 1
+    }
+    mkdir -p ".ai-local/panel"
+    python3 "$_VL_PY" record \
+        --ledger "$PANEL_LEDGER" \
+        --files "$_REC_FILES" \
+        --class "$_REC_CLASS" \
+        --disposition "$_REC_DISP"
+    exit $?
+fi
+if [[ "$_PANEL_SUBCMD" == "reset" ]]; then
+    rm -f "$PANEL_LEDGER"
+    echo "reset: removed panel ledger for PR #${PR} (${PANEL_LEDGER})"
+    exit 0
+fi
+
 RUN_DIR=".ai-local/panel/pr${PR}-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$RUN_DIR"
 DIFF_FILE="$RUN_DIR/pr.diff"
@@ -243,17 +281,15 @@ info "PR #$PR — $PR_TITLE"
 info "head $HEAD_SHA · $(echo "$CHANGED_FILES" | grep -c . ) file(s) · +${ADDED} lines · run dir $RUN_DIR"
 
 # ── TRIAGE — deterministic floor ∪ author trailer, confirmed/raised by Haiku ────
-det_floor() {
-  local files="$1" added="$2" level="LOW"
-  echo "$files" | grep -qiE '\.(ts|tsx|js|jsx|py|go|rb|java|cs|php|rs|sh)$' && level="MEDIUM"
-  echo "$files" | grep -qiE '(package\.json|package-lock|yarn\.lock|pnpm-lock|requirements\.txt|go\.mod|Gemfile|Cargo\.toml|composer\.json)' && level="MEDIUM"
-  (( added > SIZE_FLOOR )) && level="$(max_risk "$level" MEDIUM)"
-  echo "$files" | grep -qiE '(auth|login|session|middleware|password|token|crypto|secret|/api/|routes?/|migrations?/|schema|/db/|sql)' && level="$(max_risk "$level" HIGH)"
-  echo "$files" | grep -qiE '(payment|billing|stripe|checkout|/delete|destroy|drop_)' && level="$(max_risk "$level" CRITICAL)"
-  echo "$level"
-}
+# The deterministic floor rules + SQC sample hash now live in panel_logic.py
+# (SPEC-332 / #314 — Python owns the logic, shell launches it). Resolve the module
+# path the same way the SPEC-376 ranking call below does.
+PANEL_LOGIC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scripts/oversight/panel_logic.py"
+[[ -f "$PANEL_LOGIC" ]] || PANEL_LOGIC="scripts/oversight/panel_logic.py"
 
-FLOOR="$(det_floor "$CHANGED_FILES" "$ADDED")"
+# Deterministic floor: file list on stdin, added-line count + size floor as flags.
+FLOOR="$(printf '%s' "$CHANGED_FILES" \
+  | python3 "$PANEL_LOGIC" triage-floor --added-lines "$ADDED" --size-floor "$SIZE_FLOOR")"
 AUTHOR_RISK="$(gh pr view "$PR" --json commits -q '.commits[].messageBody' 2>/dev/null \
   | grep -oiE 'AI-Risk:[[:space:]]*(LOW|MEDIUM|HIGH|CRITICAL)' \
   | grep -oiE '(LOW|MEDIUM|HIGH|CRITICAL)' | tr '[:lower:]' '[:upper:]' \
@@ -277,8 +313,9 @@ $(head -c "$CAP" "$DIFF_FILE")
 Return ONLY JSON: {\"risk\":\"LOW|MEDIUM|HIGH|CRITICAL\",\"reason\":\"one sentence\"}"
   TRIAGE_RAW="$(call_model haiku "$TRIAGE_PROMPT")"
   echo "$TRIAGE_RAW" > "$RUN_DIR/triage.raw.txt"
-  HAIKU_RISK="$(printf '%s' "$TRIAGE_RAW" | extract_json | jq -r '.risk // empty' | tr '[:lower:]' '[:upper:]')"
-  TRIAGE_REASON="$(printf '%s' "$TRIAGE_RAW" | extract_json | jq -r '.reason // empty')"
+  TRIAGE_JSON="$(printf '%s' "$TRIAGE_RAW" | python3 "$PANEL_LOGIC" extract-json)"
+  HAIKU_RISK="$(printf '%s' "$TRIAGE_JSON" | jq -r '.risk // empty' | tr '[:lower:]' '[:upper:]')"
+  TRIAGE_REASON="$(printf '%s' "$TRIAGE_JSON" | jq -r '.reason // empty')"
   RISK="$(max_risk "$FLOOR" "${HAIKU_RISK:-$FLOOR}")"
   info "triage: floor=$FLOOR author=${AUTHOR_RISK:-none} haiku=${HAIKU_RISK:-?} → ${BOLD}$RISK${RESET}"
   [[ -n "$TRIAGE_REASON" ]] && info "        \"$TRIAGE_REASON\""
@@ -291,7 +328,6 @@ fi
 # selected ⇔ SHA256(head_sha + secret_salt) mod 100 < tier_rate. Reproducible (an
 # auditor with the salt can prove a PR was/wasn't sampled) and non-gameable (the salt
 # is secret, so an author can't grind commit hashes to dodge the sample).
-sha256() { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi | awk '{print $1}'; }
 SAMPLED=0; ROLL=-1; RATE=0
 if (( DO_SAMPLE )); then
   # Acquire (or mint) the secret salt — kept in gitignored .ai-local so it persists.
@@ -303,11 +339,16 @@ if (( DO_SAMPLE )); then
     printf '%s' "$SALT" > "$SALT_FILE"; chmod 600 "$SALT_FILE"
     warn "minted a new audit salt at $SALT_FILE (gitignored) — keep it; it makes the sample reproducible & non-gameable"
   fi
-  case "$RISK" in LOW) RATE=$SAMPLE_LOW ;; MEDIUM) RATE=$SAMPLE_MED ;; *) RATE=0 ;; esac  # HIGH/CRITICAL already 100%
+  # SQC sample decision now in panel_logic.py (SPEC-332): salted SHA256 roll vs.
+  # tier rate. HIGH/CRITICAL return rate=0 here (they fire the adversary pass via
+  # the always-on roster path below, not via SQC). Salt stays shell-side (Spec §5).
+  SQC_JSON="$(python3 "$PANEL_LOGIC" sqc-sample \
+    --head-sha "$HEAD_SHA" --salt "$SALT" --tier "$RISK" \
+    --sample-low "$SAMPLE_LOW" --sample-med "$SAMPLE_MED")"
+  RATE=$(printf '%s' "$SQC_JSON" | jq -r '.rate')
+  ROLL=$(printf '%s' "$SQC_JSON" | jq -r '.roll')
+  SAMPLED=$(printf '%s' "$SQC_JSON" | jq -r 'if .sampled then 1 else 0 end')
   if (( RATE > 0 )); then
-    HEX=$(printf '%s' "${HEAD_SHA}${SALT}" | sha256 | cut -c1-8)
-    ROLL=$(( 0x$HEX % 100 ))
-    (( ROLL < RATE )) && SAMPLED=1
     mkdir -p "$(dirname "$SALT_FILE")"
     printf '{"ts":"%s","pr":%s,"head":"%s","tier":"%s","rate":%s,"roll":%s,"selected":%s}\n' \
       "$(date -u +%FT%TZ)" "$PR" "$HEAD_SHA" "$RISK" "$RATE" "$ROLL" \
@@ -397,8 +438,35 @@ $(head -c "$CAP" "$2")
 EOF
 }
 
-# ── REVIEWERS — fan-out, parse best-effort JSON, tag each finding ───────────────
-ALL_FINDINGS="[]"
+# ── SPEC-379 R4: advisory when a reviewer requests full-repository context ────
+# Non-blocking. Appends an ADVISORY entry to .claudetmp/panel/ (the dir the
+# oversight-evaluator reads). Does NOT change exit code, the arbiter verdict,
+# posted threads, or the summary.
+PANEL_ADVISORY_FILE=".claudetmp/panel/advisory-pr${PR}-$(date +%Y%m%dT%H%M%S).md"
+log_context_advisory() {  # $1=reviewer  $2=response-text
+  [[ "$DIFF_ONLY" -eq 1 ]] || return 0
+  local match
+  match=$(printf '%s' "$2" | grep -ioE "$DIFF_ONLY_REQUEST_PATTERNS" | head -1 || true)
+  [[ -n "$match" ]] || return 0
+  mkdir -p "$(dirname "$PANEL_ADVISORY_FILE")"
+  {
+    echo "[ADVISORY] Reviewer requested full-file/full-repository context while --diff-only is on."
+    echo "Reviewer: $1"
+    echo "Matched pattern: ${match}"
+    echo "Action: Full-context request not fulfilled. If a specific artifact is needed,"
+    echo "re-invoke with the named file passed as targeted context."
+    echo ""
+  } >> "$PANEL_ADVISORY_FILE"
+  warn "[ADVISORY] $1 requested full-repo context (pattern: '${match}') — logged, non-blocking"
+}
+
+# ── REVIEWERS — fan-out, parse best-effort JSON, collect one entry per reviewer ──
+# SPEC-333 (#314): the testable cross-reviewer tag+merge is now ONE Python call.
+# The shell collects a {reviewer,lens,raw} entry per reviewer into RESPONSES_JSON,
+# then calls `panel_logic.py aggregate` once after the loop. Per-chunk extraction
+# uses the `extract-json` subcommand; the per-reviewer chunk union stays a trivial
+# `.findings // []` jq concat (binding 4 permits trivial single-field plucks).
+RESPONSES_JSON="[]"
 for spec in "${ROSTER[@]}"; do
   tool="${spec%%:*}"; lens="${spec##*:}"
   if [[ "$tool" != "ipcheck" ]] && ! command -v "$tool" >/dev/null 2>&1; then warn "skip $spec — $tool not on PATH"; continue; fi
@@ -409,14 +477,19 @@ for spec in "${ROSTER[@]}"; do
     ci=$((ci+1))
     raw="$(call_model "$tool" "$(build_review_prompt "$lens" "$chunk")")" || raw='{"findings":[]}'
     printf '%s' "$raw" > "$RUN_DIR/${tool}-${lens}-chunk${ci}.raw.txt"
-    f="$(printf '%s' "$raw" | extract_json | jq -c '.findings // []' 2>/dev/null || echo '[]')"
+    log_context_advisory "$tool" "$raw"
+    f="$(printf '%s' "$raw" | python3 "$PANEL_LOGIC" extract-json | jq -c '.findings // []' 2>/dev/null || echo '[]')"
     tool_findings="$(jq -cn --argjson a "$tool_findings" --argjson b "$f" '$a + $b' 2>/dev/null || echo "$tool_findings")"
   done
   n=$(printf '%s' "$tool_findings" | jq 'length' 2>/dev/null || echo 0)
   ok "$tool/$lens → $n raw finding(s)"
-  tool_findings="$(printf '%s' "$tool_findings" | jq -c --arg t "$tool" --arg l "$lens" 'map(. + {reviewer:$t, lens:$l})' 2>/dev/null || echo '[]')"
-  ALL_FINDINGS="$(jq -cn --argjson a "$ALL_FINDINGS" --argjson b "$tool_findings" '$a + $b')"
+  # Append one {reviewer,lens,raw} entry (raw = this reviewer's chunk-union object).
+  RESPONSES_JSON="$(jq -cn --argjson a "$RESPONSES_JSON" --arg t "$tool" --arg l "$lens" --argjson fs "$tool_findings" \
+    '$a + [{reviewer:$t, lens:$l, raw:{findings:$fs}}]')"
 done
+# One-pass aggregation (binding 3): Python tags every finding with reviewer+lens
+# and flattens in roster order. A structural failure exits non-zero (binding 5).
+ALL_FINDINGS="$(printf '%s' "$RESPONSES_JSON" | python3 "$PANEL_LOGIC" aggregate)"
 printf '%s' "$ALL_FINDINGS" > "$RUN_DIR/findings.raw.json"
 RAW_COUNT=$(printf '%s' "$ALL_FINDINGS" | jq 'length')
 
@@ -430,25 +503,120 @@ do not add new findings the reviewers didn't raise. Risk level: $RISK.
 Tasks: (1) DEDUPE findings that describe the same underlying issue (same file/line/cause), keeping
 the highest severity and merging detail. (2) Drop anything clearly spurious or out of its lens.
 (3) Write a short markdown SUMMARY for the human (verdict + the headline risks).
+(4) For EACH output finding, include \"merged_from\": the membership list of every raw finding you
+merged into it (INCLUDING the finding itself), as [{\"reviewer\":\"...\",\"lens\":\"...\"}]. This is
+how cross-vendor corroboration is counted downstream (SPEC-376) — do NOT omit it.
 
 Reviewer findings (JSON):
 $ALL_FINDINGS
 
 Return ONLY JSON of this exact shape:
 {\"summary\":\"markdown overview for the human\",
- \"findings\":[{\"file\":\"path\",\"line\":<int>,\"end_line\":<int>,\"severity\":\"tier1|tier2|tier3|tier4\",\"lens\":\"...\",\"reviewer\":\"...\",\"title\":\"short\",\"detail\":\"why\",\"suggestion\":\"fix\"}]}"
+ \"findings\":[{\"file\":\"path\",\"line\":<int>,\"end_line\":<int>,\"severity\":\"tier1|tier2|tier3|tier4\",\"lens\":\"...\",\"reviewer\":\"...\",\"title\":\"short\",\"detail\":\"why\",\"suggestion\":\"fix\",\"merged_from\":[{\"reviewer\":\"...\",\"lens\":\"...\"}]}]}"
   ARB_RAW="$(call_model sonnet "$ARB_PROMPT")"
   printf '%s' "$ARB_RAW" > "$RUN_DIR/arbiter.raw.txt"
-  ARB_JSON="$(printf '%s' "$ARB_RAW" | extract_json)"
+  ARB_JSON="$(printf '%s' "$ARB_RAW" | python3 "$PANEL_LOGIC" extract-json)"
 else
   # No reviewer findings (or no claude): nothing to arbitrate.
   ARB_JSON="$(jq -cn --arg s "Panel found no issues under the active lenses at risk $RISK." '{summary:$s, findings:[]}')"
 fi
 printf '%s' "$ARB_JSON" > "$RUN_DIR/arbiter.json"
-SUMMARY="$(printf '%s' "$ARB_JSON" | jq -r '.summary // "(no summary)"')"
-FINDINGS="$(printf '%s' "$ARB_JSON" | jq -c '.findings // []')"
-FCOUNT=$(printf '%s' "$FINDINGS" | jq 'length')
-ok "arbiter: $FCOUNT finding(s) after dedup (from $RAW_COUNT raw)"
+
+# ── CORROBORATION RANKING (SPEC-376) — annotate + tier-order via panel_logic.py ─
+# Counts cross-vendor corroboration from the arbiter's merged_from membership,
+# tags each finding with corroborated_by/corroborating_reviewers/corroboration_tier,
+# and reorders Tier 1 (>=2 vendors) before Tier 2 (single reviewer). Logic lives in
+# the Python module (#314 — shell launches, doesn't implement). A module failure
+# degrades to the un-ranked arbiter output (no suppression, all findings still post).
+# $PANEL_LOGIC was already resolved in the TRIAGE section (SPEC-332).
+if [[ -f "$PANEL_LOGIC" ]]; then
+  RANKED_JSON="$(printf '%s' "$ARB_JSON" \
+    | python3 "$PANEL_LOGIC" --raw "$RUN_DIR/findings.raw.json" 2>>"$RUN_DIR/errors.log" \
+    || printf '%s' "$ARB_JSON")"
+  [[ -n "$RANKED_JSON" ]] || RANKED_JSON="$ARB_JSON"
+else
+  warn "panel_logic.py not found — skipping corroboration ranking (findings un-tiered)"
+  RANKED_JSON="$ARB_JSON"
+fi
+printf '%s' "$RANKED_JSON" > "$RUN_DIR/arbiter.json"   # re-written WITH corroboration fields (binding 8)
+
+SUMMARY="$(printf '%s' "$RANKED_JSON" | jq -r '.summary // "(no summary)"')"
+FINDINGS="$(printf '%s' "$RANKED_JSON" | jq -c '.findings // []')"
+# SPEC-333 (#314): tier counts via panel_logic.py (one call → trivial .total/.tier1/.tier2 plucks).
+TIER_COUNTS="$(printf '%s' "$FINDINGS" | python3 "$PANEL_LOGIC" tier-counts)"
+FCOUNT=$(printf '%s' "$TIER_COUNTS" | jq -r '.total')
+TIER1_COUNT=$(printf '%s' "$TIER_COUNTS" | jq -r '.tier1')
+TIER2_COUNT=$(printf '%s' "$TIER_COUNTS" | jq -r '.tier2')
+ok "arbiter: $FCOUNT finding(s) after dedup (from $RAW_COUNT raw) · tier1=$TIER1_COUNT tier2=$TIER2_COUNT"
+
+# ── SPEC-78: ledger-aware convergence verdict ─────────────────────────────────
+# new_blocking_count: tier1 findings not already in the per-PR ledger.
+# Gates the exit code only — does NOT suppress thread posting (OQ-2/C3 pending #400).
+# Fingerprint = (sorted files, lens) per validation_logic.fingerprint + C7.
+NEW_BLOCKING_COUNT="${TIER1_COUNT}"
+if [[ -f "$_VL_PY" ]]; then
+    _LEDGER_PATH="$PANEL_LEDGER"
+    _ARBITER_JSON="$RUN_DIR/arbiter.json"
+    NEW_BLOCKING_COUNT=$(python3 - <<PYEOF
+import json, sys, os
+sys.path.insert(0, os.path.dirname("$_VL_PY"))
+from validation_logic import load_ledger, fingerprint
+
+ledger = load_ledger("$_LEDGER_PATH")
+try:
+    with open("$_ARBITER_JSON") as fh:
+        data = json.load(fh)
+    findings = data.get("findings", [])
+except Exception:
+    print(0)
+    sys.exit(0)
+
+new_blocking = 0
+for f in findings:
+    if f.get("severity", "") != "tier1":
+        continue
+    # fingerprint uses (sorted files, category/type). Map: file -> files list,
+    # lens -> category (closest panel equivalent, per C7 / technical-design §5.3).
+    fp_finding = {"file": f.get("file", ""), "category": f.get("lens", "")}
+    if fingerprint(fp_finding) not in ledger:
+        new_blocking += 1
+
+print(new_blocking)
+PYEOF
+    ) || NEW_BLOCKING_COUNT="${TIER1_COUNT}"
+fi
+info "convergence (SPEC-78): tier1=${TIER1_COUNT} new_blocking=${NEW_BLOCKING_COUNT} ledger=${PANEL_LEDGER}"
+
+# ── SPEC-78 OQ-2 (#400, human-cleared): per-finding ledger flags for thread suppression ─
+# Pre-pass: for each arbiter finding (in arbiter.json .findings order — the SAME order the
+# POST loop iterates FINDINGS), emit "1" if its fingerprint is already in the per-PR ledger,
+# else "0". The mapping (file -> file, lens -> category) is IDENTICAL to the new_blocking
+# heredoc above (technical-design §2.1/§5) so the suppressed set ≡ the ledgered set.
+# Fail-open: any error → all "0" (nothing suppressed; every finding posts). A ledger/
+# fingerprint failure must never silently drop a finding from the PR.
+LEDGERED_FLAGS=()
+if [[ -f "$_VL_PY" ]]; then
+    _flags_raw="$(python3 - <<PYEOF 2>>"$RUN_DIR/errors.log" || true
+import json, sys, os
+sys.path.insert(0, os.path.dirname("$_VL_PY"))
+from validation_logic import load_ledger, fingerprint
+
+ledger = load_ledger("$PANEL_LEDGER")
+try:
+    with open("$RUN_DIR/arbiter.json") as fh:
+        findings = json.load(fh).get("findings", [])
+except Exception:
+    sys.exit(0)
+
+for f in findings:
+    fp_finding = {"file": f.get("file", ""), "category": f.get("lens", "")}
+    print("1" if fingerprint(fp_finding) in ledger else "0")
+PYEOF
+)"
+    while IFS= read -r _flag; do
+        [[ -n "$_flag" ]] && LEDGERED_FLAGS+=("$_flag")
+    done <<< "$_flags_raw"
+fi
 
 # ── POST — one line-level thread per finding, then one summary comment ──────────
 # Line threads (review comments on the diff) are what the resolution gate enforces;
@@ -461,8 +629,14 @@ post_thread() {  # $1=path $2=line $3=body  → 0 on success
 
 UNANCHORED=""   # findings we couldn't pin to a diff line → folded into the summary
 POSTED=0
+SUPPRESSED_COUNT=0   # SPEC-78 OQ-2: findings skipped because already in the per-PR ledger
+FI=0                 # finding index into LEDGERED_FLAGS (FINDINGS iteration order)
 if (( FCOUNT > 0 )); then
   while IFS= read -r row; do
+    # SPEC-78 OQ-2 (#400): suppress posting a thread for a finding already in the ledger.
+    # The flag array is in arbiter.json .findings order == FINDINGS order (technical-design §3.1).
+    _ledgered="${LEDGERED_FLAGS[$FI]:-0}"
+    FI=$((FI+1))
     file=$(jq -r '.file // ""' <<<"$row")
     line=$(jq -r '.line // 0'  <<<"$row")
     sev=$(jq -r '.severity // "tier3"' <<<"$row")
@@ -471,8 +645,24 @@ if (( FCOUNT > 0 )); then
     title=$(jq -r '.title // ""' <<<"$row")
     detail=$(jq -r '.detail // ""' <<<"$row")
     sugg=$(jq -r '.suggestion // ""' <<<"$row")
-    body=$(printf '**🔭 Oversight panel — %s / %s** (via %s)\n\n**%s**\n\n%s\n\n%s%s' \
-      "$sev" "$lens" "$rvw" "$title" "$detail" \
+    ctier=$(jq -r '.corroboration_tier // 2' <<<"$row")
+    cby=$(jq -r '.corroborated_by // 1' <<<"$row")
+    if [[ "$_ledgered" == "1" ]]; then
+      SUPPRESSED_COUNT=$((SUPPRESSED_COUNT+1))
+      if (( DRY_RUN )); then
+        echo -e "  ${YELLOW}[dry-run] suppressed (ledgered)${RESET} $file:$line  [$sev/$lens] $title"
+      else
+        skip "suppressed (ledgered): $file:$line [$sev/$lens] $title — already triaged on a prior pass"
+      fi
+      continue
+    fi
+    if [[ "$ctier" == "1" ]]; then
+      clabel="Tier 1 — cross-vendor confirmed (corroborated by $cby reviewers)"
+    else
+      clabel="Tier 2 — single reviewer"
+    fi
+    body=$(printf '**🔭 Oversight panel — %s / %s** (via %s)\n_%s_\n\n**%s**\n\n%s\n\n%s%s' \
+      "$sev" "$lens" "$rvw" "$clabel" "$title" "$detail" \
       "${sugg:+_Suggested fix:_ }" "$sugg")
     if (( DRY_RUN )); then
       echo -e "  ${CYAN}[dry-run] thread${RESET} $file:$line  [$sev/$lens] $title"
@@ -485,15 +675,29 @@ if (( FCOUNT > 0 )); then
   done < <(printf '%s' "$FINDINGS" | jq -c '.[]')
 fi
 
+# ── SPEC-333 (#314): render one tier's findings as markdown bullet lines now lives
+# in panel_logic.py (`render-tier`). FINDINGS is already globally tier-1-first,
+# severity-within-tier from panel_logic.py. The former `render_tier_findings` jq
+# filter is removed.
+TIER1_FINDINGS="$(printf '%s' "$FINDINGS" | python3 "$PANEL_LOGIC" render-tier --tier 1)"
+TIER2_FINDINGS="$(printf '%s' "$FINDINGS" | python3 "$PANEL_LOGIC" render-tier --tier 2)"
+
 # Assemble the summary comment.
 SUMMARY_BODY=$(cat <<EOF
 ## 🔭 Oversight panel — verdict
 
-**Risk:** \`$RISK\`  ·  **Reviewers:** ${ROSTER[*]}  ·  **Findings:** $FCOUNT ($POSTED posted as threads)
+**Risk:** \`$RISK\`  ·  **Reviewers:** ${ROSTER[*]}  ·  **Findings:** $FCOUNT ($POSTED posted as threads · $SUPPRESSED_COUNT suppressed (ledgered)) · tier1=$TIER1_COUNT tier2=$TIER2_COUNT
 
 $SUMMARY
 EOF
 )
+# SPEC-376 R3 / binding 5: Tier 1 section BEFORE Tier 2; each empty section omitted.
+if [[ -n "$TIER1_FINDINGS" ]]; then
+  SUMMARY_BODY+=$'\n\n## Critical Findings (Corroborated by ≥2 Reviewers)\n> Confirmed by ≥ 2 independent reviewers. Address before merge.\n\n'"$TIER1_FINDINGS"
+fi
+if [[ -n "$TIER2_FINDINGS" ]]; then
+  SUMMARY_BODY+=$'\n\n## Additional Findings (Single Reviewer)\n> Raised by one reviewer. Review and address where warranted.\n\n'"$TIER2_FINDINGS"
+fi
 if (( SAMPLED )); then
   SUMMARY_BODY+=$'\n\n> 🎲 **Selected for random red-team audit** — this `'"$RISK"$'` PR was sampled for an adversarial pass (SQC; rate '"$RATE"$'%, roll '"$ROLL"$'). Lower-tier PRs are spot-checked at random to estimate the escaped-defect rate and to deter risk under-declaration. Selection is reproducible from the head SHA + the secret audit salt.'
 fi
@@ -524,5 +728,18 @@ else
 fi
 
 echo ""
-echo -e "${GREEN}${BOLD}Panel complete.${RESET}  PR #$PR · risk $RISK · $FCOUNT finding(s) · raw archive: $RUN_DIR"
+echo -e "${GREEN}${BOLD}Panel complete.${RESET}  PR #$PR · risk $RISK · $FCOUNT finding(s) · tier1=${TIER1_COUNT} new_blocking=${NEW_BLOCKING_COUNT} · suppressed=${SUPPRESSED_COUNT} · raw archive: $RUN_DIR"
 echo ""
+
+# SPEC-78: write panel-verdict.json for oversight-evaluator (new_blocking_count field).
+# SPEC-78 OQ-2 (#400): suppressed_count records ledgered findings not re-posted as threads.
+printf '{"new_blocking_count":%s,"tier1_count":%s,"suppressed_count":%s,"ledger":"%s","pr":%s}\n' \
+    "${NEW_BLOCKING_COUNT}" "${TIER1_COUNT}" "${SUPPRESSED_COUNT:-0}" "${PANEL_LEDGER}" "${PR}" \
+    > "$RUN_DIR/panel-verdict.json"
+
+# SPEC-78 R4: exit 3 (escalation) when there are un-ledgered blocking findings
+# on a non-dry-run. Mirrors second-review convention (exit 3 = human decides).
+if [[ $DRY_RUN -eq 0 && "${NEW_BLOCKING_COUNT:-0}" -gt 0 ]]; then
+    warn "Panel verdict: ESCALATE — ${NEW_BLOCKING_COUNT} new un-ledgered blocking finding(s) (tier1)"
+    exit 3
+fi

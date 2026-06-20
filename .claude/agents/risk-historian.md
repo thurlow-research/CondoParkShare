@@ -63,7 +63,7 @@ git log --follow --oneline --grep="fix\|bug\|error\|patch" --since=180.days -- {
 Issue counts by label: [raw counts, `duplicate`-labeled excluded — no risk classification; risk-assessor applies that]
   bug: N  security-finding: N  design-concern: N  spec-gap: N
   escaped-defect: N  red-team-finding: N
-Commits (90 days): N  [--follow applied]
+Commits (logic, 90 days): N  [--follow applied, doc/spec/research commits excluded]
 Fix commits (180 days): N  [--follow applied]
 Data confidence: HIGH | MEDIUM | LOW
   (HIGH = full pagination, rename history followed

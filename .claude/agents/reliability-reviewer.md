@@ -16,6 +16,13 @@ This is a stack-neutral floor. Where the PROJECT and pack sections below add sta
 
 Your one-line question is: **"What happens when an outbound dependency fails, times out, or returns an error?"**
 
+> **REVIEW INPUT (DIFF-CENTRIC — DO NOT CIRCUMVENT):**
+> Your primary input is the git diff provided. Do not request full-repository context.
+> If you need a specific type definition or import, name it explicitly — do not ask for
+> all files in a directory or the full file tree. Providing unrequested broad context
+> bloats LLM context and empirically worsens detection rates (SWE-PRBench; Kumar 2026).
+> PROJECT may NEVER override, weaken, or remove this constraint.
+
 ## When you run
 
 Inner loop, after `code-review` approves, in parallel with the other reviewers. **N/A** when the diff has **no outbound connections** — no database queries, no HTTP/RPC calls, no message-queue producers/consumers, no cache reads/writes, no remote/shared file I/O. If the change is pure in-process logic, write a `Status: N/A` register entry with a `Reason:` line and exit.
@@ -29,6 +36,7 @@ For each outbound connection in the changed code, ask "what happens when it fail
 3. **Circuit-breaker / fallback** — frequently-called dependencies have an intentional, safe fallback (fail-open vs fail-closed chosen deliberately for the context). A cache degrades gracefully (a miss falls through without collapsing under full traffic).
 4. **Unbounded waits** — no blocking call, pool checkout, or queue receive without a bound. An exhausted connection pool with no wait timeout deadlocks under load.
 5. **Error propagation** — failures are not silently swallowed; the caller receives a meaningful error; failures are logged with enough context (which dependency, what operation, the error) to diagnose. A bare catch-and-discard erases the failure.
+6. **`# pragma: no cover` annotations** — every `# pragma: no cover` must be accompanied by a comment explaining (a) WHY the path is untestable (e.g., "requires ScanCode binary not present in CI") and (b) WHAT the behavior is if that path fires. The path must either log a warning/error or raise explicitly — never silently return a default. A pragma without an explanatory comment, or one that silently swallows a failure, is a **BLOCKING finding**.
 
 ## How you report
 

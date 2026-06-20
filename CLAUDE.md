@@ -1,29 +1,4 @@
 <!-- HOS:ORCHESTRATOR start -->
-## Session start — state your identity first
-
-At the start of every session, before any task, disclose:
-
-```
-Repo:         thurlow-research/CondoParkShare
-Role:         worker (INTERACTIVE) | overseer (INTERACTIVE)
-Worker bot:   hos-worker-cps[bot]   (App ID 4091605)
-Overseer bot: hos-overseer-cps[bot] (App ID 4091594)
-Supervised:   ScottThurlow
-Model:        claude-sonnet-4-6
-```
-
-Auth is via GitHub App JWT — no `gh auth login` required.
-Credentials are loaded automatically from `~/Code/CPS/.config/hos/apps.env`.
-
-All commits must include trailers:
-```
-AI-Model: claude-sonnet-4-6
-AI-Risk: LOW|MEDIUM|HIGH
-Supervised-by: ScottThurlow
-```
-
----
-
 ## Oversight: you are the orchestrator
 
 This project uses the Human Oversight System (HOS). **Read `AGENTS.md` before any build task.**

@@ -20,6 +20,25 @@ Your one-line question is: **"Can you tell what's happening and debug it?"**
 
 Read the project's **telemetry spec** (its path is declared in `config.sh` / the project's ops-doc location) before assessing anything. If the telemetry spec does **not exist**, **halt and request that `ops-designer` be invoked to produce it** — do not proceed and do not invent requirements. If `ops-designer` has been invoked but the spec still does not exist after one session, escalate to human rather than looping.
 
+> **REVIEW INPUT (DIFF-CENTRIC — DO NOT CIRCUMVENT):**
+> Your primary input is the git diff provided. Do not request full-repository context.
+> If you need a specific type definition or import, name it explicitly — do not ask for
+> all files in a directory or the full file tree. Providing unrequested broad context
+> bloats LLM context and empirically worsens detection rates (SWE-PRBench; Kumar 2026).
+> PROJECT may NEVER override, weaken, or remove this constraint.
+
+## Notification consumption (do this before you review) — SPEC-85
+
+`ops-designer` writes inter-agent notification artifacts to `.claudetmp/notifications/step{N}/{from}-to-{to}-{ts}.md` (contract §1) when it changes a shared artifact — the telemetry spec — that you must re-review. At the **start of every review, before examining code**, run this protocol so a telemetry-spec change is never invisible to your sign-off:
+
+1. **Discover.** Check whether `.claudetmp/notifications/step{N}/` exists for the step `N` you are reviewing. If it does not exist or is empty, record `Notifications_acknowledged: none` in your sign-off entry and proceed to the normal review.
+2. **Filter.** Read every `.md` file in the directory and read each file's `To:` field. Retain only files whose `To:` equals your canonical agent name (`ops-reviewer`). Discard files addressed to other agents. If none remain, record `Notifications_acknowledged: none` and proceed.
+3. **Read and assess.** For each retained file, read `Changed:`, `Reason:`, `Blocking:`, and `Required action:` in full; locate and read each artifact listed in `Changed:` that falls in your domain (e.g. updated telemetry-spec sections — re-verify the diff still conforms); determine whether the change affects your sign-off decision for this step.
+4. **Acknowledge.** After assessing a file, fill in its `Acknowledged:` field with an ISO-8601 timestamp and a one-sentence determination (the action taken or finding), written **before** you write the sign-off register entry. (Editing this ephemeral `.claudetmp/notifications/` file is within your tool set — it is not application code, the telemetry spec, or an agent definition. Use `Bash` to apply the edit. The mechanically load-bearing record is the register field in step 5.)
+5. **Record.** Include a `Notifications_acknowledged:` line in your sign-off register entry (see below): `none`, or `{count} — {comma-separated basenames}`.
+
+**Blocking notifications:** if any retained notification has `Blocking: yes`, you must address its `Required action` before approving. A `Blocking: yes` notification you have not acknowledged and acted on must cause you to **withhold** `APPROVED` — write `Status: CONDITIONAL` with the unresolved notification as the conditional item, or `Status: ESCALATED` with an explanation — rather than approving.
+
 ## When you run
 
 Inner loop, after `code-reviewer` approves, in parallel with the other reviewers. **N/A** for projects without ops complexity (no background jobs, no external integrations, no multi-service architecture), or when ops is configured but the diff introduced no observable behavior to review (write `Status: N/A` with a `Reason:` line).
@@ -91,12 +110,13 @@ Agent: ops-reviewer
 Artifact: {changed files reviewed}
 Iterations: {N}
 Critical_findings_resolved: N/A
+Notifications_acknowledged: none | {count} — {comma-separated basenames}   ← required for the ops role (SPEC-85)
 Human_resolution: {ISO date} — {decision text}   ← required only when Status: ESCALATED (the human fills this in)
 Reason: {why not applicable}                      ← required only when Status: N/A
 Notes: {findings summary, or "none"; spec gaps escalated to ops-designer}
 ```
 
-`Status`, `Agent`, `Artifact`, and `Iterations` are always required (the oversight-evaluator hard-requires them). Never write `APPROVED` to exit a loop you did not actually resolve — escalate instead. Write `Status: N/A` with a `Reason:` line only when the project has no ops complexity (so no telemetry spec is required) or the diff introduced no observable behavior — **never** to skip a missing-spec halt: an ops-complex project whose telemetry spec is absent is halt-and-request-`ops-designer` (per the rule above), not N/A.
+`Status`, `Agent`, `Artifact`, and `Iterations` are always required (the oversight-evaluator hard-requires them). `Notifications_acknowledged:` is **required for the `ops` role** (SPEC-85): record `none` when no notification was addressed to you, or `{count} — {basenames}` listing the notification files you read and acknowledged (the count must equal the number of basenames). Never write `APPROVED` to exit a loop you did not actually resolve — escalate instead. Write `Status: N/A` with a `Reason:` line only when the project has no ops complexity (so no telemetry spec is required) or the diff introduced no observable behavior — **never** to skip a missing-spec halt: an ops-complex project whose telemetry spec is absent is halt-and-request-`ops-designer` (per the rule above), not N/A.
 
 ## Output contract
 

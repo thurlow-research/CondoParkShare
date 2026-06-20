@@ -57,3 +57,4 @@ logs/
 
 # Local environment overrides (direnv)
 .envrc
+.hos-brownfield/

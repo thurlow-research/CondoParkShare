@@ -76,7 +76,7 @@ fi
 # Filter to existing Python files
 PY_FILES=()
 ALL_FILES=()
-for f in "${FILES[@]}"; do
+for f in ${FILES[@]+"${FILES[@]}"}; do  # bash 3.2: unguarded expansion crashes on empty array
     ALL_FILES+=("$f")
     [[ "$f" == *.py && -f "$f" ]] && PY_FILES+=("$f")
 done
@@ -170,8 +170,46 @@ run_validator() {
 #   REQUIRED=false: timeout/crash → SKIP (optional); all validators are optional individually
 #   Network-dependent validators get shorter timeout; heavy ones get longer
 
+# Task-class detection pre-step (#373). Resolves the conventional-commit task
+# class (R1a) and, only as a fallback, the GitHub issue label (R1b). The result
+# is forwarded to rn_calculator.py via --task-class, which applies the risk-tier
+# floor. Detection lives HERE, never inside the Python validator (binding 6/7).
+# Fail-open is total: every command ends in `|| true` or sits in a `[[ ]]` test
+# so a non-zero git/gh exit can never abort the run under `set -euo pipefail`
+# (binding 8). Bash 3.2 safe: lowercasing via `tr`, never `${var,,}` (binding 7).
+TASK_CLASS=""
+TASK_CLASS_SOURCE=""
+# R1a: conventional-commit prefix in the HEAD subject line.
+TASK_CLASS=$(git log -1 --format=%s 2>/dev/null \
+    | grep -oE '^(feat|fix|refactor|chore)(\(.+\))?(!)?:' \
+    | grep -oE '^(feat|fix|refactor|chore)' \
+    | tr '[:upper:]' '[:lower:]' || true)
+if [[ -n "$TASK_CLASS" ]]; then
+    TASK_CLASS_SOURCE="commit_prefix"
+fi
+# R1b fallback: GitHub issue label — only when R1a was empty AND ISSUE_NUMBER set.
+if [[ -z "$TASK_CLASS" && -n "${ISSUE_NUMBER:-}" ]]; then
+    TASK_CLASS=$(gh issue view "$ISSUE_NUMBER" --json labels \
+        --jq '.labels[].name | select(test("^(feat|fix|refactor|chore)$"; "i"))' 2>/dev/null \
+        | head -1 | tr '[:upper:]' '[:lower:]' || true)
+    if [[ -n "$TASK_CLASS" ]]; then
+        TASK_CLASS_SOURCE="issue_label"
+    fi
+fi
+# Build the extra-args array forwarded to the RN validator (flags first, then files).
+RN_EXTRA=()
+if [[ -n "$TASK_CLASS" ]]; then
+    RN_EXTRA+=(--task-class "$TASK_CLASS")
+    [[ -n "$TASK_CLASS_SOURCE" ]] && RN_EXTRA+=(--task-class-source "$TASK_CLASS_SOURCE")
+fi
+
 if [[ ${#PY_FILES[@]} -gt 0 ]]; then
-    run_validator "risk_number"      "$VALIDATORS_DIR/rn_calculator.py"         60 false "${PY_FILES[@]}"
+    # bash 3.2 errors on "${arr[@]}" for an empty array under set -u — guard RN_EXTRA.
+    if [[ ${#RN_EXTRA[@]} -gt 0 ]]; then
+        run_validator "risk_number"  "$VALIDATORS_DIR/rn_calculator.py"         60 false "${RN_EXTRA[@]}" "${PY_FILES[@]}"
+    else
+        run_validator "risk_number"  "$VALIDATORS_DIR/rn_calculator.py"         60 false "${PY_FILES[@]}"
+    fi
     run_validator "complexity"       "$VALIDATORS_DIR/complexity_metrics.py"    60 false "${PY_FILES[@]}"
     run_validator "function_metrics" "$VALIDATORS_DIR/function_metrics.py"      60 false "${PY_FILES[@]}"
     run_validator "n1_queries"       "$VALIDATORS_DIR/n1_detector.py"           60 false "${PY_FILES[@]}"
@@ -181,6 +219,51 @@ fi
 
 # Migration scorer — all files
 run_validator "migration_risk"   "$VALIDATORS_DIR/migration_scorer.py"         60 false "${ALL_FILES[@]}"
+
+# Diff-size floor + multi-purpose split trigger (#377).
+# Git runs HERE (not in the validator); the validator receives CLI flags.
+# Base ref: same logic as SPEC-360/change_classifier — merge-base with
+# origin/main when available, else most-recent tag, else HEAD~1. Any git
+# failure → pass 0/0 and empty list so the floor does not fire (data
+# unavailable), never a false CRITICAL.
+DS_BASE_REF=""
+if git rev-parse --verify origin/main >/dev/null 2>&1; then
+    DS_BASE_REF="$(git merge-base HEAD origin/main 2>/dev/null || true)"
+fi
+if [[ -z "$DS_BASE_REF" ]]; then
+    DS_BASE_REF="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+fi
+if [[ -z "$DS_BASE_REF" ]]; then
+    DS_BASE_REF="$(git rev-parse --verify HEAD~1 2>/dev/null || true)"
+fi
+
+DS_CHANGED_LINES=0
+DS_CHANGED_FILES=0
+DS_FILE_LIST=()
+if [[ -n "$DS_BASE_REF" ]]; then
+    # changed_lines = sum of added + deleted (numstat cols 1+2); binary "-" skipped.
+    DS_CHANGED_LINES="$(git diff --numstat "$DS_BASE_REF" 2>/dev/null \
+        | awk '$1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ { s += $1 + $2 } END { print s + 0 }' \
+        || echo 0)"
+    while IFS= read -r _df; do
+        [[ -n "$_df" ]] && DS_FILE_LIST+=("$_df")
+    done < <(git diff --name-only "$DS_BASE_REF" 2>/dev/null || true)
+    DS_CHANGED_FILES=${#DS_FILE_LIST[@]}
+fi
+# Guard against non-numeric awk output.
+[[ "$DS_CHANGED_LINES" =~ ^[0-9]+$ ]] || DS_CHANGED_LINES=0
+
+# bash 3.2 (macOS) errors on "${arr[@]}" when the array is empty under set -u;
+# only expand the file list when it is non-empty.
+if [[ ${#DS_FILE_LIST[@]} -gt 0 ]]; then
+    run_validator "diff_size"    "$VALIDATORS_DIR/diff_size.py"                30 false \
+        --changed-lines "$DS_CHANGED_LINES" --changed-files "$DS_CHANGED_FILES" \
+        --changed-file-list "${DS_FILE_LIST[@]}"
+else
+    run_validator "diff_size"    "$VALIDATORS_DIR/diff_size.py"                30 false \
+        --changed-lines "$DS_CHANGED_LINES" --changed-files "$DS_CHANGED_FILES" \
+        --changed-file-list
+fi
 
 # Historical density — network-dependent (calls gh + git); shorter timeout
 run_validator "historical_density" "$VALIDATORS_DIR/issue_query.py"   \
@@ -258,6 +341,17 @@ composite = round(weighted_sum / total_w, 4)
 TIERS = [("LOW", 0.30), ("MEDIUM", 0.55), ("HIGH", 0.78), ("CRITICAL", 1.01)]
 tier = next(t for t, hi in TIERS if composite < hi)
 
+# Hoist any non-null tier_floor signal (e.g. from diff_size, #377) to the top
+# level of the summary so the risk-assessor reads it without parsing raw_value.
+# Read-only surfacing: it does NOT alter composite_score or the derived tier
+# (the risk-assessor is the actor that promotes the final tier).
+tier_floor = None
+for r in results:
+    tf = r.get("tier_floor")
+    if tf:
+        tier_floor = tf
+        break
+
 summary = {
     "composite_score": composite,
     "tier": tier,
@@ -265,6 +359,8 @@ summary = {
     "successful_validators": len(successful),
     "results": results,
 }
+if tier_floor is not None:
+    summary["tier_floor"] = tier_floor
 
 out = out_dir / "summary.json"
 out.write_text(json.dumps(summary, indent=2))

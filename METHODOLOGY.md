@@ -55,7 +55,7 @@ So the human's job is bounded and legible: **keep the `needs-human` issue queue 
 
 **The return path (human → HOS).** When the human decides, the issue moves from the human's inbox back to HOS's: the human **removes `needs-human`, adds [`needs-ai`](https://github.com/ScottThurlow/HumanOversightSystem/labels)**, and writes the decision in a comment with a parseable opener — `Decision: <choice>` (optionally `Action:` / `Disposition:`). HOS (the agentic loop / the standing daily job, #131) scans `needs-ai` issues, reads the `Decision:`, acts on it, and **closes** the issue — or swaps it back to `needs-human` if it needs more input. The result is a clean two-state handoff, `needs-human` ⇄ `needs-ai` → closed, where each side's queue is exactly one label, so neither the human nor HOS has to guess whether the ball is in their court.
 
-> **Threat model — the human gate is forge-proof via identity separation (#152, `docs/AGENT-IDENTITY.md`).** The gate runs as two orthogonal checks: (1) **server-side branch protection** requires an approving review from a human account (`ScottThurlow`) before a PR touching a protected surface can merge; and (2) the **`require-human-approval` CI status check** re-derives whether human approval is present independently. The critical property: the bots (`hos-worker-cps[bot]` / `hos-overseer-cps[bot]`) hold *only their own GitHub App JWT tokens* — the human's credentials are absent from their environments. GitHub's identity layer therefore makes it structurally impossible for a bot to produce a human approval: the required reviewer is a different account the bot cannot authenticate as. This supersedes the prior #151 TOTP/out-of-band-proof approach: the cleaner fix is the identity split, not a cryptographic add-on. **Residual:** repo-config tampering (disabling branch protection) remains a possible bypass — but it is loud, auditable, and detectable post-hoc (a committed change to `.github/CODEOWNERS` or the workflow file, both on the protected surface, would itself require a human approval to merge). The `#127` accountability layer (content-hashed `human-authorization` records in `audit/oversight-log.jsonl`) stays as the underlying audit trail; forge-proofing is added on top by the identity split.
+> **Threat model — the human gate is forge-proof via identity separation (#152, `docs/AGENT-IDENTITY.md`).** The gate runs as two orthogonal checks: (1) **server-side branch protection** requires an approving review from a human account (`ScottThurlow`) before a PR touching a protected surface can merge; and (2) the **`require-human-approval` CI status check** re-derives whether human approval is present independently. The critical property: the bots (`hos-worker-hos[bot]` / `hos-overseer-hos[bot]`) hold *only their own PATs* — the human's credentials are absent from their environments. GitHub's identity layer therefore makes it structurally impossible for a bot to produce a human approval: the required reviewer is a different account the bot cannot authenticate as. This supersedes the prior #151 TOTP/out-of-band-proof approach: the cleaner fix is the identity split, not a cryptographic add-on. **Residual:** repo-config tampering (disabling branch protection) remains a possible bypass — but it is loud, auditable, and detectable post-hoc (a committed change to `.github/CODEOWNERS` or the workflow file, both on the protected surface, would itself require a human approval to merge). The `#127` accountability layer (content-hashed `human-authorization` records in `audit/oversight-log.jsonl`) stays as the underlying audit trail; forge-proofing is added on top by the identity split.
 
 ---
 
@@ -81,7 +81,7 @@ We deliberately use **multiple vendors and model tiers** — the whole point is 
 
 ### Runtime orchestration agents (the human interface layer)
 
-Two named agents sit above the specialist roles listed above: `worker` is the human's console interface and the autonomous build agent — it accepts work from a human or from a cron invocation, routes it to the appropriate specialist agents (coder, reviewers, etc.), and never absorbs their outputs into its own response. `overseer` is the oversight console and the autonomous review/merge agent — it evaluates what the worker produced and decides what may merge per the merge-authority matrix. Both run under their dedicated GitHub App bot accounts (`hos-worker-cps[bot]` / `hos-overseer-cps[bot]`) in autonomous mode. This is an orchestration layer above the specialist agents, not a replacement for them; the specialists perform the actual code authoring, reviewing, and testing.
+Two named agents sit above the specialist roles listed above: `worker` is the human's console interface and the autonomous build agent — it accepts work from a human or from a cron invocation, routes it to the appropriate specialist agents (coder, reviewers, etc.), and never absorbs their outputs into its own response. `overseer` is the oversight console and the autonomous review/merge agent — it evaluates what the worker produced and decides what may merge per the merge-authority matrix. Both run under their dedicated machine accounts (`hos-worker-hos[bot]` / `hos-overseer-hos[bot]`) in autonomous mode. This is an orchestration layer above the specialist agents, not a replacement for them; the specialists perform the actual code authoring, reviewing, and testing.
 
 ---
 
@@ -169,6 +169,44 @@ The composite then maps to a tier via fixed thresholds:
 
 The pipeline has three tiers with different cadences: an **inner development loop** that repeats with every incremental prompt, a **transition phase** that runs once per feature before the PR opens, and an **outer loop** that runs once per PR. Conflating them is the most common source of accumulated technical debt in AI-assisted development.
 
+```mermaid
+flowchart LR
+    A([Spec phase\nspec-red-team]) --> B
+
+    subgraph B [Inner loop — repeats per change]
+        direction TB
+        B1[Prompt] --> B2[Author + self-flag]
+        B2 --> B3[Blocking gates]
+        B3 --> B4[Risk scoring\nrun_validators.sh]
+        B4 --> B5[Internal review chain]
+        B5 --> B6{Clean?}
+        B6 -- No --> B1
+        B6 -- Yes --> B7[Capture prompt artifact\nMEDIUM+]
+    end
+
+    B --> C
+
+    subgraph C [Transition phase — once per feature]
+        direction TB
+        C1[Commit with provenance\ntrailers] --> C2[System tests]
+        C2 --> C3[Second review\nagy / codex]
+        C3 --> C4[oversight-evaluator\nPhase 1 + Phase 2]
+        C4 --> C5[oversight-orchestrator\nwrites panel-context.md\nand handoff.md]
+        C5 --> C6{Recommendation}
+        C6 -- PROCEED / CONDITIONAL --> C7[Open PR]
+        C6 -- ESCALATE --> H([Human\ndecision])
+    end
+
+    C7 --> D
+
+    subgraph D [Outer loop — once per PR]
+        direction TB
+        D1[CI cheap gates\nlint · types · unit tests] --> D2[AI panel\nreads panel-context.md only]
+        D2 --> D3[Human gate\nresolve panel threads]
+        D3 --> D4[Merge → audit\noversight-log.jsonl]
+    end
+```
+
 > **Theoretical model vs. current implementation.** This section describes the pipeline as designed — the invariants that must hold and the logical sequence in which they should be enforced. In the ideal implementation, each step runs inside a controlled pipeline that gates the next step automatically. See the [implementation note](#implementation-note) at the end of this section for how the current implementation approximates those invariants today.
 
 ### Inner development loop (repeats N times per feature)
@@ -216,6 +254,27 @@ Each prompt-to-verify cycle must leave the codebase in a working state before th
 │  └──────── back to 1 for next incremental change ──────────┘
 ```
 
+**Agent dispatch sequence — one inner loop cycle:**
+
+```mermaid
+graph TD
+    P[Prompt issued] --> CO[coder\nwrites code + self-flags]
+    CO --> GA[Gates\nlint · type-check · secret scan · bandit HIGH]
+    GA -- gate fails --> CO
+    GA -- gates pass --> VA[run_validators.sh\n12 signal dimensions → composite score]
+    VA --> RA[risk-assessor\nvalidates tier · produces inspection brief]
+    RA --> PF[prompt-fidelity\nMEDIUM+ only]
+    RA --> DM[dep-mapper\nHIGH+ only]
+    RA --> RH[risk-historian\nHIGH+ only]
+    PF --> CR[code-reviewer\ngates parallel reviewers]
+    DM --> CR
+    RH --> CR
+    CR -- changes requested --> CO
+    CR -- approved --> PR[Parallel reviewers\nsecurity · privacy · ui · a11y\nops · reliability · infra]
+    PR --> UT[unit-test]
+    UT --> REG[Sign-off register\nentry written]
+```
+
 ### Definition of Done (inner loop step)
 
 A build step is **not done** until all four conditions hold — in this order:
@@ -226,6 +285,17 @@ A build step is **not done** until all four conditions hold — in this order:
 4. **Sign-off register entry written.** The step's register entry is complete with all required fields (§3).
 
 "I'll update the docs later" is not a valid sign-off state.
+
+### Design artifacts (required before coding begins)
+
+Every design cycle that produces code must commit two artifacts before the coder begins:
+
+1. **pm-agent spec** → `docs/specs/SPEC-{feature}.md` (normative requirements)
+2. **Technical design** → `docs/v{version}/TECHNICAL-DESIGN-{feature}.md` (coder-ready contract)
+
+The `technical-design` agent writes its output to disk as part of the task — not as conversation text only. A sign-off register step may not be marked complete if the corresponding design doc is absent. This applies to all tiers; patch-tier steps that touch documented behavior are not exempt.
+
+The design doc convention is also the audit trail for "why is the code this way?" — losing it to conversation history is a governance gap.
 
 > **Why the inner loop matters:** AI agents have no memory of the codebase state from one prompt to the next beyond what is in the current context. An agent asked to "add X" on a tree where Y is already broken will produce code that looks correct but depends on a broken foundation. By the time CI runs (after the PR opens), the failure stack may span five prompts and require significant archaeology to untangle. Local verification after each prompt is the only reliable way to keep the codebase in a known-good state throughout development.
 
@@ -323,6 +393,16 @@ An adversarial self-review on a rich governance corpus **never says "nothing lef
                      after the results comment (§6 four conditions + §6.3
                      same-actor three-signal). Chat never authorizes the cut.
                      Violations → ng3b-violation-attempt audit event.  [#345]
+
+**Three-tier review model (confirmed, #356 decision 2026-06-16):**
+
+| Tier | When | Script | Vendor cost |
+|---|---|---|---|
+| **Inner loop** | Per code change | `run_validators.sh` + reviewer agents | None |
+| **Pre-PR** | Before opening any PR | `run_review_chain.sh --tier <tier>` | agy (MEDIUM+), codex (HIGH+) |
+| **Release gate** | Per phase, at release | `run_panel.sh` on phase-review PR | Full panel (agy + codex + Copilot) |
+
+`run_review_chain.sh` is the canonical pre-PR script. Panel is release-only by default; invoke one-off with `--pr N` when needed.
 ```
 
 **Why the panel runs locally, not in CI:** the CLIs authenticate interactively (browser OAuth that lives on your machine); CI runners can't hold that session. So CI handles the deterministic gates + Copilot's native PR review, while the cross-vendor AI panel runs from a local command and **posts its findings to the PR**. The PR stays the auditable record.

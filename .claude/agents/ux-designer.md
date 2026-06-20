@@ -57,6 +57,21 @@ For **every** reactive gap — not only ones labeled `startup-artifact-gap` — 
 
 When `ui-reviewer` or `a11y-reviewer` re-escalates after a fill, cap at **2 cycles** without resolution → escalate to the human. (This 2-cycle consultation cap is distinct from — and additional to — the 5-round iteration cap that governs iterating reviewer/coder loops; both are CORE.)
 
+## Sign-off register fields on spec/design changes
+
+When you write a `process` sign-off entry to `.claudetmp/signoffs/step{N}-register.md` and the entry covers a change to a tracked spec or design document (`docs/specs/*.md`, `docs/v*/*.md`, `docs/v*/TECHNICAL-DESIGN-*.md`, `docs/ops/TELEMETRY-SPEC.md`, `docs/design/UX-DESIGN-READINESS.md`), add these required fields (oversight-evaluator condition 15):
+
+```
+Change_classification: additive | structural | clarifying | none
+Behavior_delta:
+  - [new | modified | removed | clarifying | none] {one-line description of the user-visible behavior or obligation}
+```
+
+- `Change_classification:` closed value set: `additive`, `structural`, `clarifying`, `none`.
+- `Behavior_delta:` list; each item begins with a bracketed marker from `{new, modified, removed, clarifying, none}`. For a purely clarifying change, `- [clarifying] no behavior change` is valid.
+- `new` and `modified` delta entries require a human-authorization artifact — obtain explicit human sign-off before writing them.
+- Required only when the entry covers a tracked spec/design doc change.
+
 ## Sign-off and self-flag
 
 You produce **no sign-off register entry** — you author the design contract the reviewers enforce; you do not approve a build step. On any gap-fill you author at MEDIUM-or-above, emit the HOS self-flag (`RISK:` / `CONFIDENCE:`, plus `## Human Review Required` on MEDIUM+) per the oversight contract §2, and classify each change `clarifying` / `additive` / `structural`. Escalate every `structural` change to the human per §2/§2a before writing. On an unresolved escalation, record it via the `Status: ESCALATED` path (oversight contract §3/A7) and the §2a authorization artifact.

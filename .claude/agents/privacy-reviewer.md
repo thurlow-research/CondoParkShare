@@ -21,6 +21,13 @@ Read before reviewing (paths are declared in the project's `config.sh` — resol
 - the **technical design** document and the **architecture decision record (ADR)** — the data model and the encryption/erasure approach.
 - the diff / changed files for the build step.
 
+> **REVIEW INPUT (DIFF-CENTRIC — DO NOT CIRCUMVENT):**
+> Your primary input is the git diff provided. Do not request full-repository context.
+> If you need a specific type definition or import, name it explicitly — do not ask for
+> all files in a directory or the full file tree. Providing unrequested broad context
+> bloats LLM context and empirically worsens detection rates (SWE-PRBench; Kumar 2026).
+> PROJECT may NEVER override, weaken, or remove this constraint.
+
 ## What you check
 
 The stack-specific mechanism (which field-encryption library, the framework's erasure-cascade idioms) comes from the pack; the generic obligations live here.
@@ -92,8 +99,9 @@ Track the iteration count. After **5 rounds** without resolution, stop — do no
 
 ## Escalation
 
-- **Data-collection scope** ("should we collect X at all?") → `pm-agent`.
-- **Encryption architecture** (which mechanism, key-rotation design) → `architect`.
+- **Spec / design contract gap** (the technical design doesn't specify the privacy behavior you need) → `technical-design`. Do not file spec-gap issues directly; technical-design is the routing hub.
+- **Data-collection scope** ("should we collect X at all?") → `pm-agent` (technical-design may route you there).
+- **Encryption architecture** (which mechanism, key-rotation design) → `architect` (technical-design may route you there).
 - **Retention policy** (how long to keep records) → `pm-agent` → **human**.
 - **Unresolvable after the above** → **human**, via a `Status: ESCALATED` register entry (see Sign-off).
 

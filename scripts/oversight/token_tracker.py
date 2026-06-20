@@ -56,6 +56,42 @@ def estimate_tokens(chars: int) -> int:
 def record(args: argparse.Namespace) -> None:
     USAGE_LOG.parent.mkdir(parents=True, exist_ok=True)
 
+    # REQ-255-25/26: review-event path — no token count, outcome required.
+    is_review_event = getattr(args, "review_event", False)
+    if is_review_event:
+        outcome = getattr(args, "outcome", None)
+        if not outcome:
+            print(
+                "error: --outcome is required with --review-event",
+                file=__import__("sys").stderr,
+            )
+            __import__("sys").exit(1)
+        step_val = args.step
+        try:
+            step_int = int(step_val) if step_val else 0
+        except (ValueError, TypeError):
+            step_int = 0
+        entry = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "vendor": args.vendor,
+            "stage": args.stage,
+            "step": step_int,
+            "prompt_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "estimated": False,
+            "review_event": True,
+            "outcome": outcome,
+        }
+        with open(USAGE_LOG, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+        print(
+            f"  Review event recorded: {args.vendor} {args.stage} "
+            f"step={step_int} outcome={outcome}"
+        )
+        return
+
+    # Standard token-count path (unchanged).
     prompt_tokens = args.actual_prompt_tokens or estimate_tokens(args.prompt_chars or 0)
     output_tokens = args.actual_output_tokens or estimate_tokens(args.output_chars or 0)
     total_tokens = prompt_tokens + output_tokens
@@ -114,22 +150,31 @@ def report(args: argparse.Namespace) -> None:
     for e in entries:
         v = e["vendor"]
         if v not in by_vendor:
-            by_vendor[v] = {"prompt": 0, "output": 0, "total": 0, "calls": 0, "estimated": 0}
-        by_vendor[v]["prompt"] += e["prompt_tokens"]
-        by_vendor[v]["output"] += e["output_tokens"]
-        by_vendor[v]["total"] += e["total_tokens"]
-        by_vendor[v]["calls"] += 1
-        if e.get("estimated"):
-            by_vendor[v]["estimated"] += 1
+            by_vendor[v] = {
+                "prompt": 0, "output": 0, "total": 0, "calls": 0, "estimated": 0,
+                "review_events": 0,  # REQ-255-27: count review-event records separately
+            }
+        if e.get("review_event"):
+            # Review-event records MUST NOT contribute to token totals (REQ-255-27).
+            by_vendor[v]["review_events"] += 1
+        else:
+            by_vendor[v]["prompt"] += e["prompt_tokens"]
+            by_vendor[v]["output"] += e["output_tokens"]
+            by_vendor[v]["total"] += e["total_tokens"]
+            by_vendor[v]["calls"] += 1
+            if e.get("estimated"):
+                by_vendor[v]["estimated"] += 1
 
-    # Aggregate by stage
+    # Aggregate by stage — review-event records do not contribute to token totals (REQ-255-27).
     by_stage: dict[str, int] = {}
     for e in entries:
+        if e.get("review_event"):
+            continue
         s = e["stage"]
         by_stage[s] = by_stage.get(s, 0) + e["total_tokens"]
 
-    total_all = sum(e["total_tokens"] for e in entries)
-    any_estimated = any(e.get("estimated") for e in entries)
+    total_all = sum(e["total_tokens"] for e in entries if not e.get("review_event"))
+    any_estimated = any(e.get("estimated") for e in entries if not e.get("review_event"))
 
     print("")
     print("╔══════════════════════════════════════════════════════╗")
@@ -140,12 +185,17 @@ def report(args: argparse.Namespace) -> None:
     print("")
     print("By vendor:")
     for vendor, data in sorted(by_vendor.items()):
-        est_note = f"  ({data['estimated']}/{data['calls']} estimated)" if data["estimated"] else ""
-        print(
-            f"  {vendor:<12}  {data['total']:>8,} tokens  "
-            f"({data['calls']} calls, {data['prompt']:,} in / {data['output']:,} out)"
-            f"{est_note}"
-        )
+        # REQ-255-27: vendors with only review-event records show event count, not token total.
+        if data["review_events"] > 0 and data["calls"] == 0:
+            print(f"  {vendor:<12}  (review events: {data['review_events']})")
+        else:
+            est_note = f"  ({data['estimated']}/{data['calls']} estimated)" if data["estimated"] else ""
+            rev_note = f"  +{data['review_events']} review event(s)" if data["review_events"] else ""
+            print(
+                f"  {vendor:<12}  {data['total']:>8,} tokens  "
+                f"({data['calls']} calls, {data['prompt']:,} in / {data['output']:,} out)"
+                f"{est_note}{rev_note}"
+            )
 
     print("")
     print("By pipeline stage:")
@@ -203,6 +253,16 @@ def main() -> None:
     rec.add_argument("--output-chars", type=int, default=0)
     rec.add_argument("--actual-prompt-tokens", type=int, default=0)
     rec.add_argument("--actual-output-tokens", type=int, default=0)
+    # REQ-255-25/26: review-event path (no token count; outcome required).
+    rec.add_argument(
+        "--review-event", action="store_true",
+        help="record a review event (no token count); requires --outcome",
+    )
+    rec.add_argument(
+        "--outcome",
+        choices=["approved", "changes_requested", "commented", "timeout", "skipped", "dismissed"],
+        help="review outcome (required with --review-event)",
+    )
 
     rep = sub.add_parser("report")
     rep.add_argument("--all", action="store_true")

@@ -19,6 +19,16 @@ _SUSPENSION_FILE=""
 _RETRY_HELPER="$(dirname "${BASH_SOURCE[0]}")/../run_with_retry.sh"
 [[ -f "$_RETRY_HELPER" ]] && source "$_RETRY_HELPER"
 
+# ── Python delegation (HOS#337) ──────────────────────────────────────────────
+# The suspension grammar (_SUSPENDED_RE) and the gate-suspended audit-event JSON
+# are owned ONLY by suspension_manager.py. This bash helper no longer carries a
+# copy of the regex — that duplication caused HOS#105. We shell out to the
+# manager per invocation (acceptable per the architect ruling; no caching).
+_SUSP_MGR="$(dirname "${BASH_SOURCE[0]}")/../suspension_manager.py"
+# OVERSIGHT_PYTHON is set by ensure_venv.sh when a venv exists; bare python3
+# otherwise — same convention as secret_scan.sh / run_validators.sh.
+_SUSP_PY="${OVERSIGHT_PYTHON:-python3}"
+
 _find_suspension_file() {
     # Locate contract/gate-suspension.md relative to the repo root
     local repo_root
@@ -28,16 +38,27 @@ _find_suspension_file() {
 
 is_suspended() {
     local gate="$1"
-    [[ -z "$_SUSPENSION_FILE" ]] && _SUSPENSION_FILE=$(_find_suspension_file)
-    [[ -f "$_SUSPENSION_FILE" ]] || return 1
-    # Grammar MUST stay in sync with _SUSPENDED_RE in suspension_manager.py:
-    # an active line is `SUSPENDED: <gate>` optionally followed by [pinned]
-    # and/or `review-by: YYYY-MM-DD` flags. The old end-anchored bare match
-    # ("^SUSPENDED: gate$") rejected those flagged forms — so a suspension the
-    # manager/census reported as ACTIVE was silently IGNORED here and the gate
-    # kept running. Two parsers, one grammar. (HOS#105)
-    grep -Eq "^SUSPENDED:[[:space:]]*${gate}([[:space:]]+\[pinned\]|[[:space:]]+review-by:[[:space:]]*[0-9]{4}-[0-9]{2}-[0-9]{2})*[[:space:]]*$" \
-        "$_SUSPENSION_FILE" 2>/dev/null
+    # Delegate the grammar match to suspension_manager.py (--is-suspended): the
+    # canonical _SUSPENDED_RE lives there, so the two-parser divergence that
+    # caused HOS#105 cannot recur. FAIL-CLOSED: only an explicit exit 0 from the
+    # manager means "suspended/skip". Any other outcome (python missing, error,
+    # unexpected code) returns 1 so the gate RUNS. Failing open (returning 0 on
+    # python failure) is forbidden — a missing interpreter must never silently
+    # bypass a safety gate.
+    if ! command -v "$_SUSP_PY" &>/dev/null; then
+        echo "check_suspension: $_SUSP_PY not found — running gate (fail-closed)" >&2
+        return 1
+    fi
+    "$_SUSP_PY" "$_SUSP_MGR" --is-suspended "$gate"
+    local rc=$?
+    case "$rc" in
+        0) return 0 ;;   # suspended
+        1) return 1 ;;   # not suspended
+        *)
+            echo "check_suspension: suspension_manager.py exited $rc for '$gate' — running gate (fail-closed)" >&2
+            return 1
+            ;;
+    esac
 }
 
 # A suspended gate is a bypassed safety check. It MUST leave an append-only
@@ -45,14 +66,14 @@ is_suspended() {
 # invisible after the fact and the bypass is unaccountable. (HOS#106)
 _emit_suspension_audit() {
     local gate="$1" authorized_by="$2"
-    local repo_root audit_dir ts
-    repo_root=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
-    audit_dir="${repo_root}/audit"
-    [[ -d "$audit_dir" ]] || return 0
-    ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date +"%Y-%m-%dT%H:%M:%SZ")
-    authorized_by=${authorized_by//\"/\'}   # keep the JSON well-formed
-    printf '{"event":"gate-suspended","gate":"%s","authorized_by":"%s","timestamp":"%s"}\n' \
-        "$gate" "$authorized_by" "$ts" >> "${audit_dir}/oversight-log.jsonl" 2>/dev/null || true
+    # Delegate JSON construction + append to suspension_manager.py --emit-audit.
+    # The manager owns the field set/order (event,gate,authorized_by,timestamp)
+    # and the audit/-absent no-op guard. Best-effort: emission failure must not
+    # block a suspended gate, but when audit/ exists and python is available the
+    # event IS written (the audit-trail requirement of HOS#106 is preserved).
+    command -v "$_SUSP_PY" &>/dev/null || return 0
+    "$_SUSP_PY" "$_SUSP_MGR" --emit-audit --gate "$gate" \
+        --authorized-by "$authorized_by" 2>/dev/null || true
 }
 
 print_suspended() {
