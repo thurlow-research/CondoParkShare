@@ -4,19 +4,16 @@
 At the start of every session, before any task, disclose:
 
 ```
-Repo:        thurlow-research/CondoParkShare
-Role:        worker (INTERACTIVE) | overseer (INTERACTIVE) — check gh auth status
-GitHub acct: CPSWorkerTutelare (Write) | CPSOversightTutelare (Maintain)
-Supervised:  ScottThurlow
-Model:       claude-sonnet-4-6
+Repo:         thurlow-research/CondoParkShare
+Role:         worker (INTERACTIVE) | overseer (INTERACTIVE)
+Worker bot:   hos-worker-cps[bot]   (App ID 4091605)
+Overseer bot: hos-overseer-cps[bot] (App ID 4091594)
+Supervised:   ScottThurlow
+Model:        claude-sonnet-4-6
 ```
 
-Run `gh auth status --active` to confirm the active account. Set repo-local git identity to match:
-```bash
-git config --local user.name "CPSWorkerTutelare"
-git config --local user.email "293997840+CPSWorkerTutelare@users.noreply.github.com"
-```
-(CPSOversightTutelare ID: check `gh api user --jq '.id'` when that account is active.)
+Auth is via GitHub App JWT — no `gh auth login` required.
+Credentials are loaded automatically from `~/Code/CPS/.config/hos/apps.env`.
 
 All commits must include trailers:
 ```
