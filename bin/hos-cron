@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+# bin/hos-cron — parameterized HOS cron launcher
+#
+# Single entry point for all HOS cron agents. Replace per-agent crontab entries
+# with this wrapper so fixes propagate to all projects automatically.
+#
+# Usage:
+#   hos-cron --role worker|overseer --project <name>
+#
+# Project registry: ~/.config/hos/projects.conf
+#   hos_config_dir=/Users/you/Code/HOS/.config/hos
+#   hos_worker_root=/Users/you/Code/HOS/Worker
+#   hos_overseer_root=/Users/you/Code/HOS/Overseer
+#   cps_config_dir=/Users/you/Code/CPS/.config/hos
+#   cps_worker_root=/Users/you/Code/CPS/Main
+#   cps_overseer_root=/Users/you/Code/CPS/Main
+#
+# Crontab example:
+#   1,6,11,...  * * * *  PATH=~/.local/bin:/usr/local/bin:/usr/bin:/bin hos-cron --role worker  --project hos >> /tmp/hos-worker-hos.log 2>&1
+#   4,9,14,...  * * * *  PATH=~/.local/bin:/usr/local/bin:/usr/bin:/bin hos-cron --role overseer --project hos >> /tmp/hos-overseer-hos.log 2>&1
+
+set -euo pipefail
+
+# ── Args ─────────────────────────────────────────────────────────────────────
+ROLE="" PROJECT=""
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --role)    ROLE="$2";    shift 2 ;;
+    --project) PROJECT="$2"; shift 2 ;;
+    *) echo "Usage: $0 --role worker|overseer --project <name>"; exit 1 ;;
+  esac
+done
+[[ -n "$ROLE" && -n "$PROJECT" ]] \
+  || { echo "hos-cron: --role and --project required"; exit 1; }
+[[ "$ROLE" == "worker" || "$ROLE" == "overseer" ]] \
+  || { echo "hos-cron: --role must be worker or overseer"; exit 1; }
+
+# ── Project registry ─────────────────────────────────────────────────────────
+PROJECTS_CONF="${HOME}/.config/hos/projects.conf"
+_conf_val() {
+  local key="${PROJECT}_${1}"
+  [[ -f "$PROJECTS_CONF" ]] \
+    && grep "^${key}=" "$PROJECTS_CONF" | head -1 | cut -d= -f2- \
+    || echo ""
+}
+
+HOS_CONFIG_DIR="$(_conf_val config_dir)"
+REPO_ROOT="$(_conf_val ${ROLE}_root)"
+
+[[ -n "$HOS_CONFIG_DIR" ]] \
+  || { echo "hos-cron: no ${PROJECT}_config_dir in $PROJECTS_CONF"; exit 1; }
+[[ -n "$REPO_ROOT" ]] \
+  || { echo "hos-cron: no ${PROJECT}_${ROLE}_root in $PROJECTS_CONF"; exit 1; }
+
+export HOS_CONFIG_DIR
+
+LOG_PREFIX="[hos-${ROLE}-cron:${PROJECT}] $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+# ── State dirs ────────────────────────────────────────────────────────────────
+_HOS_DIR="${HOS_STATE_DIR:-${HOME}/.hos}"
+_WAKEUP_FILE="$_HOS_DIR/wakeup/${ROLE}"
+_LAST_RUN_FILE="$_HOS_DIR/last-run/${ROLE}-${PROJECT}"
+IDLE_INTERVAL="${HOS_IDLE_INTERVAL:-1800}"
+mkdir -p "$_HOS_DIR/wakeup" "$_HOS_DIR/last-run"
+
+# ── Audit helper ──────────────────────────────────────────────────────────────
+_audit() {
+  local event="$1"; shift
+  (cd "$REPO_ROOT" && python3 -m scripts.automation.lib.cycle_log "$event" "$@") 2>/dev/null || true
+}
+
+# ── Jitter ────────────────────────────────────────────────────────────────────
+sleep $((RANDOM % 60))
+
+# ── Wakeup / idle backoff ─────────────────────────────────────────────────────
+if [[ -f "$_WAKEUP_FILE" ]]; then
+  _wakeup_reason=$(python3 -c "
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    print(d.get('reason', 'unknown'))
+except Exception:
+    print('unknown')
+" "$_WAKEUP_FILE" 2>/dev/null || echo "unknown")
+  rm -f "$_WAKEUP_FILE"
+  echo "$LOG_PREFIX wakeup signal received (reason=$_wakeup_reason)"
+  _audit cycle-wakeup "reason=$_wakeup_reason"
+elif [[ -f "$_LAST_RUN_FILE" ]]; then
+  _last=$(cat "$_LAST_RUN_FILE" 2>/dev/null || echo 0)
+  _now=$(date +%s)
+  _elapsed=$(( _now - _last ))
+  if [[ "$_elapsed" -lt "$IDLE_INTERVAL" ]]; then
+    echo "$LOG_PREFIX idle backoff — ${_elapsed}s since last run (threshold ${IDLE_INTERVAL}s)"
+    exit 0
+  fi
+  echo "$LOG_PREFIX idle poll — ${_elapsed}s since last run"
+fi
+# Timestamp written only after successful Claude exit (#711)
+
+# ── Git sync ──────────────────────────────────────────────────────────────────
+git -C "$REPO_ROOT" fetch origin main --quiet 2>/dev/null || true
+git -C "$REPO_ROOT" pull origin main --ff-only --quiet 2>/dev/null || true
+
+# ── Preflight ─────────────────────────────────────────────────────────────────
+export HOS_REQUIRE_PREFLIGHT=1
+if ! bash "$REPO_ROOT/bootstrap/validate_setup.sh" --repo "$REPO_ROOT" --quiet 2>/dev/null; then
+  echo "$LOG_PREFIX PREFLIGHT FAILED"
+  _audit cycle-preflight-fail reason=validate_setup_failed
+  exit 0
+fi
+
+# ── Auth (tempfile pattern — source <() fails in minimal cron env) ───────────
+# #720: mktemp in private dir — shared /tmp exposes token in race window
+_auth_tmp=$(mktemp -p "$_HOS_DIR")
+if ! "$REPO_ROOT/bootstrap/get_app_token.sh" --app "$ROLE" > "$_auth_tmp" 2>/dev/null; then
+  rm -f "$_auth_tmp"
+  echo "$LOG_PREFIX AUTH FAILED"
+  _audit cycle-preflight-fail reason=auth_failed
+  exit 0
+fi
+source "$_auth_tmp"; rm -f "$_auth_tmp"
+
+# ── Identity guard ────────────────────────────────────────────────────────────
+if [[ -z "${HOS_EXPECTED_BOT_LOGIN:-}" ]]; then
+  echo "$LOG_PREFIX IDENTITY GUARD FAILED: HOS_EXPECTED_BOT_LOGIN not set"
+  _audit cycle-preflight-fail reason=identity_guard_unset
+  exit 1
+fi
+if [[ "$HOS_BOT_LOGIN" != "$HOS_EXPECTED_BOT_LOGIN" ]]; then
+  echo "$LOG_PREFIX IDENTITY GUARD FAILED: got=$HOS_BOT_LOGIN expected=$HOS_EXPECTED_BOT_LOGIN"
+  _audit cycle-preflight-fail reason=identity_guard_mismatch
+  exit 1
+fi
+
+# ── Inner-loop tests (worker only) ───────────────────────────────────────────
+if [[ "$ROLE" == "worker" ]]; then
+  if ! bash "$REPO_ROOT/scripts/framework/run_tests_inner_loop.sh" -q 2>/dev/null; then
+    echo "$LOG_PREFIX INNER-LOOP TESTS FAILED"
+    _audit cycle-preflight-fail reason=inner_loop_tests_failed
+    exit 1
+  fi
+fi
+
+# ── Cycle start ───────────────────────────────────────────────────────────────
+_audit cycle-start "bot=$HOS_BOT_LOGIN project=$PROJECT"
+echo "$LOG_PREFIX Authenticated as $HOS_BOT_LOGIN — starting $ROLE cycle"
+
+# ── Invoke Claude — stdin pipe avoids '---' being parsed as a CLI flag ───────
+PROMPT_FILE="$REPO_ROOT/bootstrap/${ROLE}-cron-prompt.md"
+if [[ -f "$PROMPT_FILE" ]]; then
+  claude --print < "$PROMPT_FILE"
+else
+  echo "Run the $ROLE LOOP for project $PROJECT." | claude --print
+fi
+_claude_exit=$?
+
+# ── Post-cycle bookkeeping ────────────────────────────────────────────────────
+[[ $_claude_exit -eq 0 ]] && date +%s > "$_LAST_RUN_FILE"
+
+# Signal the other agent
+if [[ "$ROLE" == "worker" ]]; then
+  _other="overseer"
+else
+  _other="worker"
+fi
+printf '{"reason":"%s-cycle-complete","project":"%s","timestamp":"%s"}\n' \
+  "$ROLE" "$PROJECT" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+  > "$_HOS_DIR/wakeup/${_other}"
+echo "$LOG_PREFIX cycle complete (exit=$_claude_exit) — ${_other} wakeup signal dropped"

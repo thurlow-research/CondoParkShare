@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# bin/hos-trim-logs — trim HOS cron agent logs to prevent unbounded growth
+#
+# Trims all /tmp/hos-*.log files to the last HOS_LOG_MAX_LINES lines (default: 10000).
+# Discovers logs via glob — no hardcoded project names.
+# Idempotent — safe when logs don't exist yet.
+#
+# Crontab entry (weekly, Sunday 2am):
+#   0 2 * * 0  /path/to/bin/hos-trim-logs
+
+set -euo pipefail
+
+# #721: validate MAX_LINES is a positive integer before passing to tail -n
+MAX_LINES="${HOS_LOG_MAX_LINES:-10000}"
+if ! [[ "$MAX_LINES" =~ ^[1-9][0-9]*$ ]]; then
+  echo "hos-trim-logs: HOS_LOG_MAX_LINES must be a positive integer, got: '$MAX_LINES'" >&2
+  exit 1
+fi
+
+# #719: glob all hos cron logs — no hardcoded project slugs
+for log in /tmp/hos-*.log; do
+  [[ -f "$log" ]] || continue
+  _lines=$(wc -l < "$log")
+  if [[ "$_lines" -gt "$MAX_LINES" ]]; then
+    tail -n "$MAX_LINES" "$log" > "$log.tmp" && mv "$log.tmp" "$log"
+    echo "hos-trim-logs: trimmed $log ($_lines → $MAX_LINES lines)"
+  fi
+done
