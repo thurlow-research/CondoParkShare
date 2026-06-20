@@ -1,258 +1,163 @@
-# Agent Session Start — CondoParkShare
+# CondoParkShare — Session Start Brief
 
-Read this document first. Every time. Before any task.
+Read this first. Every session. Treat it as the project's institutional memory.
 
-This document is self-contained. Do not assume conversation history. Both Worker and
-Overseer run in separate repo clones under HOS v0.4.0 — treat every session as a
-fresh start.
-
----
-
-## 1. Confirm your identity
-
-Run these three commands before anything else:
-
-```bash
-gh auth status --active     # confirm which GitHub account is active
-git config user.name        # confirm git identity
-git config user.email
-```
-
-### Worker identity
-
-| Field | Value |
-|---|---|
-| GitHub account | `CPSWorkerTutelare` (GH_TOKEN) |
-| Git name | `CPSWorkerTutelare` |
-| Git email | `293997840+CPSWorkerTutelare@users.noreply.github.com` |
-
-Set if missing:
-
-```bash
-git config --local user.name "CPSWorkerTutelare"
-git config --local user.email "293997840+CPSWorkerTutelare@users.noreply.github.com"
-```
-
-### Overseer identity
-
-| Field | Value |
-|---|---|
-| GitHub account | `CPSOversightTutelare` (GH_TOKEN) |
-| Git commits | Not permitted — the overseer does not author or commit code |
-
-### Human supervisor
-
-ScottThurlow is the admin and final authority on all decisions above the overseer's ceiling.
-
-### Required commit trailers
-
-Every commit must include these three trailers:
-
-```
-AI-Model: claude-sonnet-4-6
-AI-Risk: LOW|MEDIUM|HIGH
-Supervised-by: ScottThurlow
-```
+HOS handles auth, git identity, install, and protocol mechanics. This document covers
+only what you need to know about *this project specifically* — decisions made, current
+state, what's been built, what hasn't, and where things live.
 
 ---
 
-## 2. What this project is
+## What this project is
 
-**CondoParkShare** is a multi-tenant Django SaaS for HOA condo parking management.
-Residents share parking spots; HOA admins approve users and manage availability. It is
+**CondoParkShare** is a multi-tenant Django SaaS for HOA condo parking. Residents share
+parking spots; HOA admins approve users, manage spots, and control availability. It is
 simultaneously a real production product and a living experiment in AI-assisted
-development governance, built under the Human Oversight System (HOS).
+development under HOS oversight.
 
-**Stack:** Django 5.1, PostgreSQL 16, Docker Compose, Gunicorn, Caddy (TLS termination
-on nexus)
-
-**Repo:** `https://github.com/thurlow-research/CondoParkShare`
-
-### Deploy topology
-
-| Host | IP | Role | Tracks |
-|---|---|---|---|
-| `nexus` | 192.168.1.5 | Windows, runs Caddy, terminates TLS | — |
-| `faberix` | 192.168.1.12 | PPE environment | `ppe` branch |
-| `opus` | 192.168.1.11 | Production | `prod` branch |
+**Current release:** v0.1.0 — the initial pilot, deployed to PPE (faberix). Production
+(opus) is not yet live.
 
 ---
 
-## 3. Branch model
+## Architecture decisions that affect your work
 
-| Branch | Purpose | Deploys to |
+### Authentication flow (ADR-001)
+TOTP is mandatory for all users. The enrollment flow is: register →
+`pending_approval` (awaiting HOA approval) → HOA approves → `pending_totp`
+(enrolls TOTP) → `active`. Status values: `pending_totp`, `pending_approval`,
+`active`, `blocked`. Never set `status=active` on a `pending_approval` user — this
+was a P0 security bug (#17, fixed).
+
+TOTP secrets are stored encrypted at rest in `EncryptedTOTPDevice` (MTI subclass
+of django-otp's `TOTPDevice`), using the same Fernet key as `User.phone`.
+
+### Multi-tenancy
+Every model is scoped to an `Organization`. The tenant is determined by the request
+domain. `TenantMiddleware` sets `request.organization`. Never query across orgs
+except in the operator console (superuser only, all orgs, always audited).
+
+### Booking system
+Auto-assignment — residents specify a time window, the system assigns a spot by
+owner-rotation. There is no browse-and-pick. Buffer between bookings is
+`organization.booking_buffer_hours` (default 1, per-tenant, live-read — was
+hardcoded until #84).
+
+### Audit subsystem
+`AdminAuditLog` records all operator actions. `audit_healthcheck` management command
+is a liveness probe that writes synthetic probe rows to `AuditProbe` and emits
+Prometheus metrics. The audit recovery log is a fail-closed JSONL sink — if the DB
+write path fails, records land here for later backfill.
+
+### Encryption
+- `User.phone`: field-encrypted with `EncryptedCharField` (Fernet, `PII_ENCRYPTION_KEY`)
+- `EncryptedTOTPDevice.encrypted_key`: same key, same library
+- Backups: `pg_dump | gzip | age -r $BACKUP_ENCRYPTION_RECIPIENT` before writing to NAS
+
+### Reverse proxy / TLS
+Caddy runs on **nexus** (Windows, 192.168.1.5) and terminates TLS for all domains.
+Django never sees HTTPS — `SECURE_SSL_REDIRECT = False`. Django trusts
+`X-Forwarded-Proto: https` (set by Caddy) via `SECURE_PROXY_SSL_HEADER`. If you see
+SSL redirect loops, that setting is the culprit.
+
+---
+
+## Deploy topology
+
+| Host | IP | Role |
 |---|---|---|
-| `main` | Source of truth — all PRs target here | — |
-| `ppe` | PPE release — promote by PR from `main` | faberix |
-| `prod` | Production release — promote by PR from `ppe` | opus |
+| nexus | 192.168.1.5 | Windows — runs Caddy, terminates TLS |
+| faberix | 192.168.1.12 | PPE — tracks `ppe` branch |
+| opus | 192.168.1.11 | Production — tracks `prod` branch (not yet live) |
 
-All three branches require a PR to merge. ScottThurlow has bypass on all three.
-The Worker opens PRs; the Overseer reviews and merges them.
+PPE is the staging environment. **All deployment issues must be reproduced and fixed
+on faberix before touching opus.** If it breaks on faberix, it would have broken on
+opus.
 
-**Current release:** v0.1.0 (tag on `main`)
+Domains:
+- PPE: `ppe.condoparkshare.kumajyo.com` (wildcard cert) / `ppe.condoparkshare.com` (Let's Encrypt)
+- Prod: `condoparkshare.kumajyo.com` / `condoparkshare.com`
+
+### Branch / deploy model
+
+| Branch | Deploys to | How to promote |
+|---|---|---|
+| `main` | nowhere directly | all PRs target here |
+| `ppe` | faberix | open PR from `main` → `ppe` |
+| `prod` | opus | open PR from `ppe` → `prod` |
+
+All three branches require a PR. ScottThurlow has bypass on all three.
+
+### Service account on servers
+
+The `condoparkshare` system account owns `/opt/condoparkshare/` on each server.
+Deploys run as: `sudo -u condoparkshare bash /opt/condoparkshare/scripts/deploy.sh ppe --yes`
+
+The repo is public — no credentials needed for `git pull`.
 
 ---
 
-## 4. Worker — your role and responsibilities
+## What's been built and what hasn't
 
-You are the HOS orchestrator for coding sessions. Your job is to route work to the
-right specialized agents and integrate results — **not to write code yourself.**
+### Built and shipped (v0.1.0)
+- Full auth flow: registration, invite-only sign-up, HOA approval, TOTP enrollment, recovery codes, lost-authenticator flow
+- Multi-tenant booking: auto-assignment, owner-rotation, earned-horizon metric, booking buffer
+- Audit subsystem: AdminAuditLog, audit_healthcheck liveness probe, fail-closed recovery log
+- PII encryption: phone (field), TOTP secret (EncryptedTOTPDevice), backup dumps (age)
+- Operator console: superuser-only, impersonation with audit trail, PII erasure
 
-### The orchestrate-don't-absorb rule
+### Not yet live / day-2
+- **Production (opus)** — service account and Docker not yet configured on opus
+- **Redis / CACHE_URL** — not set on faberix; rate limiting is per-worker (locmem). All `manage.py` commands require `--skip-checks` on PPE as a result (#147)
+- **BACKUP_ENCRYPTION_RECIPIENT** not in faberix `.env` — backups will fail without it
+- **Audit-recovery log backup** — not included in pg_dump; tracked in #120
+- **SMS pager** — Twilio procurement pending (#98, #102)
+- **`condoparkshare` service account on faberix** — setup in progress; `/opt/condoparkshare/` exists but repo clone may be incomplete
 
-Absorbing work that belongs to an agent collapses the author-reviewer independence that
-is the entire point of HOS. The oversight evaluator's Phase-1 compliance check reads the
-sign-off register; if you did the work yourself the register is empty and the step cannot
-advance to a PR.
+---
 
-- Code and file edits: dispatch the **coder**
-- Code review, security, privacy, risk: dispatch **code-reviewer / security-reviewer / privacy-reviewer / risk-assessor**
-- Design and architecture: dispatch **technical-design / architect**
-
-You triage, sequence, dispatch, carry results between agents, surface human gates, and
-keep the sign-off register honest.
+## Project-specific conventions
 
 ### Bug fix workflow
+File a GitHub issue → dispatch coder → open PR. Never edit files directly to fix bugs.
+This matters because it preserves the author≠reviewer independence that HOS is built on.
 
-1. File a GitHub issue first
-2. Dispatch the coder to implement the fix
-3. Open the PR
+### CPS overrides from HOS defaults
+Full details in `docs/hos-overrides.md`. Two active:
 
-Do not edit files directly to fix bugs, even trivial ones.
+1. **`portability_check.sh` line 10** — forward-slash Windows example to avoid
+   self-match. HOS CORE still has the buggy backslash form. Re-apply after each HOS
+   upgrade. Tracked in HOS#352.
 
-### Mandatory pre-PR checklist
+2. **`a11y-reviewer` all-tools grant** — tools restriction removed so the agent can
+   reach Chrome DevTools MCP. Re-applied by `scripts/hos/postinstall-restore-frontmatter.sh`
+   after every HOS upgrade.
 
-Run the full inner loop before opening any PR. Do not rely on the Overseer to catch
-failures the inner loop should catch.
-
-```bash
-# Compute changed Python files relative to main
-CHANGED=$(git diff origin/main..HEAD --name-only | grep '\.py$')
-
-# Per-file gates — only run when Python files changed
-[[ -n "$CHANGED" ]] && bash scripts/oversight/gates/lint_check.sh $CHANGED
-[[ -n "$CHANGED" ]] && bash scripts/oversight/gates/type_check.sh $CHANGED
-
-# Whole-repo gates — always run
-bash scripts/oversight/gates/portability_check.sh --all
-bash scripts/oversight/gates/collection_integrity.sh
-bash scripts/oversight/gates/django_check.sh
-bash scripts/oversight/gates/secret_scan.sh
-bash scripts/oversight/gates/template_refs_check.sh
-```
-
-**Important:** the lint and type gates exit 0 silently when invoked without file
-arguments. That is not a pass. Always pass `$CHANGED` explicitly (HOS#358).
-
-Then run the transitional review:
-
-```bash
-bash scripts/run_second_review.sh --step <step-name> --score <composite-score>
-```
-
-All gates must be clean and there must be no Tier 1 findings before the PR opens.
-
-### What the Worker cannot do
-
-- Approve, merge, or bypass PRs
-- Lift gate suspensions
-- Open PRs as the Overseer account
+### Release promotion
+Requires the GitHub three-part signal on the release issue (add `release-authorized`
+label, remove `needs-human`, re-assign to worker) — all by ScottThurlow, all after
+the worker posts validation results. A chat message does not authorize a release cut.
+See `METHODOLOGY.md` §17 RELEASE AUTH.
 
 ---
 
-## 5. Overseer — your role and responsibilities
-
-You review, approve, and merge PRs. You do not author or commit code.
-
-### Approval authority
-
-| Risk tier | Who can approve |
-|---|---|
-| LOW | Overseer |
-| MEDIUM | Overseer |
-| HIGH | ScottThurlow only — the Overseer ceiling does not cover HIGH |
-
-Approve LOW-risk non-protected PRs promptly after review. Do not defer them to
-ScottThurlow without reason.
-
-### Autonomous review loop
-
-Run the oversight loop approximately every 15 minutes when operating autonomously.
-Check for open PRs, review findings, and merge or flag as appropriate.
-
-### PR authorship check
-
-If you see a PR opened by `ScottThurlow`, that is a Worker identity mistake. Flag it
-back to the Worker before taking any action — do not approve or merge it.
-
-### What the Overseer cannot do
-
-- Author or commit code
-- Open PRs
-- Approve HIGH-risk PRs
-
----
-
-## 6. Known CPS overrides
-
-Full details in `docs/hos-overrides.md`. The active overrides are:
-
-**`portability_check.sh` line 10** — uses `C:/Users/<name>/` (forward slashes). This
-is intentional. The HOS CORE form uses backslashes, which cause the gate to match its
-own script text and self-flag. Our fix is tracked in HOS#303 but not yet merged
-upstream.
-
-**`a11y-reviewer`** — granted all tools (the `tools:` restriction is removed) so the
-agent can reach the Chrome DevTools MCP for live accessibility audits. HOS upgrades
-restore the restriction; the postinstall script removes it again.
-
-### After any HOS upgrade
-
-```bash
-bash scripts/hos/postinstall-restore-frontmatter.sh
-```
-
-This script is idempotent and asserts every override is in place. Run it every time
-`hos_install.sh` runs.
-
----
-
-## 7. Known issues and day-2 items
-
-| Issue | Detail |
-|---|---|
-| PPE: `django_ratelimit.E003` | Blocks `manage.py` commands without `--skip-checks` — no Redis on faberix. Issue #147. |
-| PPE: service account | `condoparkshare` service account setup in progress; repo at `/opt/condoparkshare/` tracking `ppe`. |
-| Production (opus) | Not yet deployed — `prod` branch is ready but the opus service is not configured. |
-| `STATIC_ROOT` | Fixed in PR #142. Apply if rebuilding the container before that merges. |
-| Backup encryption | `BACKUP_ENCRYPTION_RECIPIENT` not set in faberix `.env` — backups will fail without it. |
-| Release signal | Release promotion requires the GitHub three-part signal documented in `METHODOLOGY.md` §17 RELEASE AUTH. A chat message from ScottThurlow is not sufficient. |
-
----
-
-## 8. Where to find things
+## Where to find things
 
 | What | Where |
 |---|---|
-| HOS protocol | `AGENTS.md`, `METHODOLOGY.md` |
-| CPS overrides | `docs/hos-overrides.md` |
-| Deployment crontab | `docs/deploy/CRONTAB.md` |
-| Deployment runbooks | `docs/runbooks/` |
-| Architecture decisions | `docs/architecture/ADR-001-pilot.md`, `docs/architecture/ADR-002-host-ingress-monitoring-security.md` |
 | Product spec | `Specs/SPEC-1-pilot.md`, `Specs/CONFIRMED-REQUIREMENTS.md` |
 | Technical design | `docs/design/TECHNICAL-DESIGN.md` |
-| Oversight runbook | `docs/OVERSIGHT-RUNBOOK.md` |
+| Architecture decisions | `docs/architecture/ADR-001-pilot.md` (auth/encryption), `docs/architecture/ADR-002-host-ingress-monitoring-security.md` (monitoring) |
+| CPS overrides from HOS | `docs/hos-overrides.md` |
+| Deployment crontab | `docs/deploy/CRONTAB.md` |
+| Runbooks | `docs/runbooks/` |
 | Open issues | https://github.com/thurlow-research/CondoParkShare/issues |
-| HOS issues | https://github.com/thurlow-research/HumanOversightSystem/issues |
+| HOS issues filed from this project | https://github.com/thurlow-research/HumanOversightSystem/issues (filter: field-report label) |
 
 ---
 
-## Quick reference
+## People
 
-```
-Repo:     thurlow-research/CondoParkShare
-Worker:   CPSWorkerTutelare  (Write — opens PRs, cannot approve)
-Overseer: CPSOversightTutelare  (Maintain — approves/merges, cannot commit)
-Human:    ScottThurlow  (Admin — final authority, HIGH-risk approvals)
-Model:    claude-sonnet-4-6
-```
+| Person | Role |
+|---|---|
+| ScottThurlow | Human owner, admin, final authority. HIGH-risk approvals. Gate suspension removal. |
