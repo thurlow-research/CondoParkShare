@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# bin/hos-overseer-cron — cron overseer launcher
+#
+# Preflight + auth + one oversight cycle via claude --print, then exits.
+#
+# Cron entry (every 5 minutes — wakeup/backoff handles idle suppression):
+#   */5 * * * * /path/to/repo/bin/hos-overseer-cron
+
+set -euo pipefail
+REPO_ROOT="$(git -C "$(dirname "$0")/.." rev-parse --show-toplevel)"
+LOG_PREFIX="[hos-overseer-cron] $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+# ── Wakeup / backoff directories (#628) ─────────────────────────────────────
+_HOS_DIR="${HOS_STATE_DIR:-${HOME}/.hos}"
+_WAKEUP_FILE="$_HOS_DIR/wakeup/overseer"
+_LAST_RUN_FILE="$_HOS_DIR/last-run/overseer"
+IDLE_INTERVAL="${HOS_OVERSEER_IDLE_INTERVAL:-1800}"  # 30 min idle poll; override for testing
+
+mkdir -p "$_HOS_DIR/wakeup" "$_HOS_DIR/last-run"
+
+# ── Jitter ───────────────────────────────────────────────────────────────────
+sleep $((RANDOM % 60))
+
+# ── Wakeup / idle backoff check (#628) ───────────────────────────────────────
+if [[ -f "$_WAKEUP_FILE" ]]; then
+  # #712: pass path as argv, not interpolated into Python source
+  _wakeup_reason=$(python3 -c "
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    print(d.get('reason', 'unknown'))
+except Exception:
+    print('unknown')
+" "$_WAKEUP_FILE" 2>/dev/null || echo "unknown")
+  rm -f "$_WAKEUP_FILE"
+  echo "$LOG_PREFIX wakeup signal received (reason=$_wakeup_reason) — running immediately"
+elif [[ -f "$_LAST_RUN_FILE" ]]; then
+  _last=$(cat "$_LAST_RUN_FILE" 2>/dev/null || echo 0)
+  _now=$(date +%s)
+  _elapsed=$(( _now - _last ))
+  if [[ "$_elapsed" -lt "$IDLE_INTERVAL" ]]; then
+    echo "$LOG_PREFIX idle backoff — last run ${_elapsed}s ago (threshold ${IDLE_INTERVAL}s) — skipping"
+    exit 0
+  fi
+  echo "$LOG_PREFIX idle poll — ${_elapsed}s since last run"
+fi
+# #711: timestamp written only after successful Claude exit (below)
+
+# ── Preflight ─────────────────────────────────────────────────────────────────
+export HOS_REQUIRE_PREFLIGHT=1
+bash "$REPO_ROOT/bootstrap/validate_setup.sh" --repo "$REPO_ROOT" --quiet \
+  || { echo "$LOG_PREFIX PREFLIGHT FAILED — not starting"; exit 0; }
+
+# ── Auth — temp-file pattern (source <() unreliable in minimal cron env) ──────
+_auth_tmp=$(mktemp)
+if ! "$REPO_ROOT/bootstrap/get_app_token.sh" --app overseer > "$_auth_tmp" 2>/dev/null; then
+  rm -f "$_auth_tmp"
+  echo "$LOG_PREFIX AUTH FAILED — not starting"
+  exit 0
+fi
+source "$_auth_tmp"; rm -f "$_auth_tmp"
+
+# #699: HOS_EXPECTED_BOT_LOGIN exported by get_app_token.sh
+[[ -n "${HOS_EXPECTED_BOT_LOGIN:-}" ]] \
+  || { echo "$LOG_PREFIX IDENTITY GUARD FAILED: HOS_EXPECTED_BOT_LOGIN not set"; exit 1; }
+[[ "$HOS_BOT_LOGIN" == "$HOS_EXPECTED_BOT_LOGIN" ]] \
+  || { echo "$LOG_PREFIX IDENTITY GUARD FAILED: got=$HOS_BOT_LOGIN expected=$HOS_EXPECTED_BOT_LOGIN"; exit 1; }
+
+echo "$LOG_PREFIX Authenticated as $HOS_BOT_LOGIN — starting oversight cycle"
+
+# ── Run one oversight cycle ───────────────────────────────────────────────────
+# Not exec — we need to write last-run and drop worker wakeup after Claude exits (#628)
+claude --print "$(cat "$REPO_ROOT/bootstrap/overseer-cron-prompt.md" 2>/dev/null \
+  || echo '---\n**Role: HOS Overseer Agent | autonomous cron invocation**\nReview open PRs.')"
+_claude_exit=$?
+
+# ── #711: write last-run timestamp only on successful Claude exit ─────────────
+if [[ $_claude_exit -eq 0 ]]; then
+  date +%s > "$_LAST_RUN_FILE"
+fi
+
+# ── Signal worker that overseer completed a cycle (#628) ─────────────────────
+printf '{"reason":"overseer-cycle-complete","timestamp":"%s"}\n' \
+  "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$_HOS_DIR/wakeup/worker"
+echo "$LOG_PREFIX cycle complete (exit=$_claude_exit) — worker wakeup signal dropped"
