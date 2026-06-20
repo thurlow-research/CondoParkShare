@@ -335,11 +335,11 @@ HOS uses two machine accounts to make agent actions structurally distinguishable
 
 | Account | Class | May approve PRs? |
 |---|---|---|
-| `hos-worker-hos[bot]` | **worker** — opens PRs, never approves | No |
-| `hos-overseer-hos[bot]` | **overseer** — reviews and approves within ceiling | Yes (≤ OVERSEER_CEILING) |
+| `hos-worker-cps[bot]` | **worker** — opens PRs, never approves | No |
+| `hos-overseer-cps[bot]` | **overseer** — reviews and approves within ceiling | Yes (≤ OVERSEER_CEILING) |
 | `ScottThurlow` (human) | escalation ceiling | Yes (all tiers) |
 
-The split is load-bearing: `hos-worker-hos[bot]` literally cannot approve its own PR — GitHub's identity layer enforces it, not a policy check. Any agent session that pushes branches or opens PRs runs under the **worker** credentials. Review agents run under the **overseer** credentials. The human account is absent from both bot environments.
+The split is load-bearing: `hos-worker-cps[bot]` literally cannot approve its own PR — GitHub's identity layer enforces it, not a policy check. Any agent session that pushes branches or opens PRs runs under the **worker** credentials. Review agents run under the **overseer** credentials. The human account is absent from both bot environments.
 
 ### Git Commit Trailer Convention
 
