@@ -16,6 +16,14 @@ signoffs/                            ← COMMITTED to project repo (not gitignor
                                        (signoff_gate.py) reads its git commit timestamp.
                                        Per-step subdirectories keep concurrent PRs for
                                        different steps from colliding (#366).
+  validators/                      ← COMMITTED validator artifacts (#555)
+    step{N}/
+      summary.json                 ← committed copy of validator output, written by
+                                       run_validators.sh when --step N is passed.
+                                       Contains: head_sha, head_sha_source, artifact_version,
+                                       step, written_at, composite_score, tier, results.
+                                       Read by overseer step 3b to verify validators ran
+                                       against the PR's HEAD commit before merge decision.
 
 audit/                               ← COMMITTED to project repo (not gitignored)
   oversight-log.jsonl               ← append-only audit trail; one JSON event per line

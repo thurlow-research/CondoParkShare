@@ -8,18 +8,50 @@
 #   hos-cron --role worker|overseer --project <name>
 #
 # Project registry: ~/.config/hos/projects.conf
-#   hos_config_dir=/Users/you/Code/HOS/.config/hos
-#   hos_worker_root=/Users/you/Code/HOS/Worker
-#   hos_overseer_root=/Users/you/Code/HOS/Overseer
-#   cps_config_dir=/Users/you/Code/CPS/.config/hos
-#   cps_worker_root=/Users/you/Code/CPS/Main
-#   cps_overseer_root=/Users/you/Code/CPS/Main
+#   hos_config_dir=$HOME/Code/HOS/.config/hos
+#   hos_worker_root=$HOME/Code/HOS/Worker
+#   hos_overseer_root=$HOME/Code/HOS/Overseer
+#   cps_config_dir=$HOME/Code/CPS/.config/hos
+#   cps_worker_root=$HOME/Code/CPS/Main
+#   cps_overseer_root=$HOME/Code/CPS/Main
 #
-# Crontab example:
-#   1,6,11,...  * * * *  PATH=~/.local/bin:/usr/local/bin:/usr/bin:/bin hos-cron --role worker  --project hos >> /tmp/hos-worker-hos.log 2>&1
-#   4,9,14,...  * * * *  PATH=~/.local/bin:/usr/local/bin:/usr/bin:/bin hos-cron --role overseer --project hos >> /tmp/hos-overseer-hos.log 2>&1
+# Claude auth (#728): ~/.config/hos/claude-auth.env  (mode 0600), holding
+#   CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...   (from `claude setup-token`)
+# This runs headless claude on the user's Claude subscription. Without it, cron falls
+# through to API-key billing. Override path with HOS_CLAUDE_AUTH_ENV.
+#
+# Env overrides:
+#   HOS_CLAUDE_AUTH_ENV   path to the OAuth token file (default ~/.config/hos/claude-auth.env)
+#   HOS_CRON_MAX_SECONDS  wall-clock cap on the claude session (default 1800; 0 disables)
+#   HOS_CRON_MAX_TURNS    optional --max-turns backstop (default unset = no cap)
+#   HOS_CRON_AUTH_PROBE   1 = run a model auth probe before work (default 0; costs a turn)
+#   HOS_IDLE_INTERVAL     idle-backoff threshold in seconds (default 1800)
+#   HOS_CRON_JITTER_MAX   max startup jitter in seconds (default 60; 0 disables)
+#
+# Crontab example (the wrapper pins its own PATH, so no PATH= prefix is needed):
+#   1,6,11,...  * * * *  /path/to/hos-cron --role worker  --project hos >> /tmp/hos-worker-hos.log 2>&1
+#   4,9,14,...  * * * *  /path/to/hos-cron --role overseer --project hos >> /tmp/hos-overseer-hos.log 2>&1
 
 set -euo pipefail
+
+# ── Cron thin-env hardening (#728) — build our own world, don't trust cron's ──
+# Cron provides a near-empty environment (minimal PATH, no profile sourced), which
+# is why a bare `claude` can fail with "command not found". Pin PATH and resolve
+# the claude binary by absolute path so the wrapper works from a minimal crontab
+# line. Everything derives from $HOME — nothing machine-specific is hardcoded.
+if [[ -z "${HOME:-}" ]]; then
+  HOME="$(eval echo "~$(id -un)")"; export HOME
+fi
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
+# nvm-managed node, if present (no-op otherwise)
+[[ -s "$HOME/.nvm/nvm.sh" ]] && . "$HOME/.nvm/nvm.sh"
+# Resolve claude by absolute path — never depend on a partial cron PATH
+CLAUDE_BIN="$(command -v claude || true)"
+[[ -n "$CLAUDE_BIN" ]] || { echo "[hos-cron] FATAL: claude not found on PATH (cron thin env)"; exit 78; }
+
+# Deterministic git credentials (#738) — sourced now, applied after auth below.
+# shellcheck source=lib/git-credentials.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/git-credentials.sh"
 
 # ── Args ─────────────────────────────────────────────────────────────────────
 ROLE="" PROJECT=""
@@ -61,7 +93,24 @@ _HOS_DIR="${HOS_STATE_DIR:-${HOME}/.hos}"
 _WAKEUP_FILE="$_HOS_DIR/wakeup/${ROLE}"
 _LAST_RUN_FILE="$_HOS_DIR/last-run/${ROLE}-${PROJECT}"
 IDLE_INTERVAL="${HOS_IDLE_INTERVAL:-1800}"
-mkdir -p "$_HOS_DIR/wakeup" "$_HOS_DIR/last-run"
+mkdir -p "$_HOS_DIR/wakeup" "$_HOS_DIR/last-run" "$_HOS_DIR/locks"
+
+# ── Overlap lock (#728) — portable mkdir mutex (macOS has no flock) ──────────
+# One hos-cron run per (role, project) at a time. Lightweight overlap guard,
+# not the orchestrator machine-lock. Stale-lock reclaim via PID liveness.
+_LOCK_DIR="$_HOS_DIR/locks/hos-cron-${ROLE}-${PROJECT}.lock"
+if ! mkdir "$_LOCK_DIR" 2>/dev/null; then
+  _lock_pid="$(cat "$_LOCK_DIR/pid" 2>/dev/null || echo "")"
+  if [[ -n "$_lock_pid" ]] && kill -0 "$_lock_pid" 2>/dev/null; then
+    echo "$LOG_PREFIX another hos-cron $ROLE:$PROJECT run (pid=$_lock_pid) holds the lock — exiting"
+    exit 0
+  fi
+  echo "$LOG_PREFIX reclaiming stale lock (holder pid=${_lock_pid:-unknown} not alive)"
+  rm -rf "$_LOCK_DIR"
+  mkdir "$_LOCK_DIR" 2>/dev/null || { echo "$LOG_PREFIX could not acquire lock after reclaim — exiting"; exit 0; }
+fi
+echo "$$" > "$_LOCK_DIR/pid"
+trap 'rm -rf "$_LOCK_DIR" 2>/dev/null || true' EXIT
 
 # ── Audit helper ──────────────────────────────────────────────────────────────
 _audit() {
@@ -70,7 +119,11 @@ _audit() {
 }
 
 # ── Jitter ────────────────────────────────────────────────────────────────────
-sleep $((RANDOM % 60))
+# Spread concurrent fires so multiple projects don't stampede git/auth at once.
+# Override to 0 in tests (and any deterministic context) — mirrors machine_lock's
+# HOS_LOCK_JITTER_MAX. Guard the modulo: `% 0` would be a divide-by-zero error.
+_JITTER_MAX="${HOS_CRON_JITTER_MAX:-60}"
+[[ "$_JITTER_MAX" -gt 0 ]] && sleep $(( RANDOM % _JITTER_MAX ))
 
 # ── Wakeup / idle backoff ─────────────────────────────────────────────────────
 if [[ -f "$_WAKEUP_FILE" ]]; then
@@ -132,6 +185,54 @@ if [[ "$HOS_BOT_LOGIN" != "$HOS_EXPECTED_BOT_LOGIN" ]]; then
   exit 1
 fi
 
+# ── Deterministic git credentials (#738) ─────────────────────────────────────
+# Make `git push` work regardless of the host's credential helper, which is
+# interactive-oriented and unreachable from the cron thin-env. Configure the
+# already-authenticated `gh` as git's github.com helper for THIS session only —
+# no file written, developer's global ~/.gitconfig untouched, and the exported
+# env is inherited by the headless claude subprocess (so pushes inside the agent
+# need no inline workaround). GH_TOKEN is supplied over gh's stdin protocol, not
+# materialized into any URL/argv/file (#734). Must run AFTER auth is sourced so
+# gh can authenticate. See bin/lib/git-credentials.sh for the mechanism.
+if ! hos_configure_git_credentials; then
+  echo "$LOG_PREFIX FATAL: could not configure git credentials (gh not found)"
+  _audit cycle-preflight-fail reason=git_credentials_unconfigured
+  exit 78  # EX_CONFIG
+fi
+
+# ── Claude Code subscription auth (#728) — cron-safe subscription OAuth ──────
+# Headless `claude --print` runs on the user's Claude subscription via CLAUDE_CODE_OAUTH_TOKEN.
+# Without it, resolution falls through to API-key billing (the keychain credential
+# is unreachable from cron). Source the 0600 token file, then unset any API key
+# that would shadow the OAuth token and force per-token billing.
+# Placed BEFORE inner-loop tests so a missing token fails fast (skips the 60s run).
+# NOTE: no `set -x` around this block — the token must never reach a log.
+_CLAUDE_AUTH_ENV="${HOS_CLAUDE_AUTH_ENV:-${HOME}/.config/hos/claude-auth.env}"
+if [[ ! -r "$_CLAUDE_AUTH_ENV" ]]; then
+  echo "$LOG_PREFIX FATAL: missing $_CLAUDE_AUTH_ENV (run 'claude setup-token', store CLAUDE_CODE_OAUTH_TOKEN)"
+  _audit cycle-preflight-fail reason=claude_auth_env_missing
+  exit 78  # EX_CONFIG
+fi
+set -a; . "$_CLAUDE_AUTH_ENV"; set +a
+unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN
+if [[ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]]; then
+  echo "$LOG_PREFIX FATAL: CLAUDE_CODE_OAUTH_TOKEN not set after sourcing $_CLAUDE_AUTH_ENV"
+  _audit cycle-preflight-fail reason=claude_oauth_token_unset
+  exit 78
+fi
+
+# Optional model-spawning auth probe (opt-in via HOS_CRON_AUTH_PROBE=1). Default
+# OFF: a probe spends a model turn on every active fire against the weekly subscription
+# limit, and the main invocation surfaces auth failures anyway. Turn on only to
+# fail fast on an expired/revoked token before the inner-loop test run.
+if [[ "${HOS_CRON_AUTH_PROBE:-0}" == "1" ]]; then
+  if ! printf 'ping' | "$CLAUDE_BIN" --print --max-turns 1 >/dev/null 2>&1; then
+    echo "$LOG_PREFIX FATAL: Claude auth probe failed (token expired/revoked or API key shadowing)"
+    _audit cycle-preflight-fail reason=claude_auth_probe_failed
+    exit 75  # EX_TEMPFAIL
+  fi
+fi
+
 # ── Inner-loop tests (worker only) ───────────────────────────────────────────
 if [[ "$ROLE" == "worker" ]]; then
   if ! bash "$REPO_ROOT/scripts/framework/run_tests_inner_loop.sh" -q 2>/dev/null; then
@@ -145,14 +246,58 @@ fi
 _audit cycle-start "bot=$HOS_BOT_LOGIN project=$PROJECT"
 echo "$LOG_PREFIX Authenticated as $HOS_BOT_LOGIN — starting $ROLE cycle"
 
+# ── Per-fire bounds (#728 Task 2) ─────────────────────────────────────────────
+# Headless fires draw from the same weekly subscription rate limit as interactive use, and
+# a hung/runaway autonomous session could burn it. The always-on bound is a
+# WALL-CLOCK timeout — it kills a stuck session without truncating legitimate
+# turn-by-turn pipeline work (a low --max-turns would leave a half-done task).
+#   HOS_CRON_MAX_SECONDS  wall-clock cap (default 1800 = 30m); 0 disables.
+#   HOS_CRON_MAX_TURNS    optional --max-turns backstop (default unset = no cap).
+# NOTE: --allowedTools is intentionally NOT set. The worker dispatches sub-agents
+# (architect/coder/reviewers) and edits files; CLI-level tool restriction is the
+# wrong layer and would silently break autonomous work. Tool scope is governed by
+# the agent definitions and the LOOP prompt, not the launcher.
+HOS_CRON_MAX_SECONDS="${HOS_CRON_MAX_SECONDS:-1800}"
+# Portable timeout (GNU `timeout` absent on macOS; `gtimeout` via coreutils)
+if command -v timeout &>/dev/null; then _TIMEOUT_BIN="timeout"
+elif command -v gtimeout &>/dev/null; then _TIMEOUT_BIN="gtimeout"
+else _TIMEOUT_BIN=""; fi
+
+# Headless cron sessions have no human to approve tool calls. bypassPermissions
+# clears the approval gate so the agent can run gh/git/bash unattended. The safety
+# net is the GitHub App's scoped permissions + the overseer's merge guardrails
+# (OVERSEER_CEILING, protected surfaces, human-required escalations) — NOT the CLI
+# permission gate. Chosen over --dangerously-skip-permissions, which refuses to run
+# as root and needs a separate enable flag (friction on unattended Linux servers).
+_claude_cmd=("$CLAUDE_BIN" --print --permission-mode bypassPermissions)
+[[ -n "${HOS_CRON_MAX_TURNS:-}" ]] && _claude_cmd+=(--max-turns "$HOS_CRON_MAX_TURNS")
+_run_claude() {  # stdin is inherited → passed through to claude
+  if [[ -n "$_TIMEOUT_BIN" && "$HOS_CRON_MAX_SECONDS" != "0" ]]; then
+    "$_TIMEOUT_BIN" "$HOS_CRON_MAX_SECONDS" "${_claude_cmd[@]}"
+  else
+    [[ -z "$_TIMEOUT_BIN" ]] && echo "$LOG_PREFIX WARN: no timeout/gtimeout — claude runs unbounded"
+    "${_claude_cmd[@]}"
+  fi
+}
+
 # ── Invoke Claude — stdin pipe avoids '---' being parsed as a CLI flag ───────
+# Capture the real exit code: under `set -e`, a bare failing command in an if-body
+# would abort the script before `$?` is read, so guard with `|| _claude_exit=$?`.
 PROMPT_FILE="$REPO_ROOT/bootstrap/${ROLE}-cron-prompt.md"
+_claude_exit=0
 if [[ -f "$PROMPT_FILE" ]]; then
-  claude --print < "$PROMPT_FILE"
+  _run_claude < "$PROMPT_FILE" || _claude_exit=$?
 else
-  echo "Run the $ROLE LOOP for project $PROJECT." | claude --print
+  echo "Run the $ROLE LOOP for project $PROJECT." | _run_claude || _claude_exit=$?
 fi
-_claude_exit=$?
+
+if [[ $_claude_exit -eq 124 ]]; then
+  echo "$LOG_PREFIX claude TIMED OUT after ${HOS_CRON_MAX_SECONDS}s — session killed (no last-run written; will retry next fire)"
+  _audit cycle-claude-timeout "limit=$HOS_CRON_MAX_SECONDS"
+elif [[ $_claude_exit -ne 0 ]]; then
+  echo "$LOG_PREFIX claude exited $_claude_exit — if auth-related, refresh the token: 'claude setup-token' → $_CLAUDE_AUTH_ENV"
+  _audit cycle-claude-fail "exit=$_claude_exit"
+fi
 
 # ── Post-cycle bookkeeping ────────────────────────────────────────────────────
 [[ $_claude_exit -eq 0 ]] && date +%s > "$_LAST_RUN_FILE"

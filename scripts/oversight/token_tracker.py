@@ -26,9 +26,9 @@ Estimation: 1 token ≈ 4 characters (English prose/code).
 When actual counts are available from the CLI JSON output, those are used instead.
 
 Subscription awareness:
-  agy (Gemini):   $20/mo baseline → $100/mo upgrade. Tracks vs. known quota.
-  codex (OpenAI): $20/mo ChatGPT Pro. Reserve reviewer — tracks premium request usage.
-  claude:         Internal agents. Tracked for awareness; covered by Max subscription.
+  agy (Gemini):   subscription CLI. Tracks usage vs. known quota.
+  codex (OpenAI): subscription CLI. Reserve reviewer — tracks premium request usage.
+  claude:         Internal agents. Tracked for awareness; covered by the Claude subscription.
 """
 
 from __future__ import annotations
@@ -43,9 +43,9 @@ USAGE_LOG = Path(".claudetmp/oversight/token-usage.jsonl")
 
 # Rough monthly quota estimates (conservative — actual quotas vary)
 MONTHLY_QUOTA_ESTIMATES = {
-    "agy-20": {"tokens": 2_000_000, "label": "Gemini $20/mo"},
-    "agy-100": {"tokens": 10_000_000, "label": "Gemini $100/mo"},
-    "codex-20": {"tokens": 500_000, "label": "ChatGPT Pro $20/mo (~25 large calls)"},
+    "agy-20": {"tokens": 2_000_000, "label": "Gemini (baseline tier)"},
+    "agy-100": {"tokens": 10_000_000, "label": "Gemini (upgraded tier)"},
+    "codex-20": {"tokens": 500_000, "label": "ChatGPT (~25 large calls)"},
 }
 
 
@@ -236,7 +236,7 @@ def report(args: argparse.Namespace) -> None:
 
     claude_total = by_vendor.get("claude", {}).get("total", 0)
     if claude_total > 0:
-        print(f"  claude (internal): ~{claude_total:,} tokens  (Max subscription — awareness only)")
+        print(f"  claude (internal): ~{claude_total:,} tokens  (Claude subscription — awareness only)")
 
     print("")
 

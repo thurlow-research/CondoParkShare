@@ -323,7 +323,14 @@ EOF
 fi
 
 SPEC_CONTEXT=""
-[[ -f "Specs/SPEC-1-pilot.md" ]] && SPEC_CONTEXT=$(cat Specs/SPEC-1-pilot.md)
+# Load project identity from config.sh (#685 — was hardcoded to CondoParkShare)
+PROJECT_NAME="" PROJECT_STACK="" SPEC_FILE=""
+[[ -f "scripts/framework/config.sh" ]] && source scripts/framework/config.sh
+# Consumer projects may define SPEC_FILE in their config.sh
+SPEC_CONTEXT=""
+if [[ -n "${SPEC_FILE:-}" && -f "$SPEC_FILE" ]]; then
+    SPEC_CONTEXT=$(cat "$SPEC_FILE")
+fi
 
 VALIDATOR_SUMMARY=""
 [[ -f ".claudetmp/oversight/validators/summary.json" ]] && \
@@ -486,7 +493,7 @@ run_agy_review() {
 IMPORTANT — this is a READ-ONLY review. Base your review ONLY on the diff and context provided below. Do NOT run shell commands, execute tests, or create/modify any files. Output your review directly; do not narrate tool use.
 
 ## Application context
-Django (Python) + HTMX application — CondoParkShare, a parking spot sharing system for condo residents. Multi-tenant (one Django instance, multiple buildings). Uses PostgreSQL with tstzrange GiST exclusion constraints for booking overlap safety.
+${PROJECT_NAME:-this project} — ${PROJECT_STACK:-see config.sh for stack details}.
 
 ## Your task
 ${extra_instructions}
@@ -494,7 +501,7 @@ ${extra_instructions}
 Review this diff for:
 1. Logic errors, off-by-one errors, incorrect conditions, missing edge cases
 2. Spec adherence gaps — requirements that appear unimplemented or wrong
-3. Django-specific risks: race conditions (missing select_for_update), N+1 queries, cross-tenant data leaks
+3. Stack-specific risks: race conditions, N+1 queries, cross-tenant data leaks (see PROJECT_STACK in config.sh)
 4. Missing error handling required by the spec
 
 Do NOT comment on style, formatting, or repeat obvious design decisions.
@@ -590,7 +597,7 @@ Probe for:
 - Input validation gaps (boundary values, nulls, type coercion)
 - Race conditions in concurrent booking scenarios
 - Authentication bypass paths
-- CSRF on state-changing HTMX endpoints
+- CSRF on state-changing endpoints
 - Injection: SQL, template, shell
 - TOTP replay or bypass
 

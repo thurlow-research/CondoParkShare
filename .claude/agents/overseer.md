@@ -128,6 +128,19 @@ For each PR found:
 2. **Failure cap check** (`breakers.py:is_poisoned` on the cid) — skip poisoned items.
 3. **Read PR state** — title, author, changed files, oversight-evaluator verdict from `.claudetmp/signoffs/`.
 3a. **PR size check** — count the changed files and commits before proceeding. Apply the limits from `docs/PR-SIZE-POLICY.md` (#450):
+3b. **Validator artifact check (#555)** — read `signoffs/validators/step{N}/summary.json` from the PR branch (where N is the step number from the cid or step manifest). Verify:
+   1. The file exists (artifact present).
+   2. `head_sha` matches the PR's current HEAD commit (`GET /repos/{o}/{r}/pulls/{n}` → `head.sha`).
+   3. `head_sha_source` is present and is either `"step_range"` or `"git_head_fallback"` (any other value or absent → schema error).
+
+   **Fail-close rules (all route to HUMAN_REQUIRED / GATE_UNSATISFIED):**
+   - Artifact absent: detail = `"validator artifact missing for step N"`
+   - Head SHA mismatch: detail = `"validator artifact head_sha <artifact_sha> != PR HEAD <pr_head_sha>"`
+   - Schema error (missing/unrecognized `head_sha_source`): detail = `"validator artifact schema error: head_sha_source missing or unrecognized"`
+
+   **Do not proceed to step 4 if any fail-close rule fires.**
+
+   If the artifact is present, verified, and schema-valid → proceed to step 4.
    - **Exceeds 15 files or 10 commits:** request changes immediately with a suggested split by logical sub-group (e.g. docs / lib / tests). Do not proceed to the merge-authority matrix. Post a comment naming the file count, the limit, and the suggested split.
    - **Exceeds 25 files (hard ceiling):** bounce unconditionally with split instructions. Post a comment stating the hard ceiling was exceeded, name the file count, and require the worker to split before re-submitting. Do not apply the merge-authority matrix.
    - **Within limits:** proceed to step 4.

@@ -81,7 +81,7 @@ We deliberately use **multiple vendors and model tiers** — the whole point is 
 
 ### Runtime orchestration agents (the human interface layer)
 
-Two named agents sit above the specialist roles listed above: `worker` is the human's console interface and the autonomous build agent — it accepts work from a human or from a cron invocation, routes it to the appropriate specialist agents (coder, reviewers, etc.), and never absorbs their outputs into its own response. `overseer` is the oversight console and the autonomous review/merge agent — it evaluates what the worker produced and decides what may merge per the merge-authority matrix. Both run under their dedicated GitHub App bot accounts (`hos-worker-cps[bot]` / `hos-overseer-cps[bot]`) in autonomous mode. This is an orchestration layer above the specialist agents, not a replacement for them; the specialists perform the actual code authoring, reviewing, and testing.
+Two named agents sit above the specialist roles listed above: `worker` is the human's console interface and the autonomous build agent — it accepts work from a human or from a cron invocation, routes it to the appropriate specialist agents (coder, reviewers, etc.), and never absorbs their outputs into its own response. `overseer` is the oversight console and the autonomous review/merge agent — it evaluates what the worker produced and decides what may merge per the merge-authority matrix. Both run under their dedicated machine accounts (`hos-worker-cps[bot]` / `hos-overseer-cps[bot]`) in autonomous mode. This is an orchestration layer above the specialist agents, not a replacement for them; the specialists perform the actual code authoring, reviewing, and testing.
 
 ---
 
