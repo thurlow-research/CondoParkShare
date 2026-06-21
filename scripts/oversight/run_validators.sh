@@ -367,3 +367,47 @@ out.write_text(json.dumps(summary, indent=2))
 print(f"Composite score: {composite:.4f}  →  tier: {tier}")
 print(f"Summary: {out}")
 EOF
+
+# ── Committed validator artifact (#555) ───────────────────────────────────────
+# When --step is provided (PR pipeline context): write a committed copy of the
+# summary at signoffs/validators/step{N}/summary.json so the overseer can verify
+# the artifact was produced for the correct PR HEAD commit.
+# When --step is absent (developer ad-hoc): no committed artifact written.
+if [[ -n "$STEP" ]]; then
+    # Resolve head_sha via step_range.sh (architect ruling Q2)
+    # shellcheck source=scripts/oversight/lib/step_range.sh
+    source "$SCRIPT_DIR/lib/step_range.sh"
+    _step_range="$(get_step_range "$STEP" 2>/dev/null || true)"
+    if [[ -n "$_step_range" ]]; then
+        # split "BASE..HEAD" on ".." and take the HEAD (field 2)
+        _committed_head="${_step_range##*..}"
+        _head_sha_source="step_range"
+    else
+        _committed_head="$(git rev-parse HEAD 2>/dev/null || true)"
+        _head_sha_source="git_head_fallback"
+    fi
+
+    _artifact_dir="signoffs/validators/step${STEP}"
+    mkdir -p "$_artifact_dir"
+    _artifact_path="$_artifact_dir/summary.json"
+
+    # Atomically write: Python writes to tmp, then mv into final path (#725)
+    _artifact_tmp="$(mktemp "${_artifact_dir}/summary.XXXXXX")"
+    "$PYTHON" - "$OUT_DIR/summary.json" "$_artifact_tmp" \
+        "$_committed_head" "$_head_sha_source" "$STEP" <<'PYEOF'
+import json, sys, datetime
+src, dst, head_sha, head_sha_source, step = sys.argv[1:]
+base = json.loads(open(src).read())
+artifact = {
+    "head_sha":        head_sha,
+    "head_sha_source": head_sha_source,
+    "artifact_version": "1",
+    "step":            int(step),
+    "written_at":      datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    **base,
+}
+open(dst, "w").write(json.dumps(artifact, indent=2))
+PYEOF
+    mv "$_artifact_tmp" "$_artifact_path"
+    echo "Committed artifact: $_artifact_path (head_sha_source=$_head_sha_source)"
+fi

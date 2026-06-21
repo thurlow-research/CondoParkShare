@@ -86,13 +86,54 @@ fi
 echo ""
 echo "=== pip-audit (dependency vulnerabilities) ==="
 if [[ -x "$VENV_BIN/pip-audit" ]]; then
-    _run_pip_audit() { with_timeout "$GATE_TIMEOUT" "$VENV_BIN/pip-audit" --progress-spinner off 2>&1; }
+    PIP_AUDIT_TMP=$(mktemp /tmp/pip_audit_XXXXXX)
+    # Unit of work: run pip-audit under the configured timeout, capture JSON.
+    # pip-audit exits 1 when it FINDS vulnerabilities — that is a SUCCESSFUL scan
+    # for us, NOT an execution failure (#672). We must separate the two:
+    #   • completed scan (rc 0 or 1 AND parseable JSON) → parse, block on findings
+    #   • timeout / network error (no parseable JSON)    → retry, then warn+skip
+    # Without this split, run_with_retry treats the vulns-found rc=1 as a crash,
+    # exhausts retries, and — required=false — fails OPEN (gate exits 0 with real
+    # vulnerabilities present). Mirrors the bandit unit-of-work above.
+    _run_pip_audit() {
+        with_timeout "$GATE_TIMEOUT" "$VENV_BIN/pip-audit" --progress-spinner off \
+            --format json > "$PIP_AUDIT_TMP" 2>/dev/null
+        local prc=$?
+        # A completed scan emits parseable JSON regardless of rc 0/1. Require both
+        # an expected rc and valid JSON before declaring the attempt a success.
+        if [[ $prc -eq 0 || $prc -eq 1 ]] && PYTHONSAFEPATH=1 "$OVERSIGHT_PYTHON" -c \
+            "import json,sys; json.load(open(sys.argv[1]))" "$PIP_AUDIT_TMP" 2>/dev/null; then
+            return 0
+        fi
+        # Preserve a timeout rc so run_with_retry logs "timeout"; otherwise surface
+        # the execution failure rc (network error, resolver crash, …).
+        [[ $prc -eq 124 ]] && return 124
+        return "${prc:-1}"
+    }
     if run_with_retry "pip-audit" "$GATE_RETRIES" "false" _run_pip_audit; then
-        echo "OK: no known vulnerabilities"
+        VULN_COUNT=$(PYTHONSAFEPATH=1 "$OVERSIGHT_PYTHON" -c \
+            "import json,sys; d=json.load(open(sys.argv[1])); \
+             print(sum(len(dep.get('vulns',[])) for dep in d.get('dependencies',[])))" \
+             "$PIP_AUDIT_TMP" 2>/dev/null || echo "0")
+        if [[ "$VULN_COUNT" -gt 0 ]]; then
+            echo "GATE FAIL: $VULN_COUNT dependency vulnerability(ies) found"
+            PYTHONSAFEPATH=1 "$OVERSIGHT_PYTHON" -c \
+                "import json,sys; \
+                 [print(f\"  {dep['name']} {dep.get('version','?')} [{v.get('id','?')}] fix: {','.join(v.get('fix_versions',[])) or 'none'}\") \
+                  for dep in json.load(open(sys.argv[1])).get('dependencies',[]) for v in dep.get('vulns',[])]" \
+                 "$PIP_AUDIT_TMP" 2>/dev/null || true
+            ERRORS=$((ERRORS + 1))
+        else
+            echo "OK: no known vulnerabilities"
+        fi
     else
-        # pip-audit exhausted retries — required=false so we warn and continue
+        # pip-audit exhausted retries on a genuine execution failure (timeout /
+        # network) — required=false so we warn and continue. This branch is NOT
+        # reached when vulnerabilities are found; those exit cleanly above.
         echo "WARN: pip-audit did not complete — dependency vulnerability check skipped"
     fi
+    rm -f "$PIP_AUDIT_TMP"
+    unset -f _run_pip_audit
 else
     echo "SKIP: pip-audit not in oversight venv (run: ./scripts/oversight/ensure_venv.sh)"
 fi

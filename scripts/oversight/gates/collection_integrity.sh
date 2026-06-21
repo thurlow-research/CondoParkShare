@@ -35,17 +35,37 @@ _GATES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$_GATES_DIR/check_suspension.sh"
 is_suspended "collection_integrity" && { print_suspended "collection_integrity"; exit 0; }
 
-# Trigger guard (§2.2 / R2.2): only run when the current diff touches at least
+# Trigger guard (§2.2 / R2.2): only run when this change set touches at least
 # one *.py file. Non-Python-only diffs skip this gate — keeps it fast and avoids
 # irrelevant failures on template-only or docs-only changes. The gate itself
 # always checks the FULL suite (not just changed files); this guard controls
 # WHEN it runs, not what it checks.
-# When run outside a git repo or with no staged diff (e.g. manually), $PY_FILES
-# is empty and we fall through to run the gate (safe-direction for manual runs).
-_py_files="$(git diff --name-only HEAD 2>/dev/null | grep -E '\.py$' || true)"
-if [[ -z "$_py_files" ]]; then
-    echo "SKIP: no *.py files in current diff — collection_integrity gate N/A"
-    exit 0
+#
+# The change set must be scoped against the BASE BRANCH, not the working tree.
+# In PR/CI context every change is already committed, so `git diff HEAD` (which
+# only shows uncommitted changes) is empty and the gate wrongly SKIPs — the
+# escape behind #673. We instead diff against the merge-base with the base
+# branch (GITHUB_BASE_REF in CI, else origin/main — mirroring
+# check_validation_current.sh) AND union in any uncommitted working-tree changes
+# so local pre-commit runs still trigger.
+#
+# When run outside a git repo or with no resolvable base (e.g. shallow clone,
+# detached manual run) the change set can't be scoped, so we fall through to run
+# the gate (safe-direction for manual runs).
+_base_ref="${GITHUB_BASE_REF:-main}"
+_merge_base="$(git merge-base HEAD "origin/${_base_ref}" 2>/dev/null \
+    || git merge-base HEAD "${_base_ref}" 2>/dev/null \
+    || true)"
+
+if [[ -n "$_merge_base" ]]; then
+    _changed="$( { git diff --name-only "$_merge_base" HEAD; git diff --name-only HEAD; } 2>/dev/null || true)"
+    _py_files="$(printf '%s\n' "$_changed" | grep -E '\.py$' || true)"
+    if [[ -z "$_py_files" ]]; then
+        echo "SKIP: no *.py files in this change set — collection_integrity gate N/A"
+        exit 0
+    fi
+else
+    echo "INFO: no resolvable base ref — running collection_integrity gate unconditionally"
 fi
 
 echo "=== test collection integrity (pytest --collect-only) ==="

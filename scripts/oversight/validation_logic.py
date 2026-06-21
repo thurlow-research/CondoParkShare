@@ -53,6 +53,12 @@ SEVERITIES = ["critical", "high", "blocking", "warning", "medium", "low", "none"
 # Severities that count as a blocking finding for verdict purposes.
 BLOCKING_SEVERITIES = ("critical", "high", "blocking")
 
+# A reviewer block carrying this verdict (e.g. agy/codex timed out and emitted
+# {"verdict":"error","findings":[]}) is an operational FAILURE to review, not a
+# clean pass. It counts as a blocking finding and is never dedup-silenced — a
+# timeout has no stable fingerprint and must always gate (fail-closed, #670).
+ERROR_VERDICT = "error"
+
 
 # ── JSON extraction (binding 6) ───────────────────────────────────────────────
 def _brace_objects(text: str) -> list[dict]:
@@ -175,7 +181,10 @@ def compute_verdict(
     """Aggregate the verdict across parsed reviewer blocks.
 
     `findings` is the list of parsed reviewer JSON blocks (as returned by
-    extract_json_objects); each block has a `findings` and/or `attacks` list.
+    extract_json_objects); each block has a `findings` and/or `attacks` list,
+    and may carry a block-level `verdict`. A block whose verdict is "error" (a
+    reviewer that timed out / failed to review) counts as one NEW blocking
+    finding so the aggregate fails closed rather than silently approving (#670).
     The ledger at `ledger_path` supplies the seen-fingerprint set.
 
     Returns {verdict, highest_severity, blocking_count, new_blocking_count,
@@ -187,6 +196,16 @@ def compute_verdict(
     new_blocking_count = 0
 
     for block in findings:
+        # A reviewer that failed to review (timeout → verdict "error") is a
+        # blocking signal in its own right, regardless of its (empty) findings.
+        # It always counts as NEW blocking: an operational failure has no stable
+        # fingerprint to dedup against, so it must never be silenced (#670).
+        if str(block.get("verdict", "")).lower() == ERROR_VERDICT:
+            blocking_count += 1
+            new_blocking_count += 1
+            if SEVERITIES.index("blocking") < SEVERITIES.index(highest):
+                highest = "blocking"
+
         for item in block.get("findings", []) + block.get("attacks", []):
             sev = str(item.get("severity", "low")).lower()
             try:

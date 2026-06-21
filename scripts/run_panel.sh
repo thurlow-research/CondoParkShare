@@ -3,7 +3,7 @@
 #
 # Runs the independent-review stage of the oversight pipeline (METHODOLOGY.md §6,
 # steps 7–10) LOCALLY, because the reviewer CLIs authenticate against paid
-# *subscriptions* (Claude Max / ChatGPT Pro / Gemini Pro) via interactive browser
+# *subscriptions* (Claude / ChatGPT / Gemini) via interactive browser
 # OAuth that CI runners can't hold. The panel posts its findings back to the PR so
 # the PR stays the auditable record.
 #
