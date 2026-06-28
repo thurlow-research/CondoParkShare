@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 # audit_conditional_proceed.sh — retroactive audit of CONDITIONAL_PROCEED PRs (#370).
 #
-# Reads audit/oversight-log.jsonl, finds CONDITIONAL_PROCEED events, and for each
-# merged PR checks (heuristically) whether a human actioned the conditional items:
-# a non-bot reply on the PR after the earliest CONDITIONAL_PROCEED timestamp.
+# Reads the per-entry audit records under audit/log/, finds CONDITIONAL_PROCEED
+# events, and for each merged PR checks (heuristically) whether a human actioned
+# the conditional items: a non-bot reply after the earliest CP timestamp.
 #
 # This is a one-time, READ-ONLY audit tool. It files no issues, modifies no PRs,
 # and never writes to the audit log. Findings are work items for a human.
 #
 # Usage:
-#   ./scripts/oversight/audit_conditional_proceed.sh [--log <path>] [--help]
+#   ./scripts/oversight/audit_conditional_proceed.sh [--root <path>] [--help]
 #
 # Options:
-#   --log <path>   Override audit-log path (default: <repo-root>/audit/oversight-log.jsonl)
+#   --root <path>  Override repo root holding audit/log/ (default: enclosing git repo)
 #   --help, -h     Show this help and exit
 #
 # Environment overrides:
@@ -39,13 +39,19 @@ warn() { echo -e "  ${YELLOW}⚠${RESET}  $*" >&2; }
 err()  { echo -e "  ${RED}✘${RESET}  $*" >&2; }
 die()  { err "$*"; exit 1; }
 
+# Read-shim seam (SPEC-888 P3): the audit event stream is reconstructed from the
+# per-entry records under <root>/audit/log/ via audit_read_stream. The helper is
+# side-effect-free and safe to source under `set -e`.
+# shellcheck source=lib/audit_log.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/audit_log.sh"
+
 # ── Arg parsing ───────────────────────────────────────────────────────────────
-LOG_OVERRIDE=""
+ROOT_OVERRIDE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --log)
-      [[ $# -ge 2 ]] || die "--log requires a path"
-      LOG_OVERRIDE="$2"
+    --root)
+      [[ $# -ge 2 ]] || die "--root requires a path"
+      ROOT_OVERRIDE="$2"
       shift 2 ;;
     --help|-h)
       sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//'
@@ -65,12 +71,15 @@ BOTS_JSON="$(printf '["%s","%s","github-actions[bot]"]' "$OVERSIGHT_ACCOUNT" "$W
 # ── Prerequisite checks (fail-closed before any processing) ───────────────────
 command -v jq >/dev/null 2>&1 || die "jq not found — required for JSONL parsing (install jq)"
 command -v gh >/dev/null 2>&1 || die "gh CLI not found — required for GitHub API access"
+command -v python3 >/dev/null 2>&1 || die "python3 not found — required by the audit read-shim"
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 [[ -n "$REPO_ROOT" ]] || die "not inside a git repository"
 
-LOG_PATH="${LOG_OVERRIDE:-$REPO_ROOT/audit/oversight-log.jsonl}"
-[[ -f "$LOG_PATH" ]] || die "audit log not found: $LOG_PATH"
+# Repo root whose audit/log/ holds the per-entry records. A missing audit/log
+# directory yields an empty stream (zero events) rather than an error — the
+# read-shim is total, so an absent log produces an empty report, not a failure.
+AUDIT_ROOT="${ROOT_OVERRIDE:-$REPO_ROOT}"
 
 gh auth status >/dev/null 2>&1 || die "gh is not authenticated — run 'gh auth login'"
 
@@ -81,7 +90,7 @@ REPO_SLUG="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || 
 echo "" >&2
 echo -e "${BOLD}CONDITIONAL_PROCEED audit${RESET}" >&2
 info "repo:            $REPO_SLUG"
-info "log:             $LOG_PATH"
+info "audit root:      $AUDIT_ROOT  (audit/log/)"
 info "overseer acct:   $OVERSIGHT_ACCOUNT"
 info "worker acct:     $WORKER_ACCOUNT"
 info "ci bot excluded: github-actions[bot]"
@@ -105,7 +114,7 @@ CP_TSV="$(
               else 0 end )
         ] | @tsv
     ' 2>/dev/null || true
-  done < "$LOG_PATH"
+  done < <(audit_read_stream "$AUDIT_ROOT")
 )"
 
 N_EVENTS="$(printf '%s\n' "$CP_TSV" | grep -c . || true)"
@@ -134,7 +143,7 @@ emit() { REPORT_BUF+="$1"$'\n'; printf '%s\n' "$1"; }
 emit "CONDITIONAL_PROCEED Audit Report"
 emit "Generated: $GENERATED"
 emit "Repo: $REPO_SLUG"
-emit "Log: $LOG_PATH ($N_EVENTS CONDITIONAL_PROCEED events found)"
+emit "Audit root: $AUDIT_ROOT/audit/log ($N_EVENTS CONDITIONAL_PROCEED events found)"
 emit ""
 emit "$(printf '%s\t%s\t%s' 'PR_NUMBER' 'STATUS' 'DETAILS')"
 emit "$(printf '%s\t%s\t%s' '---------' '------' '-------')"
@@ -156,6 +165,16 @@ if [[ -n "$CANDIDATES" ]]; then
 
     # Step B — merged status
     merged="$(gh api "repos/${REPO_SLUG}/pulls/${pr}" --jq '.merged' 2>/dev/null || echo "ERROR")"
+    # A transient API error must NOT be folded into NO_MERGE: unlike UNKNOWN,
+    # NO_MERGE carries no re-run signal, so a genuinely-merged CP PR would be
+    # silently dropped. Branch on the ERROR sentinel first → UNKNOWN (re-run);
+    # only an explicit non-true value is a real NO_MERGE.
+    if [[ "$merged" == "ERROR" ]]; then
+      emit "$(printf '#%s\t%s\t%s' "$pr" 'UNKNOWN' "merged-status fetch failed (rate-limit or API error); items=${items_label}")"
+      n_unknown=$((n_unknown + 1))
+      sleep "$DELAY_SEC"
+      continue
+    fi
     if [[ "$merged" != "true" ]]; then
       emit "$(printf '#%s\t%s\t%s' "$pr" 'NO_MERGE' "not merged (or not found); items=${items_label}")"
       n_nomerge=$((n_nomerge + 1))

@@ -53,12 +53,12 @@ class _MigrationVisitor(ast.NodeVisitor):
     """Extract migration operation class names from a Django migrations file."""
 
     def __init__(self):
-        self.operations: list[str] = []
+        self.operations: list[tuple[str, int]] = []  # (op_name, lineno)
 
     def visit_Attribute(self, node: ast.Attribute) -> None:
         # migrations.AddField(...)  or  migrations.RunPython(...)
         if isinstance(node.value, ast.Name) and node.value.id == "migrations":
-            self.operations.append(node.attr)
+            self.operations.append((node.attr, node.lineno))
         self.generic_visit(node)
 
 
@@ -86,6 +86,7 @@ def analyse_files(file_paths: list[str]) -> dict:
         )
 
     all_ops: list[dict] = []
+    parse_errors: list[dict] = []
     evidence: list[dict] = []
     checklist: list[str] = []
 
@@ -96,10 +97,10 @@ def analyse_files(file_paths: list[str]) -> dict:
             v = _MigrationVisitor()
             v.visit(tree)
 
-            for op in v.operations:
+            for op, lineno in v.operations:
                 risk, reason = _OP_RISK.get(op, ("MEDIUM", "unknown operation"))
                 # Upgrade AddField to HIGH if non-nullable without default
-                if op == "AddField" and _check_add_field_nullable(source, 0):
+                if op == "AddField" and _check_add_field_nullable(source, lineno):
                     risk = "HIGH"
                     reason = (
                         "AddField without null=True or default — "
@@ -123,14 +124,38 @@ def analyse_files(file_paths: list[str]) -> dict:
                     )
 
         except Exception as e:
-            all_ops.append({"file": path, "error": str(e)})
+            # Track parse failures separately — do NOT mix them into all_ops,
+            # where a missing "risk" key would default to LOW (0.15) and let an
+            # unparseable migration score as clean. (#917)
+            parse_errors.append({"file": path, "error": str(e)})
+
+    # Every migration file failed to parse → no signal at all. Exclude the
+    # dimension via error= rather than scoring a LOW-clean 0.15. (#917)
+    if parse_errors and not all_ops:
+        detail = "; ".join(f"{Path(p['file']).name}: {p['error']}" for p in parse_errors)
+        return make_result(
+            "migration_risk",
+            0.0,
+            {"parse_errors": parse_errors, "files": migration_files},
+            weight=WEIGHTS["migration_risk"],
+            error=f"all migration files unparseable — cannot assess risk: {detail}",
+        )
 
     if not all_ops:
         return make_result(
             "migration_risk", 0.0, {"files": migration_files}, weight=WEIGHTS["migration_risk"]
         )
 
-    max_score = max(_TIER_SCORE.get(op.get("risk", "LOW"), 0.15) for op in all_ops)
+    # Some files parsed but others did not: keep the real signal, but flag the
+    # unparseable files so a reviewer confirms they hide no high-risk operations.
+    for pe in parse_errors:
+        checklist.insert(
+            0,
+            f"⚠ {Path(pe['file']).name} could not be parsed ({pe['error']}) — "
+            "manually verify it contains no high-risk migration operations",
+        )
+
+    max_score = max(_TIER_SCORE.get(op["risk"], 0.15) for op in all_ops)
     critical_ops = [op for op in all_ops if op.get("risk") == "CRITICAL"]
     high_ops = [op for op in all_ops if op.get("risk") == "HIGH"]
 
@@ -146,6 +171,7 @@ def analyse_files(file_paths: list[str]) -> dict:
             "operations": all_ops,
             "critical_count": len(critical_ops),
             "high_count": len(high_ops),
+            "parse_errors": parse_errors,
             "files": migration_files,
         },
         weight=WEIGHTS["migration_risk"],

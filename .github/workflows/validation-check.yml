@@ -1,0 +1,35 @@
+name: Validation Stamp Check
+
+# Verifies that all framework validation phases were run locally before this PR
+# was pushed. Does NOT call agy or codex — those run locally only (subscription
+# CLI auth cannot run in CI). This check just verifies the stamp is current.
+#
+# Pass condition: scripts/framework/validation-stamps/all-phases.stamp was
+# committed AFTER (or at the same time as) every non-excluded changed file.
+#
+# Excluded from the check (changes to these do not require re-validation):
+#   - audit/          — append-only oversight log
+#   - research/       — research notes and session logs
+#   - .claudetmp/     — ephemeral working files (not tracked)
+#   - scripts/framework/validation-stamps/  — the stamps themselves
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  validation-stamp-check:
+    name: Validation stamps current
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout (full history for commit timestamps)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # needed to compare commit timestamps across branches
+
+      - name: Check validation stamps are current
+        run: bash scripts/framework/check_validation_current.sh
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}

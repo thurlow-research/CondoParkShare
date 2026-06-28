@@ -270,6 +270,18 @@ def _cmd_process(args: argparse.Namespace) -> int:
     blocking = result["blocking_count"]
     new_blocking = result["new_blocking_count"]
 
+    # Preserve an existing request_changes verdict written by second_review_logic.py
+    # aggregate — a reviewer's explicit request_changes must not be laundered into
+    # approve just because its findings are medium-severity (not blocking by count).
+    # When the file already says request_changes and compute_verdict would approve,
+    # keep request_changes and ensure new_blocking_count reflects the blocking intent
+    # so downstream evaluators see a non-zero gate (#683).
+    existing_verdict_m = re.search(r"^verdict: (\S+)$", content, flags=re.M)
+    existing_verdict = existing_verdict_m.group(1) if existing_verdict_m else "pending"
+    if existing_verdict == "request_changes" and verdict == "approve":
+        verdict = "request_changes"
+        new_blocking = max(new_blocking, 1)
+
     new_content = re.sub(
         r"^verdict: pending$", f"verdict: {verdict}", content, flags=re.M
     )

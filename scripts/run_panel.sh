@@ -224,7 +224,7 @@ PANEL_LEDGER=".ai-local/panel/pr${PR}-ledger.jsonl"
 
 # SPEC-78: post-parse dispatch for --record and --reset (C4/C5/C6).
 # Resolved here because PR is now known. These short-circuit before any review runs.
-_VL_PY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scripts/oversight/validation_logic.py"
+_VL_PY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/oversight/validation_logic.py"
 [[ -f "$_VL_PY" ]] || _VL_PY="scripts/oversight/validation_logic.py"
 if [[ "$_PANEL_SUBCMD" == "record" ]]; then
     [[ -z "$_REC_FILES" || -z "$_REC_CLASS" || -z "$_REC_DISP" ]] && {
@@ -297,8 +297,11 @@ AUTHOR_RISK="$(gh pr view "$PR" --json commits -q '.commits[].messageBody' 2>/de
 [[ -n "$AUTHOR_RISK" ]] && FLOOR="$(max_risk "$FLOOR" "$AUTHOR_RISK")"
 
 if [[ -n "$RISK_OVERRIDE" ]]; then
-  RISK="$RISK_OVERRIDE"
-  info "triage: floor=$FLOOR author=${AUTHOR_RISK:-none} → forced ${BOLD}$RISK${RESET} (--risk)"
+  # An override may only RAISE the deterministic floor, never lower it — clamp to
+  # the floor like the Haiku and fallback branches, so --risk LOW cannot short-circuit
+  # the panel on a CRITICAL-floor PR (#910).
+  RISK="$(max_risk "$FLOOR" "$RISK_OVERRIDE")"
+  info "triage: floor=$FLOOR author=${AUTHOR_RISK:-none} override=$RISK_OVERRIDE → ${BOLD}$RISK${RESET} (--risk; clamped to floor)"
 elif command -v claude >/dev/null 2>&1; then
   TRIAGE_PROMPT="You are the TRIAGE agent in a code-oversight panel. Classify the risk of this PR using:
 LOW=pure UI/styling, no logic. MEDIUM=business logic/data/state/routing. HIGH=auth/input-handling/persistence/external-APIs. CRITICAL=injection/PII/payments/destructive ops.
@@ -469,13 +472,20 @@ log_context_advisory() {  # $1=reviewer  $2=response-text
 RESPONSES_JSON="[]"
 for spec in "${ROSTER[@]}"; do
   tool="${spec%%:*}"; lens="${spec##*:}"
-  if [[ "$tool" != "ipcheck" ]] && ! command -v "$tool" >/dev/null 2>&1; then warn "skip $spec — $tool not on PATH"; continue; fi
+  if [[ "$tool" != "ipcheck" ]] && ! command -v "$tool" >/dev/null 2>&1; then
+    die "$tool not on PATH — required reviewer for risk $RISK (install via scripts/setup_clis.sh) (#682)"
+  fi
   info "reviewing: ${BOLD}$tool${RESET} · lens=$lens"
   tool_findings="[]"
   ci=0
   for chunk in "${CHUNKS[@]}"; do
     ci=$((ci+1))
-    raw="$(call_model "$tool" "$(build_review_prompt "$lens" "$chunk")")" || raw='{"findings":[]}'
+    raw="$(call_model "$tool" "$(build_review_prompt "$lens" "$chunk")")" || {
+      if [[ "$tool" != "ipcheck" ]]; then
+        die "$tool invocation failed for lens=$lens chunk $ci of ${#CHUNKS[@]} — required reviewer for risk $RISK; see $RUN_DIR/errors.log (#682)"
+      fi
+      raw='{"findings":[]}'
+    }
     printf '%s' "$raw" > "$RUN_DIR/${tool}-${lens}-chunk${ci}.raw.txt"
     log_context_advisory "$tool" "$raw"
     f="$(printf '%s' "$raw" | python3 "$PANEL_LOGIC" extract-json | jq -c '.findings // []' 2>/dev/null || echo '[]')"

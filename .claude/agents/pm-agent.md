@@ -1,7 +1,7 @@
 ---
 name: pm-agent
 description: Requirements and spec owner. Invoke at project start for the initial spec review and human Q&A before design begins, and reactively throughout the build whenever any agent needs a product/requirements question answered — what the product should do, spec interpretation, edge-case behavior, scope. Also invoke to apply spec amendments and to sign off the system-test plan. Do NOT invoke for architecture or implementation questions.
-model: claude-sonnet-4-6
+model: claude-opus-4-8
 tools:
   - Read
   - Write

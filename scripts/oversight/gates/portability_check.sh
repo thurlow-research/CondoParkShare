@@ -56,8 +56,6 @@ fi
 echo "=== portability check (machine-specific absolute paths) ==="
 
 # /home/runner is excluded — GitHub Actions / standard CI runner paths are portable.
-PAT='(/Users/[A-Za-z0-9._-]+/|/home/(?!runner/)[A-Za-z0-9._-]+/|[A-Za-z]:\\Users\\)'
-
 # Portable check via Python — grep -nEHP is not portable (BSD lacks -P, GNU treats -E/-P
 # as conflicting, macOS always exits non-zero, silently passing this gate). CWE-697 fix.
 HITS=$(python3 - "${FILES[@]}" << 'PYEOF'

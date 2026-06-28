@@ -17,7 +17,7 @@
 set -euo pipefail
 
 GREEN="\033[32m"; YELLOW="\033[33m"; CYAN="\033[36m"
-RED="\033[31m"; BOLD="\033[1m"; RESET="\033[0m"
+RED="\033[31m"; RESET="\033[0m"
 ok()   { echo -e "  ${GREEN}✔${RESET}  $*" >&2; }
 info() { echo -e "  ${CYAN}→${RESET}  $*" >&2; }
 warn() { echo -e "  ${YELLOW}⚠${RESET}  $*" >&2; }
@@ -40,7 +40,7 @@ done
 
 # ── #633: verify apps.env permissions before sourcing ─────────────────────────
 # #645: fail-closed — if stat fails (no stat available), error rather than allow unverified permissions
-_env_mode=$(stat -f "%OLp" "$APPS_ENV" 2>/dev/null || stat -c "%a" "$APPS_ENV" 2>/dev/null)     || err "Cannot verify apps.env permissions — stat unavailable. Manually confirm: chmod 600 $APPS_ENV"
+_env_mode=$(stat -c "%a" "$APPS_ENV" 2>/dev/null || stat -f "%OLp" "$APPS_ENV" 2>/dev/null)     || err "Cannot verify apps.env permissions — stat unavailable. Manually confirm: chmod 600 $APPS_ENV"
 if [[ "$_env_mode" != "600" && "$_env_mode" != "400" ]]; then
     err "apps.env has permissions $_env_mode (expected 600). Run: chmod 600 $APPS_ENV"
 fi
@@ -48,16 +48,20 @@ fi
 # shellcheck source=/dev/null
 source "$APPS_ENV"
 
+# DECLARED_BOT_LOGIN is the operator's *expected* identity for this role, taken
+# from apps.env. It is deliberately a SEPARATE source from the API-authoritative
+# slug derived below (#631) so the identity guard compares two independently-set
+# values rather than one variable against itself (#703).
 case "$APP_ROLE" in
     worker)
         APP_ID="$HOS_WORKER_APP_ID"
         PEM_PATH="$HOS_WORKER_PEM"
-        BOT_LOGIN="$HOS_WORKER_BOT_LOGIN"
+        DECLARED_BOT_LOGIN="${HOS_WORKER_BOT_LOGIN:-}"
         ;;
     overseer)
         APP_ID="$HOS_OVERSEER_APP_ID"
         PEM_PATH="$HOS_OVERSEER_PEM"
-        BOT_LOGIN="$HOS_OVERSEER_BOT_LOGIN"
+        DECLARED_BOT_LOGIN="${HOS_OVERSEER_BOT_LOGIN:-}"
         ;;
     *)  err "--app must be 'worker' or 'overseer'" ;;
 esac
@@ -65,6 +69,12 @@ esac
 # ── Input validation (#545, #548) ─────────────────────────────────────────────
 [[ -n "${HOS_REPO_OWNER:-}" ]] || err "HOS_REPO_OWNER not set in apps.env (e.g. HOS_REPO_OWNER=thurlow-research)"
 [[ "$APP_ID" =~ ^[0-9]+$ ]]   || err "APP_ID must be numeric, got: $APP_ID"
+# #703: the expected-identity declaration is load-bearing for the identity guard.
+# Fail closed if apps.env omits it rather than exporting an empty expected value
+# (an empty expected vs the API slug would fail the guard with a confusing message).
+# Bash 3.2 safe: uppercase via tr, never ${var^^} (binding 7).
+_role_uc="$(printf '%s' "$APP_ROLE" | tr '[:lower:]' '[:upper:]')"
+[[ -n "$DECLARED_BOT_LOGIN" ]] || err "HOS_${_role_uc}_BOT_LOGIN not set in apps.env — required to verify the ${APP_ROLE} bot identity (#703). Add it (e.g. HOS_${_role_uc}_BOT_LOGIN='<appname>[bot]')."
 # #633: resolve symlinks before prefix check to block path traversal
 # #644: fail-closed — if python3 unavailable we cannot safely resolve symlinks
 _resolved_pem=$(python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "$PEM_PATH")     || err "python3 required to resolve PEM_PATH symlinks safely (CWE-59). Install python3 or verify $PEM_PATH is not a symlink."
@@ -114,7 +124,16 @@ _api_slug=$(printf '%s' "$APP_INFO" | python3 -c "import json,sys; print(json.lo
 # #710: empty slug is not a safe fallback — it means the API response was malformed.
 # Fail closed rather than silently re-enabling the apps.env circular dependency.
 [[ -n "$_api_slug" ]] || err "GET /app returned empty slug — cannot verify bot identity. Check network and GitHub API availability. (#631, #710)"
+# API-authoritative ACTUAL identity (what GitHub says this App authenticated as).
 BOT_LOGIN="${_api_slug}[bot]"
+
+# #703: fail closed at the source if the App we actually authenticated as does not
+# match the operator's declared identity for this role. Previously both sides of
+# the identity guard came from this same API slug, making the comparison a
+# tautology; cross-checking against the independent apps.env declaration catches a
+# mis-mapped APP_ID/PEM (e.g. overseer credentials under the worker role) or a
+# stale/incorrect declared login before any token is exported.
+[[ "$BOT_LOGIN" == "$DECLARED_BOT_LOGIN" ]] || err "Identity mismatch: authenticated as '$BOT_LOGIN' but apps.env declares HOS_${_role_uc}_BOT_LOGIN='$DECLARED_BOT_LOGIN'. Verify the ${APP_ROLE} APP_ID/PEM and the declared login in apps.env. (#703)"
 
 INSTALL_RESPONSE=$(curl -sf --connect-timeout 10 --max-time 30 \
     -H "Authorization: Bearer ${JWT}" \
@@ -162,5 +181,9 @@ ok "${APP_ROLE} token obtained (expires: ${EXPIRES})"
 # is an accepted trade-off for the current architecture. Tracked for v0.5.0 explicit-passing
 # refactor (#632). Do NOT add further secrets to this export list.
 printf "export GH_TOKEN='%s'\n"              "$TOKEN"
-printf "export HOS_BOT_LOGIN='%s'\n"         "$BOT_LOGIN"
-printf "export HOS_EXPECTED_BOT_LOGIN='%s'\n" "$BOT_LOGIN"  # #699: cron identity guard; API-verified via #631
+# #703: the two identity values come from independent sources so the downstream
+# identity guard is a real comparison, not a tautology:
+#   HOS_BOT_LOGIN          = API-authoritative slug (actual; #631)
+#   HOS_EXPECTED_BOT_LOGIN = operator's apps.env declaration (expected)
+printf "export HOS_BOT_LOGIN='%s'\n"          "$BOT_LOGIN"
+printf "export HOS_EXPECTED_BOT_LOGIN='%s'\n" "$DECLARED_BOT_LOGIN"  # #699/#703: cron identity guard

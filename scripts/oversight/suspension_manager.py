@@ -29,6 +29,7 @@ Stdlib only — no third-party imports, so no venv dependency.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import re
@@ -39,7 +40,22 @@ from pathlib import Path
 
 SUSPENSION_FILE = "contract/gate-suspension.md"
 HISTORY_FILE = ".claudetmp/oversight/suspension-history.jsonl"
-AUDIT_LOG = "audit/oversight-log.jsonl"
+
+
+def _load_audit_log():
+    """Load the canonical per-entry audit-record helper by file path.
+
+    suspension_manager runs as a plain script (sys.path[0] = its own dir), so a
+    package import is not reliable here; load the sibling lib/ module directly.
+    """
+    path = Path(__file__).resolve().parent / "lib" / "audit_log.py"
+    spec = importlib.util.spec_from_file_location("hos_audit_log", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+_AUDIT_LOG = _load_audit_log()
 
 # Gates that can be auto-removed: PURE script gates whose passing genuinely
 # means the gate is satisfied. `security` is deliberately excluded — it has a
@@ -294,10 +310,15 @@ def consecutive_passes(history: list[dict], gate: str) -> int:
 
 
 def emit_audit(event: dict) -> None:
+    """Write `event` as a write-once per-entry audit record (SPEC-888, #888 P2).
+
+    The record lands under audit/log/<YYYY>/<MM>/ so two branches never touch the
+    same file — the audit-log merge conflict is removed at its source rather than
+    synced around. No-op when audit/ is absent (the original guard is preserved).
+    """
     if Path("audit").is_dir():
         event = {**event, "timestamp": _now()}
-        with Path(AUDIT_LOG).open("a") as f:
-            f.write(json.dumps(event) + "\n")
+        _AUDIT_LOG.write_event(event, root=".")
 
 
 def run_gate(script: str) -> bool:
