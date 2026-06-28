@@ -55,6 +55,9 @@ mutants/
 # Runtime audit-recovery JSONL sink (AUDIT_RECOVERY_LOG)
 logs/
 
+# Legacy audit log — superseded by audit/log/ per-entry layout (#888)
+audit/oversight-log.jsonl
+
 # Local environment overrides (direnv)
 .envrc
 .hos-brownfield/
