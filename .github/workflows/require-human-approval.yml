@@ -1,0 +1,71 @@
+name: Require human approval (protected surfaces)
+
+# Server-side enforcement of AGENT-IDENTITY.md §9 (the determination-honesty gate,
+# §5.1): a PR whose diff touches a protected surface MUST have a human approval —
+# no bot (worker/overseer) may approve or merge it. This runs in GitHub Actions,
+# OUTSIDE the agent's environment, so a bot session cannot satisfy it locally.
+#
+# To make it BLOCKING: add "require-human-approval" to the branch-protection
+# "Require status checks to pass" list (see docs/MACHINE-ACCOUNTS-SETUP.md).
+# Re-runs on review submit/dismiss so adding/removing an approval re-evaluates.
+
+# SECURITY: uses pull_request_TARGET, not pull_request. Under pull_request_target
+# the workflow definition, the gate script (require_human_approval.py), the
+# protected-surfaces list, and machine-accounts.env all run from the TRUSTED BASE
+# branch — NOT the PR's version. So a PR cannot edit the gate (or the surfaces
+# list, or this workflow) to neuter the very check that gates it. This is the SAFE
+# use of pull_request_target: we execute NO PR-authored code — the PR's changed
+# files and reviews are read as DATA via the `gh` API below, never checked out
+# and run. (Copilot finding on PR #224: plain `pull_request` + checkout ran the
+# PR's own copy of the gate, making it self-bypassable.)
+on:
+  pull_request_target:
+    branches: [main, "release/v*"]
+  pull_request_review:
+    types: [submitted, dismissed]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  require-human-approval:
+    # The job `name` IS the status-check context GitHub reports to branch
+    # protection. It MUST equal the required context in
+    # scripts/framework/setup_branch_protection.sh (`require-human-approval`),
+    # or the required context stays permanently "expected" and every merge
+    # returns HTTP 405 while the gate appears green (#737). Keep these in sync;
+    # tests/framework/test_branch_protection_contexts.py enforces it.
+    name: require-human-approval
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (TRUSTED base — never the PR head)
+        # Under pull_request_target the default ref is the base branch, so this
+        # checks out the trusted gate script + surfaces list. Do NOT add
+        # `ref: ${{ github.event.pull_request.head.sha }}` here — that would run
+        # the PR's version of the gate and reintroduce the self-bypass.
+        uses: actions/checkout@v4
+
+      - name: Protected-surface human-approval gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          # Bot identity set (used to tell a bot approval from a human one).
+          if [[ -f scripts/framework/machine-accounts.env ]]; then
+            # shellcheck disable=SC1091
+            source scripts/framework/machine-accounts.env
+          fi
+          export BOT_ACCOUNTS="${BOT_ACCOUNTS:-}"
+
+          # Changed files via gh (robust across pull_request + review events).
+          gh pr diff "$PR_NUMBER" --name-only > /tmp/changed.txt
+
+          python3 scripts/framework/require_human_approval.py \
+            --changed-files-file /tmp/changed.txt \
+            --pr "$PR_NUMBER"

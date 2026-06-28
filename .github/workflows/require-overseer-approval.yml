@@ -1,0 +1,67 @@
+name: Require overseer approval (all PRs)
+
+# Server-side enforcement that every PR has an APPROVED review from
+# hos-overseer-hos[bot] before it may merge. Closes the gap (#621) where a
+# human approval satisfied GitHub's "1 approving review" branch-protection
+# requirement without the overseer ever having looked at the PR.
+#
+# Human approval is additive — for protected surfaces (CODEOWNERS) and
+# CRITICAL-tier PRs a human approval is ALSO required, but it does NOT replace
+# the overseer gate. The intentional escape hatch for the repo admin is GitHub's
+# own "Merge without waiting for requirements" admin override (explicit, logged
+# by GitHub), NOT a label or comment mechanism.
+#
+# Pairs with:
+#   require-human-approval  — protected-surface / CRITICAL tier gate
+#   require-tier-ceiling    — overseer cannot merge above its ceiling
+#
+# To make it BLOCKING: add "require-overseer-approval" to the branch-protection
+# "Require status checks to pass" list (see docs/MACHINE-ACCOUNTS-SETUP.md and
+# scripts/framework/setup_branch_protection.sh).
+
+# SECURITY: uses pull_request_TARGET, not pull_request. Under pull_request_target
+# the workflow definition, the gate script, and machine-accounts.env all run from
+# the TRUSTED BASE branch — NOT the PR's version. So a PR cannot edit this
+# workflow or the gate script to neuter the check that gates it. The PR's reviews
+# are read as DATA via gh API calls, never checked out and executed. (Same
+# security model as require-human-approval.yml and require-tier-ceiling.yml.)
+on:
+  pull_request_target:
+    branches: [main, "release/v*"]
+  pull_request_review:
+    types: [submitted, dismissed]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  require-overseer-approval:
+    # The job `name` IS the status-check context GitHub reports to branch
+    # protection. It MUST equal the required context in
+    # scripts/framework/setup_branch_protection.sh (`require-overseer-approval`),
+    # or the required context stays permanently "expected" and every merge
+    # returns HTTP 405 while the gate appears green (#737). Keep these in sync;
+    # tests/framework/test_branch_protection_contexts.py enforces it.
+    name: require-overseer-approval
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (TRUSTED base — never the PR head)
+        # Under pull_request_target the default ref is the base branch, so this
+        # checks out the trusted gate script and machine-accounts.env. Do NOT add
+        # `ref: ${{ github.event.pull_request.head.sha }}` — that would run the
+        # PR's version of the gate and reintroduce the self-bypass.
+        uses: actions/checkout@v4
+
+      - name: Overseer approval gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          python3 scripts/framework/require_overseer_approval.py \
+            --pr "$PR_NUMBER"
