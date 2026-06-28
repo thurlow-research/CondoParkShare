@@ -1,0 +1,45 @@
+# Canonical protected-surface globs (single source of truth) — AGENT-IDENTITY.md §9.
+#
+# Any PR whose diff touches one of these requires a HUMAN approval, regardless of
+# computed risk tier — no bot (worker or overseer) may approve or merge it. These
+# are the surfaces that DEFINE the controls; they can never be loosened on the
+# controls' own say-so.
+#
+# Consumed by:
+#   - scripts/framework/require_human_approval.py  (the server-side status check)
+#   - scripts/framework/gen_codeowners.sh          (generates .github/CODEOWNERS)
+# Keep this list, AGENT-IDENTITY.md §9, and the generated CODEOWNERS in sync.
+#
+# Glob syntax: `dir/**` = that directory and everything under it; `*` = one path
+# segment; a plain path = that exact file. Blank lines and `#` comments ignored.
+
+.claude/agents/**
+contract/**
+AGENTS.md
+docs/AGENTS.md
+docs/AGENT-IDENTITY.md
+METHODOLOGY.md
+docs/FABERIX-ROLES.md
+docs/CROSS-REPO-CONDUCT.md
+bin/**
+bootstrap/**
+scripts/framework/**
+scripts/oversight/gates/**
+scripts/oversight/run_validators.sh
+scripts/oversight/validators/schema.py
+.github/CODEOWNERS
+.github/workflows/**
+
+# Unattended-worker governance surfaces (#254). These decide whether the
+# autonomous worker may run, how much it may spend, and whose commands it obeys —
+# the highest control-loosening surfaces of all. A bot must never self-authorize
+# by merging a change to its own enable/budget/allowlist or to the kill switch.
+PROJECT/hos-coordination.yaml
+PROJECT/hos-halt
+
+# Release artifacts (#761). Releases are always human-approved (NG3b).
+# Adding these as a server-side protected-surface guard backs up the behavioral
+# NG3b rule in overseer.md so that even if the title/content heuristic misses,
+# the protected-surface gate enforces HUMAN_REQUIRED.
+docs/releases/**
+.hos-release

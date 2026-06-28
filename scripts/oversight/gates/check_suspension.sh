@@ -17,6 +17,7 @@ _SUSPENSION_FILE=""
 
 # ── Source retry helper if available ─────────────────────────────────────────
 _RETRY_HELPER="$(dirname "${BASH_SOURCE[0]}")/../run_with_retry.sh"
+# shellcheck source=/dev/null
 [[ -f "$_RETRY_HELPER" ]] && source "$_RETRY_HELPER"
 
 # ── Python delegation (HOS#337) ──────────────────────────────────────────────

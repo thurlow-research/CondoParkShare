@@ -29,7 +29,6 @@ source "$_GATES_DIR/check_suspension.sh"
 is_suspended "template-refs" && { print_suspended "template-refs"; exit 0; }
 
 PASS=0
-FAIL=1
 
 FILES=()
 CHECK_ALL=false

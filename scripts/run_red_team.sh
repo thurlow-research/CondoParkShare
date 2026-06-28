@@ -29,10 +29,8 @@
 
 set -euo pipefail
 
-[[ -f .env ]] && set -o allexport && source .env && set +o allexport 2>/dev/null || true
-
 GREEN="\033[32m"; YELLOW="\033[33m"; CYAN="\033[36m"
-RED="\033[31m"; BOLD="\033[1m"; RESET="\033[0m"
+BOLD="\033[1m"; RESET="\033[0m"
 ok()   { echo -e "  ${GREEN}✔${RESET}  $*"; }
 info() { echo -e "  ${CYAN}→${RESET}  $*"; }
 warn() { echo -e "  ${YELLOW}⚠${RESET}  $*"; }
@@ -300,6 +298,47 @@ fi
 
 $DRY_RUN || create_redteam_issues "agy" "$AGY_OUT"
 ok "agy done"
+
+# ── Fail closed on degraded or absent reviewers (#911) ───────────────────────
+# Both reviewer invocations swallow their own failure into placeholder JSON: an
+# absent CLI yields {"skipped":true} (the else-branches above) and a fired-but-
+# crashed CLI yields {"error":...} (the `|| echo` fallbacks). `set -e` cannot see
+# either — they are caught — so without this guard the checkpoint would exit 0
+# having performed NO real adversarial review, turning the highest-leverage gate
+# into a no-op precisely when tooling is degraded. Symmetric with the
+# run_second_review.sh runtime-error guard (#681/#765).
+#
+# Rule: a fired reviewer that errored is a checkpoint FAILURE; and if neither
+# reviewer produced a real (non-skipped, non-error) review the checkpoint is
+# invalid. --dry-run is intentionally exempt (its skipped placeholders are
+# expected, not a degraded run).
+reviewer_state() {  # echoes: real | error | skipped
+    local out="$1"
+    if [[ -z "${out//[[:space:]]/}" ]]; then echo "error"          # empty output = crash/auth failure
+    elif echo "$out" | grep -q '"error"'; then echo "error"        # fired-but-failed placeholder/CLI error
+    elif echo "$out" | grep -q '"skipped":true'; then echo "skipped"
+    else echo "real"; fi
+}
+
+if ! $DRY_RUN; then
+    CODEX_STATE=$(reviewer_state "$CODEX_OUT")
+    AGY_STATE=$(reviewer_state "$AGY_OUT")
+
+    if [[ "$CODEX_STATE" == "error" || "$AGY_STATE" == "error" ]]; then
+        echo "" >&2
+        echo "run_red_team: FAIL-CLOSED — a fired reviewer errored at runtime (codex=${CODEX_STATE}, agy=${AGY_STATE})." >&2
+        echo "  The adversarial checkpoint did not produce a complete independent review." >&2
+        echo "  Fix the reviewer CLI and re-run: ./scripts/setup_clis.sh auth" >&2
+        exit 1
+    fi
+    if [[ "$CODEX_STATE" != "real" && "$AGY_STATE" != "real" ]]; then
+        echo "" >&2
+        echo "run_red_team: FAIL-CLOSED — no reviewer produced a real review (codex=${CODEX_STATE}, agy=${AGY_STATE})." >&2
+        echo "  A milestone red-team with zero NOT-EXPLOITABLE attestations is not a valid checkpoint." >&2
+        echo "  Authenticate the reviewer CLIs: ./scripts/setup_clis.sh auth" >&2
+        exit 1
+    fi
+fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""

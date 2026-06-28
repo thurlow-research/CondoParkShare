@@ -507,6 +507,7 @@ def merge_region(
     incoming: str,
     *,
     squash: bool = False,
+    prune: bool = False,
     removed: bool = False,
 ) -> Action:
     """Decide what to do with one region on an upgrade — the pure three-way
@@ -529,9 +530,16 @@ def merge_region(
                     (the region is present on disk, retired by the template).
         incoming:   sha of the region HOS would write this upgrade. Ignored when
                     `removed=True` (the template no longer carries the region).
-        squash:     opt-in explicit consent (TD §4.3). Converts HARDSTOP→REFRESH
-                    for template-side drift (row 4) and HARDSTOP→DROP for an
-                    edited removed region (row 6). Never affects PROJECT.
+        squash:     opt-in explicit consent (TD §4.3). The STRONG consent:
+                    converts HARDSTOP→REFRESH for template-side drift (row 4)
+                    AND HARDSTOP→DROP for an edited removed region (row 6).
+                    Never affects PROJECT.
+        prune:      opt-in consent SCOPED to the removed-region sweep only
+                    (#914). Converts HARDSTOP→DROP for an edited removed region
+                    (row 6) — the region-level analogue of --prune's orphan-FILE
+                    archival. It deliberately does NOT consent to template-side
+                    drift (row 4): --prune must never silently overwrite a
+                    consumer-edited CORE/PACK region (that requires --squash).
         removed:    True for the manifest-side sweep (rows 5/6) — the region is
                     in the manifest but ABSENT from the new template (HOS retired
                     it). Drives the DROP/HARDSTOP rows instead of the template
@@ -555,8 +563,9 @@ def merge_region(
     if removed:
         if base_eq_disk:
             return Action.DROP  # row 5: unedited → DROP
-        # row 6: edited → HARDSTOP unless --squash/--prune consents to drop.
-        return Action.DROP if squash else Action.HARDSTOP
+        # row 6: edited → HARDSTOP unless --squash OR --prune consents to drop.
+        # --prune is scoped to this sweep only (#914); --squash also consents.
+        return Action.DROP if (squash or prune) else Action.HARDSTOP
 
     # Rows 1–4: template-side three-way.
     disk_eq_incoming = disk_sha == incoming
@@ -694,8 +703,10 @@ class Plan:
         hardstops:         (region_id, reason) for every region that resolved to
                            HARDSTOP — the precise per-region drift report (§4.3).
                            Empty unless `blocked`.
-        blocked:           True iff any HARDSTOP fired and `squash` was not given.
-                           When blocked, `new_bytes` is None and NOTHING is
+        blocked:           True iff any HARDSTOP fired without the consent that
+                           clears it (`squash` for template drift / removed;
+                           `prune` for removed-region only — #914). When any
+                           region HARDSTOPs, `new_bytes` is None and NOTHING is
                            composed — the installer refuses the whole upgrade
                            (§4.3) and writes no file, no manifest, no release.
         new_bytes:         the composed canonical file bytes to write in Phase B,
@@ -731,6 +742,7 @@ def plan_upgrade(
     base_shas: dict[str, str],
     *,
     squash: bool = False,
+    prune: bool = False,
     first_install: bool = False,
 ) -> Plan:
     """Plan a single agent file's upgrade — the pure Phase-A/Phase-B core (§4.5).
@@ -792,6 +804,9 @@ def plan_upgrade(
             # is a straight REFRESH (write the incoming body, stamp incoming).
             action = Action.REFRESH
         else:
+            # Template-side drift (row 4) honours --squash only, NEVER --prune
+            # (#914): --prune is orphan-drop consent and must not overwrite a
+            # consumer-edited CORE/PACK region.
             action = merge_region(region_id, base_sha, disk_sha, incoming, squash=squash)
 
         actions.append((region_id, action))
@@ -820,7 +835,9 @@ def plan_upgrade(
             # Already gone from disk too — nothing to drop, no row to emit.
             continue
         disk_sha = region_sha(disk_region.body)
-        action = merge_region(region_id, base_sha, disk_sha, disk_sha, squash=squash, removed=True)
+        action = merge_region(
+            region_id, base_sha, disk_sha, disk_sha, squash=squash, prune=prune, removed=True
+        )
         actions.append((region_id, action))
         if action == Action.HARDSTOP:
             hardstops.append((region_id, _drop_reason(region_id, base_sha, disk_sha)))
@@ -1181,6 +1198,7 @@ def _cmd_plan(args) -> int:
             template_bytes,
             base_shas,
             squash=args.squash,
+            prune=args.prune,
             first_install=args.first_install,
         )
     except ParseError as e:
@@ -1374,6 +1392,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--squash",
         action="store_true",
         help="explicit consent: convert drift/removed HARDSTOP → REFRESH/DROP (TD §4.3)",
+    )
+    pl.add_argument(
+        "--prune",
+        action="store_true",
+        help="consent to drop an edited REMOVED region (row 6 HARDSTOP → DROP) "
+        "only; does NOT overwrite template-side drift (#914)",
     )
     pl.add_argument(
         "--first-install",

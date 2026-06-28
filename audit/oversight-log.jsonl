@@ -20,3 +20,4 @@
 {"event":"structural-override","signal":"new-user-facing-state","step":"audit-healthcheck","file":"audit/oversight-log.jsonl","covered":true,"covering_artifact":"N/A","note":"FALSE POSITIVE — classifier matched string literals from step 7 oversight-log entries. No new user-facing state enum or model added by this step.","timestamp":"2026-06-15T07:15:00Z"}
 {"event":"suspension-census","active_suspensions":1,"suspended_gates":["portability"],"timestamp":"2026-06-15T07:15:00Z"}
 {"event":"hos-stale-archive","file":".claude/agents/dep-mapper.md","archived_to":".hos-stale/dep-mapper.md","release":"v0.4.0","sha256":"27036d2ad6df600ba2abb7ca59806f567fe77b84cc36076f809130e9f888d053","timestamp":"2026-06-20T17:39:18Z"}
+{"event":"hos-stale-archive","file":".claude/agents/dep-mapper.md","archived_to":".hos-stale/dep-mapper.md","release":"v0.5.0","sha256":"570800af70326215123634bcd84f159fa6d840c63d0cbe447856d6b03976ce27","timestamp":"2026-06-28T20:37:22Z"}

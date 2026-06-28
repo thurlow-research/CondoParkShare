@@ -34,8 +34,9 @@
 # Logging:
 #   Per-retry:  ⟳ label attempt N/MAX — reason
 #   Final:      ✔ succeeded on attempt N  |  ⏸ SKIPPED  |  ✘ FAILED
-#   Audit:      appends a validator-failure event to audit/oversight-log.jsonl
-#               on exhaustion (final outcome only, not per-attempt).
+#   Audit:      writes a validator-failure event as a write-once per-entry record
+#               under audit/log/ on exhaustion (final outcome only, not
+#               per-attempt) via the canonical audit_log helper (SPEC-888 #888 P2).
 
 # ── Detect timeout binary (Linux: timeout, macOS brew: gtimeout) ──────────────
 _TIMEOUT_BIN=""
@@ -44,6 +45,11 @@ if command -v timeout &>/dev/null; then
 elif command -v gtimeout &>/dev/null; then
     _TIMEOUT_BIN="gtimeout"
 fi
+
+# Per-entry audit-record writer (SPEC-888). Sourced helper; no side effects,
+# safe to source repeatedly. Provides audit_write_event.
+# shellcheck source=lib/audit_log.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/audit_log.sh"
 
 # with_timeout TIMEOUT_SEC cmd [args...] — run cmd under timeout if available.
 # Returns the command's rc (124 if timed out). TIMEOUT_SEC=0 disables timeout.
@@ -105,12 +111,12 @@ run_with_retry() {
         outcome="skipped"
     fi
 
-    # Append final outcome to the audit log (not per-attempt).
+    # Write the final outcome (not per-attempt) as a write-once per-entry record.
     if [[ -d "audit" ]]; then
-        local ts
+        local ts json
         ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date +"%Y-%m-%dT%H:%M:%SZ")
-        echo "{\"event\":\"validator-failure\",\"validator\":\"${label}\",\"required\":${required},\"attempts\":${total_attempts},\"final_outcome\":\"${outcome}\",\"last_error\":\"${last_error}\",\"timestamp\":\"${ts}\"}" \
-            >> "audit/oversight-log.jsonl" 2>/dev/null || true
+        json="{\"event\":\"validator-failure\",\"validator\":\"${label}\",\"required\":${required},\"attempts\":${total_attempts},\"final_outcome\":\"${outcome}\",\"last_error\":\"${last_error}\",\"timestamp\":\"${ts}\"}"
+        audit_write_event "$json" >/dev/null 2>&1 || true
     fi
 
     if [[ "$required" == "true" ]]; then

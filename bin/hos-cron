@@ -21,12 +21,14 @@
 # through to API-key billing. Override path with HOS_CLAUDE_AUTH_ENV.
 #
 # Env overrides:
-#   HOS_CLAUDE_AUTH_ENV   path to the OAuth token file (default ~/.config/hos/claude-auth.env)
-#   HOS_CRON_MAX_SECONDS  wall-clock cap on the claude session (default 1800; 0 disables)
-#   HOS_CRON_MAX_TURNS    optional --max-turns backstop (default unset = no cap)
-#   HOS_CRON_AUTH_PROBE   1 = run a model auth probe before work (default 0; costs a turn)
-#   HOS_IDLE_INTERVAL     idle-backoff threshold in seconds (default 1800)
-#   HOS_CRON_JITTER_MAX   max startup jitter in seconds (default 60; 0 disables)
+#   HOS_CLAUDE_AUTH_ENV         path to the OAuth token file (default ~/.config/hos/claude-auth.env)
+#   HOS_CRON_MAX_SECONDS        wall-clock cap on the claude session (default 1800; 0 disables)
+#   HOS_CRON_MAX_TURNS          optional --max-turns backstop (default unset = no cap)
+#   HOS_CRON_AUTH_PROBE         1 = run a model auth probe before work (default 0; costs a turn)
+#   HOS_IDLE_INTERVAL           idle-backoff threshold in seconds (default 1800)
+#   HOS_CRON_JITTER_MAX         max startup jitter in seconds (default 60; 0 disables)
+#   HOS_TARGET_RELEASE          override the active release title (e.g. v0.4.2); default from projects.conf
+#   HOS_TARGET_MILESTONE_NUMBER override the milestone number directly (skips REST resolution)
 #
 # Crontab example (the wrapper pins its own PATH, so no PATH= prefix is needed):
 #   1,6,11,...  * * * *  /path/to/hos-cron --role worker  --project hos >> /tmp/hos-worker-hos.log 2>&1
@@ -84,7 +86,7 @@ REPO_ROOT="$(_conf_val ${ROLE}_root)"
 [[ -n "$REPO_ROOT" ]] \
   || { echo "hos-cron: no ${PROJECT}_${ROLE}_root in $PROJECTS_CONF"; exit 1; }
 
-export HOS_CONFIG_DIR
+export HOS_CONFIG_DIR REPO_ROOT
 
 LOG_PREFIX="[hos-${ROLE}-cron:${PROJECT}] $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
@@ -93,7 +95,38 @@ _HOS_DIR="${HOS_STATE_DIR:-${HOME}/.hos}"
 _WAKEUP_FILE="$_HOS_DIR/wakeup/${ROLE}"
 _LAST_RUN_FILE="$_HOS_DIR/last-run/${ROLE}-${PROJECT}"
 IDLE_INTERVAL="${HOS_IDLE_INTERVAL:-1800}"
-mkdir -p "$_HOS_DIR/wakeup" "$_HOS_DIR/last-run" "$_HOS_DIR/locks"
+mkdir -p "$_HOS_DIR/wakeup" "$_HOS_DIR/last-run" "$_HOS_DIR/locks" "$_HOS_DIR/validation-cache" "$_HOS_DIR/suspend" "$_HOS_DIR/test-clean"
+_HOS_CACHE_DIR="$_HOS_DIR/validation-cache"
+
+# ── Project suspension check (#778) — early exit before lock ─────────────────
+# bin/hos-suspend writes a JSON marker to $_HOS_DIR/suspend/<project>. When
+# present, skip this cycle cleanly. An optional "until" field auto-expires the
+# marker: remove it on the first fire after the expiration date so cron resumes
+# automatically without needing a manual --clear.
+_SUSPEND_FILE="$_HOS_DIR/suspend/$PROJECT"
+if [[ -f "$_SUSPEND_FILE" ]]; then
+  _until=$(python3 -c "
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    print(d.get('until', ''))
+except Exception:
+    print('')
+" "$_SUSPEND_FILE" 2>/dev/null || echo "")
+  if [[ -n "$_until" ]]; then
+    _today=$(date -u '+%Y-%m-%d')
+    if [[ "$_today" > "$_until" ]]; then
+      rm -f "$_SUSPEND_FILE"
+      echo "$LOG_PREFIX suspension expired (was until $_until) — resuming"
+    else
+      echo "$LOG_PREFIX [SUSPENDED] project $PROJECT suspended until $_until (use: hos-suspend --project $PROJECT --clear)"
+      exit 0
+    fi
+  else
+    echo "$LOG_PREFIX [SUSPENDED] project $PROJECT suspended indefinitely (use: hos-suspend --project $PROJECT --clear)"
+    exit 0
+  fi
+fi
 
 # ── Overlap lock (#728) — portable mkdir mutex (macOS has no flock) ──────────
 # One hos-cron run per (role, project) at a time. Lightweight overlap guard,
@@ -118,12 +151,111 @@ _audit() {
   (cd "$REPO_ROOT" && python3 -m scripts.automation.lib.cycle_log "$event" "$@") 2>/dev/null || true
 }
 
+# ── Audit log sync (#861) ─────────────────────────────────────────────────────
+# Push audit/oversight-log.jsonl and audit/overnight-loop-log.md to the
+# unprotected `audit-log` branch. A GitHub Actions workflow reads from that
+# branch and commits only those files to main, keeping feature PRs free of
+# append-only conflicts while maintaining an auditable sync path.
+_sync_audit_logs() {
+  local _repo="$1"
+  local _files=()
+  [[ -f "$_repo/audit/oversight-log.jsonl"   ]] && _files+=("audit/oversight-log.jsonl")
+  [[ -f "$_repo/audit/overnight-loop-log.md" ]] && _files+=("audit/overnight-loop-log.md")
+  [[ ${#_files[@]} -eq 0 ]] && return 0
+
+  local _tmp_branch="_audit-sync-$$"
+  (
+    cd "$_repo"
+    git fetch origin audit-log main --quiet 2>/dev/null || git fetch origin main --quiet 2>/dev/null || return 0
+    local _base
+    git ls-remote --exit-code origin audit-log &>/dev/null \
+      && _base="origin/audit-log" || _base="origin/main"
+    git checkout -b "$_tmp_branch" "$_base" --quiet 2>/dev/null || return 0
+    local _changed=0
+    for _f in "${_files[@]}"; do
+      git add -f "$_f" 2>/dev/null
+      git diff --cached --quiet "$_f" 2>/dev/null || _changed=1
+    done
+    if [[ "$_changed" -eq 1 ]]; then
+      git commit -m "chore(audit): sync logs $(date -u '+%Y-%m-%dT%H:%M:%SZ')" --quiet
+      git push origin HEAD:audit-log --quiet 2>/dev/null \
+        && echo "$LOG_PREFIX audit logs pushed to audit-log branch" \
+        || echo "$LOG_PREFIX WARN: audit-log push failed (will retry next cycle)"
+    fi
+    git checkout - --quiet 2>/dev/null || true
+    git branch -D "$_tmp_branch" --quiet 2>/dev/null || true
+  )
+}
+
+# ── Pre-jitter dependency check (fail-closed, marker-cached) ─────────────────
+# Fail fast before the jitter sleep if the oversight venv or pytest are missing.
+# A 7-day marker file caches a successful check; its key encodes REPO_ROOT so a
+# repo move invalidates it and triggers a re-check automatically.
+_pre_jitter_deps_check() {
+  local _hash
+  if command -v md5sum &>/dev/null; then
+    _hash=$(printf '%s' "$REPO_ROOT" | md5sum | cut -d' ' -f1)
+  elif command -v md5 &>/dev/null; then
+    _hash=$(printf '%s' "$REPO_ROOT" | md5)
+  else
+    _hash=$(printf '%s' "$REPO_ROOT" | cksum | awk '{print $1}')
+  fi
+  local _marker="$_HOS_CACHE_DIR/deps-${_hash}"
+
+  if [[ -f "$_marker" ]]; then
+    local _now; _now=$(date +%s)
+    local _mtime
+    if ! _mtime=$(stat -c %Y "$_marker" 2>/dev/null); then
+      _mtime=$(stat -f %m "$_marker" 2>/dev/null || echo 0)
+    fi
+    if [[ $(( _now - _mtime )) -lt 604800 ]]; then
+      return 0  # cache hit — skip validation this cycle
+    fi
+    echo "$LOG_PREFIX deps-cache stale — re-validating environment"
+  fi
+
+  local _venv_dir="$REPO_ROOT/scripts/oversight/.venv"
+  if [[ ! -x "$_venv_dir/bin/python" ]]; then
+    echo "$LOG_PREFIX FATAL: oversight venv missing at $_venv_dir — run: bash $REPO_ROOT/scripts/oversight/ensure_venv.sh"
+    _audit cycle-preflight-fail reason=oversight_venv_missing
+    exit 78
+  fi
+  if [[ ! -x "$_venv_dir/bin/pytest" ]]; then
+    echo "$LOG_PREFIX FATAL: pytest missing from oversight venv — run: bash $REPO_ROOT/scripts/oversight/ensure_venv.sh"
+    _audit cycle-preflight-fail reason=oversight_pytest_missing
+    exit 78
+  fi
+
+  touch "$_marker" 2>/dev/null || true
+}
+_pre_jitter_deps_check
+
 # ── Jitter ────────────────────────────────────────────────────────────────────
 # Spread concurrent fires so multiple projects don't stampede git/auth at once.
 # Override to 0 in tests (and any deterministic context) — mirrors machine_lock's
 # HOS_LOCK_JITTER_MAX. Guard the modulo: `% 0` would be a divide-by-zero error.
 _JITTER_MAX="${HOS_CRON_JITTER_MAX:-60}"
 [[ "$_JITTER_MAX" -gt 0 ]] && sleep $(( RANDOM % _JITTER_MAX ))
+
+# ── Environment validation ("cow patty" markers) ───────────────────────────────
+# Check for successful previous setup runs. If markers are missing, log a warning
+# but proceed anyway (fail-open). Markers are dropped by hos_bootstrap.sh and
+# scripts/oversight/ensure_venv.sh on successful completion.
+_validate_env() {
+  local missing=0
+  [[ -f "$HOME/.hos/setup-validation/bootstrap" ]] \
+    || { echo "$LOG_PREFIX ⚠ bootstrap marker missing (run: ./bootstrap/hos_bootstrap.sh)"; missing=1; }
+  # Call ensure_venv.sh to verify (and auto-repair) the oversight venv rather than
+  # trusting the cached marker alone.  A broken venv (e.g. after a Python upgrade)
+  # is detected and rebuilt here so validators can run this cycle.
+  if ! bash "$REPO_ROOT/scripts/oversight/ensure_venv.sh" --quiet 2>/dev/null; then
+    echo "$LOG_PREFIX ⚠ oversight-venv broken or missing — validators will not run"
+    missing=1
+  fi
+  [[ $missing -eq 0 ]] && echo "$LOG_PREFIX ✓ environment validated"
+  return 0  # fail-open: don't block on broken/missing venv
+}
+_validate_env
 
 # ── Wakeup / idle backoff ─────────────────────────────────────────────────────
 if [[ -f "$_WAKEUP_FILE" ]]; then
@@ -153,6 +285,10 @@ fi
 # ── Git sync ──────────────────────────────────────────────────────────────────
 git -C "$REPO_ROOT" fetch origin main --quiet 2>/dev/null || true
 git -C "$REPO_ROOT" pull origin main --ff-only --quiet 2>/dev/null || true
+
+# ── Repo slug — shared by halt check, PR routing, and milestone resolution ────
+_REPO_SLUG="${HOS_REPO_SLUG:-$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null \
+  | sed -E 's|.*github\.com[:/]([^/]+/[^.]+)(\.git)?$|\1|' || echo "")}"
 
 # ── Preflight ─────────────────────────────────────────────────────────────────
 export HOS_REQUIRE_PREFLIGHT=1
@@ -233,14 +369,260 @@ if [[ "${HOS_CRON_AUTH_PROBE:-0}" == "1" ]]; then
   fi
 fi
 
-# ── Inner-loop tests (worker only) ───────────────────────────────────────────
-if [[ "$ROLE" == "worker" ]]; then
-  if ! bash "$REPO_ROOT/scripts/framework/run_tests_inner_loop.sh" -q 2>/dev/null; then
-    echo "$LOG_PREFIX INNER-LOOP TESTS FAILED"
-    _audit cycle-preflight-fail reason=inner_loop_tests_failed
+# ── Halt check (#793) — skip cycle if a hos-halt issue is open ───────────────
+# #912: FAIL CLOSED. The hos-halt issue is a human emergency stop, so the cycle
+# may proceed ONLY when we positively confirm zero open hos-halt issues. An empty
+# repo slug, a gh API error, or a non-numeric/empty count means halt-state is
+# UNKNOWN — skip the cycle (reason=halt_check_unavailable) rather than risk
+# running past an active halt. Previously an empty slug skipped the whole block
+# and a gh error defaulted the count to "0", both bypassing the stop control.
+if [[ -z "$_REPO_SLUG" ]]; then
+  echo "$LOG_PREFIX HALT CHECK UNAVAILABLE: empty repo slug — skipping cycle (fail-closed)"
+  _audit cycle-skip reason=halt_check_unavailable
+  exit 0
+fi
+if _HALT_COUNT=$(gh api "repos/${_REPO_SLUG}/issues?state=open&labels=hos-halt&per_page=1" \
+    --jq 'length' 2>/dev/null); then
+  _HALT_RC=0
+else
+  _HALT_RC=$?
+fi
+if [[ "$_HALT_RC" -ne 0 || ! "$_HALT_COUNT" =~ ^[0-9]+$ ]]; then
+  echo "$LOG_PREFIX HALT CHECK UNAVAILABLE: gh query failed (rc=$_HALT_RC, count='${_HALT_COUNT}') — skipping cycle (fail-closed)"
+  _audit cycle-skip reason=halt_check_unavailable
+  exit 0
+fi
+if [[ "$_HALT_COUNT" -gt 0 ]]; then
+  echo "$LOG_PREFIX HALT: open hos-halt issue detected — skipping cycle"
+  _audit cycle-skip reason=hos-halt
+  exit 0
+fi
+
+# ── Agent availability check (#794) — fail-closed on missing agent files ──────
+_AGENTS_LIST="$REPO_ROOT/scripts/framework/consumer_agents.txt"
+if [[ -f "$_AGENTS_LIST" ]]; then
+  _missing_agents=()
+  while IFS= read -r _agent_slug; do
+    [[ -z "$_agent_slug" || "$_agent_slug" == \#* ]] && continue
+    [[ -f "$REPO_ROOT/.claude/agents/${_agent_slug}.md" ]] \
+      || _missing_agents+=("$_agent_slug")
+  done < "$_AGENTS_LIST"
+  if [[ ${#_missing_agents[@]} -gt 0 ]]; then
+    echo "$LOG_PREFIX AGENT AVAILABILITY FAIL: missing ${_missing_agents[*]}"
+    _audit cycle-preflight-fail reason=agent_availability
+    if [[ -n "$_REPO_SLUG" ]]; then
+      # #849 (no-idempotency class): fail-CLOSED dedup. A dedup-query *error*
+      # must never default the count to 0 — that fails open and files a fresh
+      # [BLOCKED] issue every cycle, flooding the queue. Only file when the
+      # query SUCCEEDS and confirms zero existing issues; on query failure,
+      # skip filing (a duplicate is worse than a deferred file — the missing
+      # agent persists, so the next cycle whose query succeeds files once).
+      if _aa_existing=$(gh api "repos/${_REPO_SLUG}/issues?state=open&labels=needs-human&per_page=20" \
+          --jq '[.[] | select(.title | startswith("[BLOCKED] agent unavailable"))] | length' \
+          2>/dev/null); then
+        _aa_existing="${_aa_existing:-0}"
+        if [[ "$_aa_existing" == "0" ]]; then
+          gh issue create \
+            --repo "$_REPO_SLUG" \
+            --title "[BLOCKED] agent unavailable — ${ROLE} halted (missing: ${_missing_agents[*]})" \
+            --label "needs-human,needs-ai" \
+            --body "Required agent files missing from \`$REPO_ROOT/.claude/agents/\`: \`${_missing_agents[*]}\`. ${ROLE} cannot launch. Re-run \`hos_install.sh\` or restore the missing files." \
+            2>/dev/null || true
+        fi
+      else
+        echo "$LOG_PREFIX WARN: agent-availability dedup query failed — skipping [BLOCKED] issue creation (fail-closed) to avoid duplicate filings"
+      fi
+    fi
     exit 1
   fi
 fi
+
+# ── Target milestone resolution (#780) ────────────────────────────────────────
+# Resolve the active release and milestone number so cron prompts never embed a
+# literal milestone=<N>. Source of truth: projects.conf target_release key (or
+# HOS_TARGET_RELEASE env override). Milestone number derived via REST API so
+# rolling to the next release is a single config change, no prompt edit.
+HOS_TARGET_RELEASE="${HOS_TARGET_RELEASE:-$(_conf_val target_release)}"
+if [[ -n "$HOS_TARGET_RELEASE" ]]; then
+  if [[ -z "${HOS_TARGET_MILESTONE_NUMBER:-}" ]]; then
+    if [[ -z "$_REPO_SLUG" ]]; then
+      echo "$LOG_PREFIX FATAL: cannot derive GitHub repo from git remote (needed for milestone resolution)"
+      _audit cycle-preflight-fail reason=milestone_repo_unresolvable
+      exit 78
+    fi
+    HOS_TARGET_MILESTONE_NUMBER=$(gh api "repos/${_REPO_SLUG}/milestones?state=all&per_page=100" \
+      --jq ".[] | select(.title == \"${HOS_TARGET_RELEASE}\" or (.title | startswith(\"${HOS_TARGET_RELEASE} \"))) | .number" \
+      2>/dev/null | head -1)
+    if [[ -z "$HOS_TARGET_MILESTONE_NUMBER" ]]; then
+      echo "$LOG_PREFIX FATAL: milestone '${HOS_TARGET_RELEASE}' not found in ${_REPO_SLUG} — set ${PROJECT}_target_release in $PROJECTS_CONF"
+      _audit cycle-preflight-fail reason=milestone_not_found
+      exit 78
+    fi
+  fi
+  export HOS_TARGET_RELEASE HOS_TARGET_MILESTONE_NUMBER
+  echo "$LOG_PREFIX target: ${HOS_TARGET_RELEASE} → milestone #${HOS_TARGET_MILESTONE_NUMBER}"
+else
+  [[ "$ROLE" == "worker" ]] \
+    && echo "$LOG_PREFIX WARN: ${PROJECT}_target_release not set in $PROJECTS_CONF — prompt will not have milestone substituted"
+fi
+
+# ── Inner-loop baseline (worker only) — skip when repo is known-clean (#789) ──
+# Cycle-start tests exist to establish a known-good baseline before Claude touches
+# the repo, catching a broken tree left by a previously-crashed cycle. That only
+# has value when state is UNKNOWN. When HEAD matches the last SHA at which the
+# baseline passed (the "cowpat") and the worktree is clean, nothing has changed
+# since the last green run — skip the redundant ~2–3 min suite. The pre-PR §8.7
+# gate (Claude runs tests against its own changes before any PR) is unchanged and
+# is the real safety net; this only trims the redundant cycle-start run.
+if [[ "$ROLE" == "worker" ]]; then
+  _COWPAT_FILE="$_HOS_DIR/test-clean/${ROLE}-${PROJECT}"
+  _CURRENT_HEAD=$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || echo "")
+  _CLEAN_SHA=$(cat "$_COWPAT_FILE" 2>/dev/null || echo "")
+  _WORKTREE_DIRTY=$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null || echo "")
+
+  if [[ -n "$_CURRENT_HEAD" && "$_CURRENT_HEAD" == "$_CLEAN_SHA" && -z "$_WORKTREE_DIRTY" ]]; then
+    # Known clean: HEAD unchanged since the last green baseline and no uncommitted
+    # files. Skip — Claude still runs tests before any PR (§8.7). No audit event:
+    # the steady-state skip fires every cycle and would flood the audit log.
+    echo "$LOG_PREFIX environment clean (HEAD ${_CURRENT_HEAD:0:12} matches cowpat) — skipping cycle-start baseline test run"
+  else
+    # Unknown or dirty state — no cowpat (first run), HEAD moved since the last
+    # green run, a dirty tree from a crashed cycle, or HEAD unresolvable. Run the
+    # baseline before Claude starts so it never builds on a broken tree.
+    if ! bash "$REPO_ROOT/scripts/framework/run_tests_inner_loop.sh" -q 2>/dev/null; then
+      echo "$LOG_PREFIX INNER-LOOP BASELINE TESTS FAILED"
+      _audit cycle-preflight-fail reason=inner_loop_tests_failed
+      # Broken-state flow (#789): rather than a silent exit, file a needs-human
+      # issue so a human can investigate/authorize a fix — the worker is halted
+      # until the baseline is green again. Fail-CLOSED dedup mirrors the #849
+      # agent-availability guard: only file when the dedup query SUCCEEDS and
+      # confirms zero existing broken-state issues. A query error must never
+      # default the count to 0 — that would file a fresh issue every cycle and
+      # flood the queue. On query failure, skip filing; the next cycle whose
+      # query succeeds files once.
+      if [[ -n "$_REPO_SLUG" ]]; then
+        _bs_title_prefix="[BLOCKED] inner-loop tests failing on ${PROJECT}"
+        if _bs_existing=$(gh api "repos/${_REPO_SLUG}/issues?state=open&labels=needs-human&per_page=20" \
+            --jq "[.[] | select(.title | startswith(\"${_bs_title_prefix}\"))] | length" \
+            2>/dev/null); then
+          _bs_existing="${_bs_existing:-0}"
+          if [[ "$_bs_existing" == "0" ]]; then
+            gh issue create \
+              --repo "$_REPO_SLUG" \
+              --title "${_bs_title_prefix} — worker halted" \
+              --label "needs-human,needs-ai" \
+              --body "$(printf 'Cycle-start inner-loop baseline tests are failing on \`%s\` at HEAD \`%s\`. The worker is halted — it will not launch Claude or open PRs until the baseline is green.\n\nThis usually means a previous cycle left the repo in a broken state. A human should investigate, fix or revert the breakage, and close this issue (or authorize an AI fix).\n\nReproduce locally:\n\n    bash scripts/framework/run_tests_inner_loop.sh\n' "$PROJECT" "${_CURRENT_HEAD:-unknown}")" \
+              2>/dev/null && echo "$LOG_PREFIX filed broken-state needs-human issue" \
+              || echo "$LOG_PREFIX WARN: broken-state issue filing failed"
+          else
+            echo "$LOG_PREFIX broken-state issue already open — not filing a duplicate"
+          fi
+        else
+          echo "$LOG_PREFIX WARN: broken-state dedup query failed — skipping issue creation (fail-closed) to avoid duplicate filings"
+        fi
+      fi
+      exit 1
+    fi
+    # Baseline green — stamp the cowpat with the SHA just verified so the next
+    # cycle on an unchanged repo skips the redundant run. Only when HEAD resolved
+    # (a non-git or unresolvable REPO_ROOT leaves no marker → always re-runs).
+    [[ -n "$_CURRENT_HEAD" ]] && printf '%s\n' "$_CURRENT_HEAD" > "$_COWPAT_FILE"
+  fi
+fi
+
+# ── Worker: skip Claude if all own PRs are awaiting human merge (#791) ────────
+if [[ "$ROLE" == "worker" && -n "$_REPO_SLUG" ]]; then
+  _OPEN_PR_NUMS=$(gh api "repos/${_REPO_SLUG}/pulls?state=open&per_page=20" \
+    --jq ".[] | select(.user.login == \"${HOS_BOT_LOGIN}\") | .number" 2>/dev/null || echo "")
+  if [[ -n "$_OPEN_PR_NUMS" ]]; then
+    _PR_ROUTING="awaiting-merge"
+    while IFS= read -r _pr_num; do
+      [[ -z "$_pr_num" ]] && continue
+      # Check mergeable_state first via detail endpoint — a conflicting PR must
+      # be fixed before anything else, even if it has prior APPROVED reviews
+      # (#867). REST API uses mergeable_state="dirty" not "CONFLICTING" (GraphQL).
+      _pr_ms=$(gh api "repos/${_REPO_SLUG}/pulls/${_pr_num}" \
+        --jq '.mergeable_state' 2>/dev/null || echo "unknown")
+      if [[ "$_pr_ms" == "dirty" ]]; then _PR_ROUTING="needs-fix"; break; fi
+      _pr_cr=$(gh api "repos/${_REPO_SLUG}/pulls/${_pr_num}/reviews" \
+        --jq '[.[] | select(.state == "CHANGES_REQUESTED")] | length' 2>/dev/null || echo "0")
+      _pr_cr="${_pr_cr:-0}"
+      if [[ "$_pr_cr" -gt 0 ]]; then _PR_ROUTING="needs-fix"; break; fi
+      _pr_ap=$(gh api "repos/${_REPO_SLUG}/pulls/${_pr_num}/reviews" \
+        --jq '[.[] | select(.state == "APPROVED")] | length' 2>/dev/null || echo "0")
+      _pr_ap="${_pr_ap:-0}"
+      if [[ "$_pr_ap" -eq 0 ]]; then _PR_ROUTING="needs-attention"; fi
+    done <<< "$_OPEN_PR_NUMS"
+    if [[ "$_PR_ROUTING" == "awaiting-merge" ]]; then
+      _pr_count=$(echo "$_OPEN_PR_NUMS" | grep -c '[0-9]' 2>/dev/null || echo "?")
+      echo "$LOG_PREFIX all ${_pr_count} open PR(s) awaiting human merge — skipping Claude launch"
+      _audit cycle-skip reason=awaiting-merge
+      printf '{"reason":"worker-cycle-skip","project":"%s","timestamp":"%s"}\n' \
+        "$PROJECT" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+        > "$_HOS_DIR/wakeup/overseer"
+      date +%s > "$_LAST_RUN_FILE"
+      exit 0
+    fi
+  fi
+fi
+
+# ── Overseer: pre-filter actionable PRs before invoking Claude ───────────────
+# Deterministically check each open PR's merge status via the detail endpoint
+# (the list endpoint returns mergeable=null until GitHub computes it lazily).
+# Only non-conflicting, non-draft PRs are passed to the overseer. If none exist,
+# skip the Claude invocation entirely — no AI turn wasted on an unmergeable queue.
+_HOS_ACTIONABLE_PRS=""   # space-separated "#N" list injected into overseer prompt
+_HOS_SKIPPED_PRS=""      # for logging only
+if [[ "$ROLE" == "overseer" ]]; then
+  # Capture gh's exit status separately from its output (#915). A bare
+  # `$(... || true)` swallows a transient API failure into an empty result,
+  # which the empty-check below would misread as "no open PRs" — masking the
+  # cause (logged as reason=no_open_prs), stamping _LAST_RUN_FILE and thereby
+  # arming the 1800s idle backoff, so pending review/merge work is dropped for
+  # up to 30 min on an API blip. Treat empty as "no PRs" ONLY when the fetch
+  # succeeded; on failure do NOT stamp last-run (so the next cycle retries
+  # immediately) and exit with a distinct reason. (Idle-backoff family: #711.)
+  if _open_pr_nums=$(gh api "repos/${_REPO_SLUG}/pulls?state=open&per_page=20" \
+      --jq '.[].number' 2>/dev/null); then
+    _pr_fetch_ok=1
+  else
+    _pr_fetch_ok=0
+  fi
+  if [[ "$_pr_fetch_ok" -eq 0 ]]; then
+    echo "$LOG_PREFIX open-PR fetch failed — skipping cycle without arming idle backoff"
+    _audit cycle-skip reason=pr_fetch_unavailable
+    exit 0
+  fi
+  if [[ -z "$_open_pr_nums" ]]; then
+    echo "$LOG_PREFIX no open PRs — skipping cycle"
+    _audit cycle-skip reason=no_open_prs
+    date +%s > "$_LAST_RUN_FILE"
+    exit 0
+  fi
+  for _pr_num in $_open_pr_nums; do
+    _detail=$(gh api "repos/${_REPO_SLUG}/pulls/${_pr_num}" \
+      --jq '{ms: .mergeable_state, d: .draft}' 2>/dev/null || echo '{"ms":"unknown","d":false}')
+    _ms=$(printf '%s' "$_detail" | python3 -c \
+      "import json,sys; print(json.load(sys.stdin).get('ms','unknown'))" 2>/dev/null || echo "unknown")
+    _d=$(printf '%s' "$_detail" | python3 -c \
+      "import json,sys; print(json.load(sys.stdin).get('d', False))" 2>/dev/null || echo "False")
+    if [[ "$_ms" == "dirty" || "$_d" == "True" ]]; then
+      _HOS_SKIPPED_PRS="${_HOS_SKIPPED_PRS} #${_pr_num}(${_ms})"
+    else
+      _HOS_ACTIONABLE_PRS="${_HOS_ACTIONABLE_PRS} #${_pr_num}"
+    fi
+  done
+  _HOS_ACTIONABLE_PRS="${_HOS_ACTIONABLE_PRS# }"
+  _HOS_SKIPPED_PRS="${_HOS_SKIPPED_PRS# }"
+  if [[ -z "$_HOS_ACTIONABLE_PRS" ]]; then
+    echo "$LOG_PREFIX all open PRs are conflicting/draft (${_HOS_SKIPPED_PRS}) — skipping cycle"
+    _audit cycle-skip reason=no_actionable_prs "skipped=${_HOS_SKIPPED_PRS}"
+    date +%s > "$_LAST_RUN_FILE"
+    exit 0
+  fi
+  echo "$LOG_PREFIX actionable: ${_HOS_ACTIONABLE_PRS} | skipped: ${_HOS_SKIPPED_PRS:-none}"
+fi
+
 
 # ── Cycle start ───────────────────────────────────────────────────────────────
 _audit cycle-start "bot=$HOS_BOT_LOGIN project=$PROJECT"
@@ -283,10 +665,74 @@ _run_claude() {  # stdin is inherited → passed through to claude
 # ── Invoke Claude — stdin pipe avoids '---' being parsed as a CLI flag ───────
 # Capture the real exit code: under `set -e`, a bare failing command in an if-body
 # would abort the script before `$?` is read, so guard with `|| _claude_exit=$?`.
+# #805: inject WORKING DIRECTORY from $REPO_ROOT so prompt files never embed a
+# machine-specific path. Also applies @@MILESTONE@@ substitution (#780) and
+# prepends the overseer pre-filter preamble (#852).
 PROMPT_FILE="$REPO_ROOT/bootstrap/${ROLE}-cron-prompt.md"
+_run_start_epoch=$(date +%s)
 _claude_exit=0
+_build_prompt() {
+  printf 'WORKING DIRECTORY: %s\n\n' "$REPO_ROOT"
+  if [[ -n "${HOS_TARGET_MILESTONE_NUMBER:-}" ]]; then
+    sed -e "s/@@TARGET_RELEASE@@/${HOS_TARGET_RELEASE}/g" \
+        -e "s/@@MILESTONE_NUMBER@@/${HOS_TARGET_MILESTONE_NUMBER}/g" \
+        "$PROMPT_FILE"
+  else
+    cat "$PROMPT_FILE"
+  fi
+  _build_context
+}
+
+# #792: pre-compute cycle context (open bot PRs + next work candidates) so the
+# agent skips the Step 1/2 discovery API calls and proceeds directly to decisions.
+# Fail-open: any section that errors is silently omitted; never abort the launch.
+_build_context() {
+  printf '\n## Pre-computed cycle context — %s\n\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+  printf '### Open bot PRs\n'
+  if [[ -n "${_REPO_SLUG:-}" && -n "${HOS_BOT_LOGIN:-}" ]]; then
+    _ctx_prs=$(gh api "repos/${_REPO_SLUG}/pulls?state=open&per_page=20" \
+      --jq ".[] | select(.user.login == \"${HOS_BOT_LOGIN}\") | \"#\(.number) \(.title | .[0:70]) [\(.labels | map(.name) | join(\",\"))]\"" \
+      2>/dev/null || echo "")
+    if [[ -n "$_ctx_prs" ]]; then
+      printf '%s\n' "$_ctx_prs"
+    else
+      printf 'None.\n'
+    fi
+  else
+    printf '(repo slug not available)\n'
+  fi
+
+  printf '\n'
+
+  if [[ "${ROLE:-}" == "worker" && -n "${HOS_TARGET_MILESTONE_NUMBER:-}" && -n "${_REPO_SLUG:-}" ]]; then
+    printf '### Next work candidates (%s, needs-ai, not needs-human; highest priority first)\n' "${HOS_TARGET_RELEASE:-active milestone}"
+    # #901: order by (priority desc, number asc) via the canonical jq filter so
+    # this path and the worker-cron-prompt.md Step-2 fallback select identically.
+    # per_page=100 (GitHub's single-page max): the priority sort must see the WHOLE
+    # backlog, else a high-priority issue on a later page would be missed. A single
+    # milestone exceeding 100 open needs-ai issues is the (documented) ceiling.
+    # Fail-open: a missing/broken filter yields no section. head -5 caps display
+    # only — the worker picks the first non-blocked candidate.
+    _ctx_issues=$(gh api "repos/${_REPO_SLUG}/issues?state=open&milestone=${HOS_TARGET_MILESTONE_NUMBER}&labels=needs-ai&per_page=100" \
+      --jq "$(cat "$REPO_ROOT/scripts/automation/lib/next_candidates.jq")" \
+      2>/dev/null | head -5 || echo "")
+    if [[ -n "$_ctx_issues" ]]; then
+      printf '%s\n' "$_ctx_issues"
+    else
+      printf '(none available or fetch failed)\n'
+    fi
+  fi
+}
+
 if [[ -f "$PROMPT_FILE" ]]; then
-  _run_claude < "$PROMPT_FILE" || _claude_exit=$?
+  if [[ "$ROLE" == "overseer" && -n "$_HOS_ACTIONABLE_PRS" ]]; then
+    { printf '[hos-cron pre-filter] HOS_ACTIONABLE_PRS: %s | skipped (conflicting/draft): %s\n---\n' \
+          "$_HOS_ACTIONABLE_PRS" "${_HOS_SKIPPED_PRS:-none}"; \
+      _build_prompt; } | _run_claude || _claude_exit=$?
+  else
+    _build_prompt | _run_claude || _claude_exit=$?
+  fi
 else
   echo "Run the $ROLE LOOP for project $PROJECT." | _run_claude || _claude_exit=$?
 fi
@@ -300,7 +746,40 @@ elif [[ $_claude_exit -ne 0 ]]; then
 fi
 
 # ── Post-cycle bookkeeping ────────────────────────────────────────────────────
-[[ $_claude_exit -eq 0 ]] && date +%s > "$_LAST_RUN_FILE"
+if [[ $_claude_exit -eq 0 ]]; then
+  date +%s > "$_LAST_RUN_FILE"
+  # If work was done this cycle, drop a self-wakeup so the next cron fire bypasses
+  # the idle backoff and picks up any remaining items without waiting IDLE_INTERVAL.
+  # Reuses the existing wakeup mechanism — no new file type needed.
+  _did_work=0
+  if [[ -n "${_REPO_SLUG:-}" && -n "${HOS_BOT_LOGIN:-}" ]]; then
+    _run_start_iso=$(python3 -c "
+import datetime, sys
+print(datetime.datetime.fromtimestamp(int(sys.argv[1]), tz=datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'))
+" "$_run_start_epoch" 2>/dev/null || echo "")
+    if [[ -n "$_run_start_iso" ]]; then
+      if [[ "$ROLE" == "worker" ]]; then
+        _new_prs=$(gh api "repos/${_REPO_SLUG}/pulls?state=all&sort=created&direction=desc&per_page=10" \
+          --jq "[.[] | select(.user.login == \"$HOS_BOT_LOGIN\" and .created_at >= \"$_run_start_iso\")] | length" \
+          2>/dev/null || echo "0")
+        [[ "${_new_prs:-0}" -gt 0 ]] && _did_work=1
+      elif [[ "$ROLE" == "overseer" ]]; then
+        _merged=$(gh api "repos/${_REPO_SLUG}/pulls?state=closed&sort=updated&direction=desc&per_page=10" \
+          --jq "[.[] | select(.merged_by.login == \"$HOS_BOT_LOGIN\" and .merged_at != null and .merged_at >= \"$_run_start_iso\")] | length" \
+          2>/dev/null || echo "0")
+        [[ "${_merged:-0}" -gt 0 ]] && _did_work=1
+      fi
+    fi
+  fi
+  if [[ "$_did_work" -eq 1 ]]; then
+    printf '{"reason":"self-wakeup-more-work","timestamp":"%s"}\n' \
+      "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$_WAKEUP_FILE"
+    echo "$LOG_PREFIX outcome: did-work — self-wakeup dropped"
+  else
+    echo "$LOG_PREFIX outcome: idle"
+  fi
+fi
+_sync_audit_logs "$REPO_ROOT"
 
 # Signal the other agent
 if [[ "$ROLE" == "worker" ]]; then

@@ -13,7 +13,7 @@
 #   3. venv/bin/python
 #   4. python3 (system — last resort, may lack project deps)
 #
-# Exit 0 = check passed or no manage.py. Exit 1 = Django reported errors.
+# Exit 0 = check passed or no manage.py. Exit 1 = Django errors or Python unavailable.
 #
 # Usage: ./django_check.sh
 #        DJANGO_PYTHON=/path/to/python ./django_check.sh
@@ -42,8 +42,9 @@ elif [[ -x "venv/bin/python" ]]; then
 elif command -v python3 &>/dev/null; then
     PY="python3"
 else
-    echo "SKIP: no python3 found"
-    exit 0
+    echo "GATE FAIL: no Python interpreter found — manage.py check cannot run (#764)"
+    echo "  Install python3 (or set DJANGO_PYTHON) and re-run."
+    exit 1
 fi
 
 echo "Python: $PY"

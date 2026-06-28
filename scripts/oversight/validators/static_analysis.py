@@ -27,17 +27,28 @@ _hos_sys.path.insert(0, str(_hos_pl.Path(__file__).resolve().parent))
 from schema import WEIGHTS, make_finding, make_result, normalize  # noqa: E402
 
 
-def _run_bandit(files: list[str]) -> list[dict]:
+def _run_bandit(files: list[str]) -> tuple[list[dict], str | None]:
+    """
+    Run bandit and return (results, error).
+
+    error is non-None when bandit could not produce a usable result — the tool
+    is missing or its output was unparseable. Callers must propagate this as a
+    validator-level ``error=`` so the aggregator EXCLUDES the highest-weight
+    security dimension rather than scoring a clean 0.0 (fail-open). (#917)
+    """
     try:
         result = subprocess.run(
             ["bandit", "-f", "json", "-ll", "-ii"] + files,
             capture_output=True,
             text=True,
         )
+    except FileNotFoundError:
+        return [], "bandit not installed — run: pip install bandit"
+    try:
         data = json.loads(result.stdout)
-        return data.get("results", [])
-    except (FileNotFoundError, json.JSONDecodeError):
-        return []
+    except json.JSONDecodeError:
+        return [], "bandit output unparseable — scan failed, cannot assess security risk"
+    return data.get("results", []), None
 
 
 def _run_semgrep(files: list[str]) -> list[dict]:
@@ -63,7 +74,19 @@ _BANDIT_CONF_MULTIPLIER = {"HIGH": 1.0, "MEDIUM": 0.8, "LOW": 0.6}
 
 
 def analyse_files(file_paths: list[str]) -> dict:
-    bandit_results = _run_bandit(file_paths)
+    bandit_results, bandit_error = _run_bandit(file_paths)
+    if bandit_error is not None:
+        # Bandit is the primary security tool here. If it cannot run, this
+        # dimension has no signal — exclude it from the composite rather than
+        # reporting a clean 0.0 that drags the score toward LOW. (#917)
+        return make_result(
+            dimension="static_analysis",
+            score=0.0,
+            raw_value={"error": bandit_error},
+            weight=WEIGHTS["static_analysis"],
+            error=bandit_error,
+        )
+
     semgrep_results = _run_semgrep(file_paths)
 
     # Only score MEDIUM severity (HIGH is a gate-level block)

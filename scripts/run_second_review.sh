@@ -59,8 +59,17 @@
 
 set -euo pipefail
 
-# Load project .env if present (for threshold overrides)
-[[ -f .env ]] && set -o allexport && source .env && set +o allexport 2>/dev/null || true
+# Read threshold overrides from .env without executing it as shell.
+# Only the two specific keys are extracted via grep/cut (strict numeric regex).
+# Sourcing a repo-local .env would execute author-controlled shell before review,
+# defeating the gate's purpose (HOS#765).
+if [[ -f .env ]]; then
+    _val=$(grep -E '^OVERSIGHT_AGY_THRESHOLD=[0-9.]+$' .env | cut -d= -f2 | head -1)
+    [[ -n "$_val" ]] && OVERSIGHT_AGY_THRESHOLD="$_val"
+    _val=$(grep -E '^OVERSIGHT_CODEX_THRESHOLD=[0-9.]+$' .env | cut -d= -f2 | head -1)
+    [[ -n "$_val" ]] && OVERSIGHT_CODEX_THRESHOLD="$_val"
+    unset _val
+fi
 
 # Thresholds — override via environment
 AGY_THRESHOLD="${OVERSIGHT_AGY_THRESHOLD:-0.30}"
@@ -173,7 +182,16 @@ CODEX_AVAILABLE=false
 # normalization and the >= threshold comparison are done inside the module.
 SELECT_OUT=$(python3 "$(dirname "$0")/oversight/second_review_logic.py" \
     select-reviewers --score "$SCORE" --tier "$TIER" \
-    --agy-threshold "$AGY_THRESHOLD" --codex-threshold "$CODEX_THRESHOLD")
+    --agy-threshold "$AGY_THRESHOLD" --codex-threshold "$CODEX_THRESHOLD") || {
+    echo "ERROR: reviewer selection helper exited non-zero — cannot determine which reviewers to run." >&2
+    echo "       Failing closed: cross-vendor review cannot be skipped silently (#681)." >&2
+    exit 1
+}
+if [[ -z "$SELECT_OUT" ]]; then
+    echo "ERROR: reviewer selection helper returned empty output — cannot determine which reviewers to run." >&2
+    echo "       Failing closed: cross-vendor review cannot be skipped silently (#681)." >&2
+    exit 1
+fi
 eval "$SELECT_OUT"   # sets RUN_AGY / RUN_CODEX to true|false
 
 if ! $RUN_AGY && ! $RUN_CODEX; then

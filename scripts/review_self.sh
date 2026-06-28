@@ -49,7 +49,7 @@ if [[ "$REVIEWER" != "agy" && "$REVIEWER" != "codex" ]]; then
 fi
 
 GREEN="\033[32m"; YELLOW="\033[33m"; CYAN="\033[36m"
-RED="\033[31m"; BOLD="\033[1m"; RESET="\033[0m"
+RED="\033[31m"; RESET="\033[0m"
 ok()   { echo -e "  ${GREEN}✔${RESET}  $*"; }
 info() { echo -e "  ${CYAN}→${RESET}  $*"; }
 warn() { echo -e "  ${YELLOW}⚠${RESET}  $*"; }
@@ -93,7 +93,7 @@ for agent in risk-assessor dep-mapper risk-historian oversight-evaluator oversig
 done
 
 # Key scripts
-CONTEXT+=$(build_section "install.sh"                                    "install.sh")
+CONTEXT+=$(build_section "scripts/framework/install.sh"                  "scripts/framework/install.sh")
 CONTEXT+=$(build_section "scripts/run_second_review.sh"                  "scripts/run_second_review.sh")
 CONTEXT+=$(build_section "scripts/run_red_team.sh"                       "scripts/run_red_team.sh")
 CONTEXT+=$(build_section "scripts/oversight/run_validators.sh"            "scripts/oversight/run_validators.sh")
