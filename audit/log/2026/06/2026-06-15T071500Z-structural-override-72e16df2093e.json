@@ -1,0 +1,1 @@
+{"covered":true,"covering_artifact":"N/A","event":"structural-override","file":"audit/oversight-log.jsonl","note":"FALSE POSITIVE — classifier matched string literals from step 7 oversight-log entries. No new user-facing state enum or model added by this step.","signal":"new-user-facing-state","step":"audit-healthcheck","timestamp":"2026-06-15T07:15:00Z"}
