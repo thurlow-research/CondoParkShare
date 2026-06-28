@@ -1,0 +1,70 @@
+name: Overseer tier-ceiling gate
+
+# Server-side enforcement of the OVERSEER_CEILING trust ratchet
+# (AGENT-IDENTITY.md §7, #167): when the overseer bot approves a PR, this
+# check verifies that the PR's computed risk tier does not exceed the ceiling
+# configured in machine-accounts.env. Above ceiling → FAIL (human required).
+#
+# If the overseer has NOT approved the PR, this check trivially passes
+# (ceiling enforcement is only relevant when the overseer is the approver).
+#
+# To make it BLOCKING: add "require-tier-ceiling" to the branch-protection
+# "Require status checks to pass" list (see docs/MACHINE-ACCOUNTS-SETUP.md).
+# Pairs with "require-human-approval" to form the two-gate server-side
+# enforcement layer.
+#
+# Re-runs on pull_request_review so the gate re-evaluates each time the
+# overseer submits or withdraws an approval.
+
+# SECURITY: uses pull_request_TARGET, not pull_request. Under pull_request_target
+# the workflow definition, the gate script, and machine-accounts.env all run from
+# the TRUSTED BASE branch — NOT the PR's version. So a PR cannot edit this
+# workflow or the gate script to neuter the check that gates it. The PR's changed
+# files and reviews are read as DATA via `gh` API calls, never checked out and
+# executed. (Same security model as require-human-approval.yml.)
+on:
+  pull_request_target:
+    branches: [main, "release/v*"]
+  pull_request_review:
+    types: [submitted, dismissed]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  require-tier-ceiling:
+    # The job `name` IS the status-check context GitHub reports to branch
+    # protection. It MUST equal the required context in
+    # scripts/framework/setup_branch_protection.sh (`require-tier-ceiling`),
+    # or the required context stays permanently "expected" and every merge
+    # returns HTTP 405 while the gate appears green (#737). Keep these in sync;
+    # tests/framework/test_branch_protection_contexts.py enforces it.
+    name: require-tier-ceiling
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (TRUSTED base — never the PR head)
+        # Under pull_request_target the default ref is the base branch, so this
+        # checks out the trusted gate script and machine-accounts.env. Do NOT add
+        # `ref: ${{ github.event.pull_request.head.sha }}` — that would run the
+        # PR's version of the gate and reintroduce the self-bypass.
+        uses: actions/checkout@v4
+
+      - name: Overseer tier-ceiling gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          # Load machine-account identity (BOT_OVERSEER_USERNAME, OVERSEER_CEILING).
+          if [[ -f scripts/framework/machine-accounts.env ]]; then
+            # shellcheck disable=SC1091
+            source scripts/framework/machine-accounts.env
+          fi
+
+          python3 scripts/framework/require_tier_ceiling.py \
+            --pr "$PR_NUMBER"
