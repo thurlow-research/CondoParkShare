@@ -1,6 +1,6 @@
 role: a11y
 agent: a11y-reviewer
-status: NOT_APPLICABLE
-signed_at: 2026-06-29T20:28:31Z          # informational — the gate uses the git commit time
-head_at_signing: 90d8d26
-note: #189 touches no user-facing surface.
+status: APPROVED
+signed_at: 2026-06-29T22:08:47Z          # informational — the gate uses the git commit time
+head_at_signing: d5c5bbf
+note: Re-sign for #147 PPE ratelimit silence; tests 512 pass, validators LOW

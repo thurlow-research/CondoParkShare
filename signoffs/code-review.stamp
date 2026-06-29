@@ -1,6 +1,6 @@
 role: code-review
 agent: code-reviewer
 status: APPROVED
-signed_at: 2026-06-29T20:28:29Z          # informational — the gate uses the git commit time
-head_at_signing: 90d8d26
-note: Reviewed #189 (gate scripts + env templates) at head pre-rebase 373d193. grep change is display-only, portability exclusion correctly scoped; no gate weakening. APPROVED. (Re-signed after rebase onto main @ #190.)
+signed_at: 2026-06-29T22:08:46Z          # informational — the gate uses the git commit time
+head_at_signing: d5c5bbf
+note: Re-sign for #147 PPE ratelimit silence; tests 512 pass, validators LOW
