@@ -106,10 +106,26 @@ case "$COLLECT_RC" in
         ;;
     *)
         echo "FAIL: test suite has collection errors (exit $COLLECT_RC) —"
-        echo "      a module was likely deleted/renamed and left orphaned imports."
+        echo "      Common causes:"
+        echo "        - A module was deleted/renamed and left orphaned imports"
+        echo "        - Missing required environment variable (SECRET_KEY, PII_ENCRYPTION_KEY,"
+        echo "          DATABASE_URL) — ensure parkshare.settings.test is the active module"
+        echo "          (set via pytest.ini DJANGO_SETTINGS_MODULE) so its env-var fallbacks"
+        echo "          are applied before base.py imports"
         echo "----- pytest --collect-only output (errors) -----"
-        # Surface the import errors, not the full collected-item list.
-        printf '%s\n' "$COLLECT_OUT" | grep -iE "error|Error|cannot import|ModuleNotFound|no module named" | head -40
+        # Surface import errors and Django config errors.
+        # Pattern rationale:
+        #   error|Error              — Python exception names, pytest ERROR/error summaries
+        #   cannot import|ModuleNotFound|no module named — import failures
+        #   ImproperlyConfigured     — Django django.core.exceptions.ImproperlyConfigured:
+        #                             raised by django-environ when a required env var (e.g.
+        #                             SECRET_KEY) is absent; the exception class name does NOT
+        #                             contain "error" so it was previously invisible (#189)
+        #   environment variable     — django-environ's message suffix ("Set the X environment
+        #                             variable") which names the specific missing var
+        printf '%s\n' "$COLLECT_OUT" | \
+            grep -iE "error|Error|cannot import|ModuleNotFound|no module named|ImproperlyConfigured|environment variable" | \
+            head -40
         echo "-------------------------------------------------"
         exit 1
         ;;

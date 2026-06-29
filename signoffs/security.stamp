@@ -1,6 +1,6 @@
 role: security
 agent: security-reviewer
 status: APPROVED
-signed_at: 2026-06-29T19:58:36Z          # informational — the gate uses the git commit time
-head_at_signing: 362be1a
-note: Re-signed against head 362be1a for #167 (ingress config drift: .env.example + setup-run.sh, config-only). 503 tests pass; no Python changed (validators N/A).
+signed_at: 2026-06-29T20:28:30Z          # informational — the gate uses the git commit time
+head_at_signing: 90d8d26
+note: Reviewed #189 at head 373d193. No real secrets; .env.test never auto-loaded; Fernet placeholder decodes to test-only value; pragma scope per-line. APPROVED. (Re-signed after rebase onto main @ #190.)
