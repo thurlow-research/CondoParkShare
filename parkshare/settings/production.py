@@ -32,9 +32,17 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # Production cache — must be a shared backend for rate limiting to be effective.
 # Configure CACHE_URL in the production .env (e.g. redis://redis:6379/1).
-# The ratelimit system checks (E003/W001) are restored here so that
+# The ratelimit system checks (E003/W001) are restored on prod (opus) so that
 # `manage.py check --deploy` will catch a misconfigured (locmem) cache in production.
-SILENCED_SYSTEM_CHECKS = ["auth.E003"]  # ratelimit checks intentionally NOT suppressed
+#
+# On PPE (faberix), CACHE_URL is intentionally not provisioned and per-worker
+# locmem rate limiting is acceptable, so these checks are re-silenced there —
+# otherwise django_ratelimit.E003 blocks every manage.py command (createsuperuser,
+# migrate, shell) and forces --skip-checks (#147). Provisioning Redis for prod is
+# tracked separately by #170.
+SILENCED_SYSTEM_CHECKS = ["auth.E003"]  # ratelimit checks intentionally NOT suppressed on prod
+if ENVIRONMENT == "ppe":  # noqa: F405  (imported from base via star import)
+    SILENCED_SYSTEM_CHECKS += ["django_ratelimit.E003", "django_ratelimit.W001"]
 
 if env("CACHE_URL", default=None):
     CACHES = {"default": env.cache("CACHE_URL")}
