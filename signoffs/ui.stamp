@@ -1,5 +1,6 @@
 role: ui
 agent: ui-reviewer
-status: NOT_APPLICABLE
-signed_at: 2026-06-17T02:06:58Z          # informational — the gate uses the git commit time
-head_at_signing: df3c284
+status: APPROVED
+signed_at: 2026-06-29T05:57:59Z          # informational — the gate uses the git commit time
+head_at_signing: 0ef9808
+note: Re-signed against head for #157 timeouts: 503 tests pass, validators LOW (0.0811).
