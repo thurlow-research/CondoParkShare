@@ -21,7 +21,13 @@ services:
     ports:
       # Nexus (front Caddy) terminates TLS and reverse-proxies to this host on :8001.
       # 8001 is free on both opus and faberix (8000 is taken on faberix by an MCP server).
-      - "8001:8000"
+      # Interface-scoped publish (ADR-002 Decision C / CPS#158): bind only the host's
+      # private-segment IP via WEB_BIND_IP instead of the 0.0.0.0 wildcard, so plain
+      # gunicorn on :8001 is not reachable on every interface (which would bypass the
+      # TLS termination and security headers applied at Nexus). WEB_BIND_IP MUST be set
+      # in .env on every deployment — if left empty, Docker falls back to the 0.0.0.0
+      # wildcard and the exposure gap reopens.
+      - "${WEB_BIND_IP}:8001:8000"
     volumes:
       # audit_logs is a named volume so the JSONL recovery sink (AUDIT_RECOVERY_LOG)
       # survives container restart/replacement. It is the only copy of audit records
