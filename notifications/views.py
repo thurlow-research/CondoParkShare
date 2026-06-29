@@ -170,6 +170,11 @@ def message_reply(request, token):
     if not request.user.is_authenticated:
         return redirect(f"/login/?next={request.path}")
 
+    # Only active accounts may use the relay — a blocked or erased user with a
+    # still-valid reply token must not be able to keep sending messages.
+    if request.user.status != "active":
+        raise PermissionDenied
+
     original = get_object_or_404(RelayMessage, reply_token=token)
 
     if original.token_expires_at <= now():

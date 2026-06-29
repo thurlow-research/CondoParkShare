@@ -116,6 +116,10 @@ def erase_user_pii(user, erased_by):
         user.phone = None
         user.recovery_codes = []
         user.status = "blocked"
+        # Deactivate the account so Django's ModelBackend.user_can_authenticate()
+        # (which checks is_active, not status) cannot re-authenticate an erased
+        # user, and existing sessions lose access at the next status-gated view.
+        user.is_active = False
         # Consent withdrawal under GDPR Art. 7(3) — clear marketing opt-in.
         user.marketing_email_opted_in = False
         user.set_unusable_password()

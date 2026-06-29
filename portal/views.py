@@ -12,6 +12,7 @@ import secrets
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.db.models import Count
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -205,6 +206,11 @@ def resident_unblock(request, pk):
     GET: confirmation page.
     POST: set status='active'; log 'unblock'.
     """
+    # A blocked HOA admin must not be able to POST their own pk to restore
+    # their own privileges. Self-unblock is always denied.
+    if pk == request.user.pk:
+        raise PermissionDenied
+
     org = request.organization
     user = get_object_or_404(User, pk=pk, organization=org)
 
@@ -278,11 +284,7 @@ def spot_deactivate(request, pk):
 def invite_list(request):
     """List all invites for the current organisation."""
     org = request.organization
-    invites = (
-        Invite.objects.filter(organization=org)
-        .select_related("issued_by", "consumed_by")
-        .order_by("-created_at")
-    )
+    invites = Invite.objects.filter(organization=org).select_related("issued_by", "consumed_by").order_by("-created_at")
     return render(request, "portal/invite_list.html", {"invites": invites})
 
 
@@ -351,9 +353,7 @@ def portal_booking_cancel(request, pk):
 
     if booking.status in ("tentative", "confirmed", "active"):
         booking.status = "cancelled_admin"
-        booking.cancel_reason = request.POST.get(
-            "cancel_reason", "Cancelled by HOA admin"
-        )
+        booking.cancel_reason = request.POST.get("cancel_reason", "Cancelled by HOA admin")
         booking.save(update_fields=["status", "cancel_reason", "updated_at"])
 
         _log(
