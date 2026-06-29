@@ -1,6 +1,6 @@
 role: test-unit
 agent: unit-test
-status: APPROVED
-signed_at: 2026-06-29T19:58:36Z          # informational — the gate uses the git commit time
-head_at_signing: 362be1a
-note: Re-signed against head 362be1a for #167 (ingress config drift: .env.example + setup-run.sh, config-only). 503 tests pass; no Python changed (validators N/A).
+status: NOT_APPLICABLE
+signed_at: 2026-06-29T20:28:30Z          # informational — the gate uses the git commit time
+head_at_signing: 90d8d26
+note: #189 is shell gate-script + docs changes — no application logic to unit test. Inner-loop 503 pass.
