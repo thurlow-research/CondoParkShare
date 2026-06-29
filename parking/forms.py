@@ -140,12 +140,18 @@ class AvailabilityWindowForm(forms.Form):
             # The org constraint is always enforced: explicitly via the passed org=
             # argument (production view passes org=request.organization), or derived
             # from owner.organization (tests / management commands that omit org=).
-            # getattr default None keeps this crash-safe if owner has no organization
-            # attribute, though in practice every User has one.
+            # If the tenant context cannot be determined at all, the queryset is
+            # emptied (fail-closed) rather than falling back to an owner-only,
+            # cross-tenant-permissive filter.
             qs = ParkingSpot.objects.filter(owner=owner, status="active")
             org = org or getattr(owner, "organization", None)
             if org is not None:
                 qs = qs.filter(organization=org)
+            else:
+                # Fail closed: if the tenant context cannot be determined (no org
+                # passed and owner has no organization), expose no spots rather than
+                # fall back to an owner-only, cross-tenant-permissive queryset.
+                qs = qs.none()
             self.fields["spot"].queryset = qs
 
     def clean(self):
