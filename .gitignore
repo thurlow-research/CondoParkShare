@@ -9,6 +9,9 @@ composer.phar
 
 # Environment / secrets
 .env
+.env.*
+!.env.example
+!.env.test
 
 # IDE
 .idea/

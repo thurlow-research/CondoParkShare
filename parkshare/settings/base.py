@@ -89,6 +89,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "csp.middleware.CSPMiddleware",
     "parkshare.middleware.RatelimitMiddleware",
     "parkshare.middleware.TenantMiddleware",

@@ -47,6 +47,7 @@ python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
 pywebpush==2.3.0
 PyYAML==6.0.3
+redis==5.2.1
 requests==2.34.2
 rich==15.0.0
 segno==1.6.6
@@ -57,4 +58,5 @@ textual==8.2.7
 typing_extensions==4.15.0
 uc-micro-py==2.0.0
 urllib3==2.7.0
+whitenoise==6.8.2
 yarl==1.24.2

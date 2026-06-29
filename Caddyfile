@@ -33,6 +33,10 @@ condoparkshare.kumajyo.com, condoparkshare.com {
         }
     }
 
+    request_body {
+        max_size 10MB
+    }
+
     header {
         X-Content-Type-Options "nosniff"
         Referrer-Policy "strict-origin-when-cross-origin"
@@ -60,6 +64,10 @@ ppe.condoparkshare.kumajyo.com, ppe.condoparkshare.com {
             dial_timeout 5s
             response_header_timeout 35s
         }
+    }
+
+    request_body {
+        max_size 10MB
     }
 
     header {

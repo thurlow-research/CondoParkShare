@@ -30,6 +30,13 @@ SECURE_SSL_REDIRECT = False
 # Required for secure cookies and CSRF to work correctly through the proxy.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
+# Manifest storage is prod-only: it requires `collectstatic` to have run, so adding
+# it to base.py would break {% static %} in tests where collectstatic hasn't run.
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+}
+
 # Production cache — must be a shared backend for rate limiting to be effective.
 # Configure CACHE_URL in the production .env (e.g. redis://redis:6379/1).
 # The ratelimit system checks (E003/W001) are restored on prod (opus) so that
@@ -46,6 +53,15 @@ if ENVIRONMENT == "ppe":  # noqa: F405  (imported from base via star import)
 
 if env("CACHE_URL", default=None):
     CACHES = {"default": env.cache("CACHE_URL")}
+elif ENVIRONMENT == "prod":  # noqa: F405  (imported from base via star import)
+    from django.core.exceptions import ImproperlyConfigured
+
+    raise ImproperlyConfigured(
+        "CACHE_URL is mandatory on prod (e.g. redis://redis:6379/1). Without a shared "
+        "cache each gunicorn worker keeps its own locmem ratelimit counters, so the "
+        "brute-force attempt budget is multiplied across workers (4 workers ≈ 4× the "
+        "login/TOTP budget). The docker-compose `redis` service provides this backend."
+    )
 else:
     import warnings
 

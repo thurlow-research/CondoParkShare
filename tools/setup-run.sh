@@ -84,8 +84,21 @@ docker compose pull --quiet
 docker compose build
 docker compose up -d
 
-echo "  Waiting 10 s for the database to be ready..."
-sleep 10
+echo "  Waiting for the database to accept connections..."
+# Poll the db container's pg_isready instead of a blind sleep (CPS#170/#165).
+# compose already gates `web` on the db healthcheck, but the migrate exec below
+# can still race a DB that only just became reachable.
+for i in $(seq 1 30); do
+    if docker compose exec -T db pg_isready -q; then
+        echo "  Database is ready."
+        break
+    fi
+    if [ "$i" -eq 30 ]; then
+        echo "  !! Database did not become ready within ~60s." >&2
+        exit 1
+    fi
+    sleep 2
+done
 
 docker compose exec -T web python manage.py migrate --no-input
 docker compose exec -T web python manage.py collectstatic --no-input --clear

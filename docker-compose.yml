@@ -22,6 +22,19 @@ services:
       retries: 5
       start_period: 10s
 
+  redis:
+    # TODO: pin by digest like db (docker buildx imagetools inspect redis:7.4-alpine)
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
   web:
     build: .
     restart: unless-stopped
@@ -35,6 +48,8 @@ services:
       - .env
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     # Liveness probe (CPS#165): TCP connect to gunicorn. A full HTTP /healthz is a
     # deferred follow-up — it needs an endpoint exempt from TenantMiddleware's
