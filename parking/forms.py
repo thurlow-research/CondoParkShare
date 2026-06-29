@@ -133,7 +133,26 @@ class AvailabilityWindowForm(forms.Form):
     def __init__(self, *args, owner=None, org=None, **kwargs):
         super().__init__(*args, **kwargs)
         if owner is not None:
-            self.fields["spot"].queryset = ParkingSpot.scoped.filter(owner=owner, status="active")
+            # Use the unscoped manager and apply the org constraint explicitly.
+            # Replaces ParkingSpot.scoped which read org from TenantMiddleware
+            # thread-locals, silently returning qs.none() in non-request contexts
+            # (tests, management commands).
+            # The org constraint is always enforced: explicitly via the passed org=
+            # argument (production view passes org=request.organization), or derived
+            # from owner.organization (tests / management commands that omit org=).
+            # If the tenant context cannot be determined at all, the queryset is
+            # emptied (fail-closed) rather than falling back to an owner-only,
+            # cross-tenant-permissive filter.
+            qs = ParkingSpot.objects.filter(owner=owner, status="active")
+            org = org or getattr(owner, "organization", None)
+            if org is not None:
+                qs = qs.filter(organization=org)
+            else:
+                # Fail closed: if the tenant context cannot be determined (no org
+                # passed and owner has no organization), expose no spots rather than
+                # fall back to an owner-only, cross-tenant-permissive queryset.
+                qs = qs.none()
+            self.fields["spot"].queryset = qs
 
     def clean(self):
         cleaned = super().clean()
