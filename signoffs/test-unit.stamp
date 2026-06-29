@@ -1,6 +1,6 @@
 role: test-unit
 agent: unit-test
-status: NOT_APPLICABLE
-signed_at: 2026-06-29T20:28:30Z          # informational — the gate uses the git commit time
-head_at_signing: 90d8d26
-note: #189 is shell gate-script + docs changes — no application logic to unit test. Inner-loop 503 pass.
+status: APPROVED
+signed_at: 2026-06-29T22:08:46Z          # informational — the gate uses the git commit time
+head_at_signing: d5c5bbf
+note: Re-sign for #147 PPE ratelimit silence; tests 512 pass, validators LOW

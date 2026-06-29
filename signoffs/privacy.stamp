@@ -1,6 +1,6 @@
 role: privacy
 agent: privacy-reviewer
-status: NOT_APPLICABLE
-signed_at: 2026-06-29T20:28:30Z          # informational — the gate uses the git commit time
-head_at_signing: 90d8d26
-note: #189 touches oversight gate scripts + env templates only — no PII fields, encryption logic, or data handling.
+status: APPROVED
+signed_at: 2026-06-29T22:08:46Z          # informational — the gate uses the git commit time
+head_at_signing: d5c5bbf
+note: Re-sign for #147 PPE ratelimit silence; tests 512 pass, validators LOW
