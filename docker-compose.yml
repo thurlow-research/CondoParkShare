@@ -1,6 +1,8 @@
 services:
   db:
-    image: postgres:16
+    # Pinned to the multi-arch index digest for reproducible deploys (CPS#165).
+    # Bump deliberately; resolve with: docker buildx imagetools inspect postgres:16
+    image: postgres:16@sha256:fe03a7605299a34ddf5e4f285dff78c3d7190a576b3c6b46f2fcff69f4bffd54
     restart: unless-stopped
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -9,15 +11,42 @@ services:
     networks:
       - internal
     # No ports binding — db is internal only. All access via web service.
+    # Readiness gate (CPS#165): pg_isready reports when Postgres is accepting
+    # connections, so web's `depends_on: condition: service_healthy` waits for a
+    # live DB instead of racing a bare `depends_on` on cold start. $$ escapes to a
+    # literal $ so the container shell expands POSTGRES_* from its own env.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER:-postgres}\" -d \"$${POSTGRES_DB:-postgres}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   web:
     build: .
     restart: unless-stopped
-    command: gunicorn parkshare.wsgi:application --bind 0.0.0.0:8000 --workers 4
+    # Migrate before serving (CPS#165): run migrations to completion, then exec
+    # gunicorn (exec → gunicorn is PID 1 for clean signal handling). With the DB
+    # readiness gate below, migrate runs against a live schema and no requests
+    # are served against an unmigrated database. --workers 4 is authoritative
+    # here (the Dockerfile CMD intentionally omits a worker count).
+    command: sh -c "python manage.py migrate --no-input && exec gunicorn parkshare.wsgi:application --bind 0.0.0.0:8000 --workers 4"
     env_file:
       - .env
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    # Liveness probe (CPS#165): TCP connect to gunicorn. A full HTTP /healthz is a
+    # deferred follow-up — it needs an endpoint exempt from TenantMiddleware's
+    # hostname→Organization resolution (and ALLOWED_HOSTS) to answer an internal
+    # 127.0.0.1 probe; a TCP check verifies the worker is accepting connections
+    # without that app-layer change. python is used (the slim image has no curl).
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8000), 3).close()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
     ports:
       # Nexus (front Caddy) terminates TLS and reverse-proxies to this host on :8001.
       # 8001 is free on both opus and faberix (8000 is taken on faberix by an MCP server).
