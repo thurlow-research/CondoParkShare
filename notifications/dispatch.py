@@ -66,6 +66,7 @@ def _send_push(user, event, booking):
     try:
         import json
 
+        import requests
         from django.conf import settings
         from pywebpush import WebPushException, webpush
 
@@ -80,9 +81,12 @@ def _send_push(user, event, booking):
                     data=payload,
                     vapid_private_key=settings.VAPID_PRIVATE_KEY,
                     vapid_claims={"sub": f"mailto:{settings.VAPID_ADMIN_EMAIL}"},
+                    # (connect, read) timeout — without this a hung push endpoint
+                    # blocks the gunicorn worker indefinitely. See #157.
+                    timeout=(10, 30),
                 )
-            except WebPushException:
-                pass  # individual push failure does not abort
+            except (WebPushException, requests.exceptions.RequestException):
+                pass  # individual push failure/timeout does not abort
     except ImportError:
         pass
 

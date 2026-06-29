@@ -678,3 +678,85 @@ def test_relay_expired_token_returns_404():
     assert (
         auth_response.status_code == 404
     ), f"Expected 404 for expired relay token, got {auth_response.status_code}"
+
+
+# ---------------------------------------------------------------------------
+# Regression (#157): outbound web-push must pass a timeout and must not let a
+# requests-level network error escape the dispatcher.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_send_push_passes_timeout_to_webpush():
+    """_send_push must pass a (connect, read) timeout so a hung endpoint
+    cannot block a gunicorn worker indefinitely (#157)."""
+    from unittest.mock import patch
+
+    from notifications.dispatch import notify
+    from notifications.models import WebPushSubscription
+
+    org = OrganizationFactory()
+    owner = UserFactory(
+        organization=org,
+        email="pushowner@example.com",
+        notification_prefs={"push": True},
+    )
+    borrower = UserFactory(organization=org, email="pushborrower@example.com")
+    spot = ParkingSpotFactory(organization=org, owner=owner)
+    booking = BookingFactory(
+        organization=org,
+        spot=spot,
+        borrower=borrower,
+        time_range=DateTimeTZRange(_utc(2029, 9, 1, 10), _utc(2029, 9, 1, 14)),
+    )
+    WebPushSubscription.objects.create(
+        user=owner,
+        endpoint="https://push.example.com/ep/owner",
+        p256dh="x" * 32,
+        auth="y" * 16,
+    )
+
+    with patch("pywebpush.webpush") as mock_webpush:
+        notify("booking_confirmed", booking)
+
+    assert mock_webpush.called, "expected webpush to be invoked for a push-enabled user"
+    _, kwargs = mock_webpush.call_args
+    assert "timeout" in kwargs, "webpush must be called with an explicit timeout (#157)"
+    assert kwargs["timeout"] is not None
+
+
+@pytest.mark.django_db
+def test_send_push_swallows_requests_network_error():
+    """A requests-level error (e.g. connect timeout) from webpush must be
+    caught so dispatch does not propagate it to the request thread (#157)."""
+    from unittest.mock import patch
+
+    import requests
+
+    from notifications.dispatch import notify
+    from notifications.models import WebPushSubscription
+
+    org = OrganizationFactory()
+    owner = UserFactory(
+        organization=org,
+        email="pushowner2@example.com",
+        notification_prefs={"push": True},
+    )
+    borrower = UserFactory(organization=org, email="pushborrower2@example.com")
+    spot = ParkingSpotFactory(organization=org, owner=owner)
+    booking = BookingFactory(
+        organization=org,
+        spot=spot,
+        borrower=borrower,
+        time_range=DateTimeTZRange(_utc(2029, 9, 2, 10), _utc(2029, 9, 2, 14)),
+    )
+    WebPushSubscription.objects.create(
+        user=owner,
+        endpoint="https://push.example.com/ep/owner2",
+        p256dh="x" * 32,
+        auth="y" * 16,
+    )
+
+    with patch("pywebpush.webpush", side_effect=requests.exceptions.ConnectTimeout("boom")):
+        # Must not raise.
+        notify("booking_confirmed", booking)
