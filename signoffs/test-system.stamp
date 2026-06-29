@@ -1,6 +1,6 @@
 role: test-system
 agent: system-test
-status: APPROVED
-signed_at: 2026-06-29T22:08:46Z          # informational — the gate uses the git commit time
-head_at_signing: d5c5bbf
-note: Re-sign for #147 PPE ratelimit silence; tests 512 pass, validators LOW
+status: NOT_APPLICABLE
+signed_at: 2026-06-29T23:01:50Z          # informational — the gate uses the git commit time
+head_at_signing: a62320c
+note: #170: no system-flow surface; prod config/infra hardening
