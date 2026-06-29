@@ -48,8 +48,9 @@ ufw --force reset
 ufw default deny incoming
 ufw default allow outgoing
 ufw allow 22/tcp   comment 'SSH'
-ufw allow 80/tcp   comment 'HTTP (Caddy)'
-ufw allow 443/tcp  comment 'HTTPS (Caddy)'
+# No 80/443 here: TLS terminates on Nexus and is reverse-proxied to :8001;
+# there is no local Caddy in docker-compose.yml, so opening 80/443 advertises
+# services that do not exist on this host (ADR-002 Decision E).
 ufw --force enable
 ufw status verbose
 
@@ -71,7 +72,6 @@ if [[ ! -f "$ENV_FILE" ]]; then
     echo "       PII_ENCRYPTION_KEY  — generate with: python3 -c \"import secrets; print(secrets.token_urlsafe(32))\""
     echo "       VAPID_PRIVATE_KEY / VAPID_PUBLIC_KEY — generate with: python3 -m pywebpush generate-keys"
     echo "       BREVO_API_KEY       — from your Brevo account"
-    echo "       CF_API_TOKEN        — from Cloudflare (needed for DNS-01 TLS on kumajyo.com)"
     echo ""
     read -r -p "  Press ENTER once you have saved $ENV_FILE, or Ctrl-C to abort and edit first. "
 else
@@ -116,5 +116,4 @@ echo ""
 echo "Run setup complete."
 echo "  Stack status:    docker compose -f $INSTALL_DIR/docker-compose.yml ps"
 echo "  App logs:        docker compose -f $INSTALL_DIR/docker-compose.yml logs -f web"
-echo "  Caddy logs:      docker compose -f $INSTALL_DIR/docker-compose.yml logs -f caddy"
 echo "  Restart on boot: systemctl status parkshare"

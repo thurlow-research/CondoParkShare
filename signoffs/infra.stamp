@@ -1,6 +1,6 @@
 role: infra
 agent: infra-reviewer
 status: APPROVED
-signed_at: 2026-06-29T17:38:26Z          # informational — the gate uses the git commit time
-head_at_signing: 0ce3a04
-note: Re-signed against head 0ce3a04 for #187 (test.py env bootstrap): 503 tests pass, validators LOW (0.0168). code-reviewer approval on 0ce3a04.
+signed_at: 2026-06-29T19:58:37Z          # informational — the gate uses the git commit time
+head_at_signing: 362be1a
+note: Re-signed against head 362be1a for #167 (ingress config drift: .env.example + setup-run.sh, config-only). 503 tests pass; no Python changed (validators N/A).
