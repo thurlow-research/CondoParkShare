@@ -90,6 +90,39 @@ sleep 10
 docker compose exec -T web python manage.py migrate --no-input
 docker compose exec -T web python manage.py collectstatic --no-input --clear
 
+# Optional first-run admin bootstrap (issue #172).
+# No-op unless ADMIN_EMAIL, ORG_NAME and ORG_HOSTNAME are all set in the
+# environment. When set, this creates the first operator admin (org + superuser
+# + confirmed TOTP device) idempotently — safe to re-run, it does nothing once
+# the admin exists. The generated/used password and the otpauth:// 2FA URI are
+# printed ONCE to the output below; capture them now.
+#   ADMIN_PASSWORD is read from the env by the command (--password-from-env);
+#   if unset/empty the command errors, so set it or drop --password-from-env to
+#   have a strong password generated and printed.
+# Note: django_ratelimit may raise system check E003 on this host (#147); if the
+# command aborts on checks, add --skip-checks to the invocation below.
+if [[ -n "${ADMIN_EMAIL:-}" && -n "${ORG_NAME:-}" && -n "${ORG_HOSTNAME:-}" ]]; then
+    echo "==> Bootstrapping first-run admin ($ADMIN_EMAIL)"
+    # Forward ADMIN_PASSWORD by NAME only (`-e ADMIN_PASSWORD`, no value) so the
+    # cleartext password never appears in the host `docker compose` argv — which
+    # is readable by any local user via `ps -ww`. The name-only form tells
+    # compose to read the value from this script's environment and inject it
+    # into the container, keeping it off the command line. We export it
+    # (defaulting to empty if unset) so it is present for that forwarding; the
+    # command itself errors out cleanly when the value is empty.
+    export ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
+    docker compose exec -T \
+        -e ADMIN_PASSWORD \
+        web python manage.py bootstrap_admin \
+        --email "$ADMIN_EMAIL" \
+        --org-name "$ORG_NAME" \
+        --org-hostname "$ORG_HOSTNAME" \
+        ${ORG_SUPPORT_EMAIL:+--org-support-email "$ORG_SUPPORT_EMAIL"} \
+        --password-from-env ADMIN_PASSWORD
+else
+    echo "  Skipping admin bootstrap (ADMIN_EMAIL/ORG_NAME/ORG_HOSTNAME not all set)."
+fi
+
 echo "==> [6/6] Installing systemd service (parkshare.service)"
 cat > /etc/systemd/system/parkshare.service <<EOF
 [Unit]
