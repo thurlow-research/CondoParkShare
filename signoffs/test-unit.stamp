@@ -1,6 +1,6 @@
 role: test-unit
 agent: unit-test
 status: APPROVED
-signed_at: 2026-06-29T07:28:18Z          # informational — the gate uses the git commit time
-head_at_signing: ff06d25
-note: Re-signed against head for #158 web-bind: 503 tests pass, validators LOW (0.0450).
+signed_at: 2026-06-29T17:38:27Z          # informational — the gate uses the git commit time
+head_at_signing: 0ce3a04
+note: Re-signed against head 0ce3a04 for #187 (test.py env bootstrap): 503 tests pass, validators LOW (0.0168). code-reviewer approval on 0ce3a04.
