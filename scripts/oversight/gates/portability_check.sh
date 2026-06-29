@@ -45,7 +45,8 @@ if $CHECK_ALL || [[ ${#FILES[@]} -eq 0 ]]; then
         [[ -n "$_f" ]] && FILES+=("$_f")
     done < <(find . -type f \
         \( -name '*.py' -o -name '*.sh' -o -name '*.toml' -o -name '*.cfg' -o -name '*.ini' \) \
-        -not -path "./.venv/*" -not -path "./.git/*" -not -path "./node_modules/*")
+        -not -path "./.venv/*" -not -path "./scripts/oversight/.venv/*" \
+        -not -path "./.git/*" -not -path "./node_modules/*")
 fi
 
 if [[ ${#FILES[@]} -eq 0 ]]; then
