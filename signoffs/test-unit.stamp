@@ -1,6 +1,6 @@
 role: test-unit
 agent: unit-test
 status: APPROVED
-signed_at: 2026-06-29T22:08:46Z          # informational — the gate uses the git commit time
-head_at_signing: d5c5bbf
-note: Re-sign for #147 PPE ratelimit silence; tests 512 pass, validators LOW
+signed_at: 2026-06-29T23:01:49Z          # informational — the gate uses the git commit time
+head_at_signing: a62320c
+note: #170: inner-loop 512 pass, 0 fail; no new code paths (config/infra)
