@@ -64,6 +64,7 @@ def hoa_admin_required(view_func):
         if (
             not request.user.is_authenticated
             or not request.user.is_hoa_admin
+            or request.user.status != "active"
             or request.user.organization != request.organization
         ):
             raise PermissionDenied

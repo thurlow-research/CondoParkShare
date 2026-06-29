@@ -114,7 +114,9 @@ def login_view(request):
             # authenticate() uses the multi-tenant backend — it scopes to the
             # current organisation via TenantMiddleware.
             user = authenticate(request, username=email, password=password)
-            if user is not None:
+            # Reject blocked / not-yet-approved accounts here. Use the same
+            # generic error as a bad password so we do not reveal account state.
+            if user is not None and user.status not in ("blocked", "pending_approval"):
                 # First factor passed — store PK; do NOT call django login yet.
                 request.session["_pre_auth_user_id"] = user.pk
                 return redirect("totp_verify")
@@ -148,6 +150,12 @@ def totp_verify(request):
     """
     user = _get_pre_auth_user(request)
     if user is None:
+        return redirect("login")
+
+    # Defence in depth: even if a blocked/unapproved user reaches the second
+    # factor (e.g. status changed mid-flow), never complete the login.
+    if user.status in ("blocked", "pending_approval"):
+        request.session.pop("_pre_auth_user_id", None)
         return redirect("login")
 
     if request.method == "POST":
