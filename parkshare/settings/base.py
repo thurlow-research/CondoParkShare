@@ -224,10 +224,16 @@ FIELD_ENCRYPTION_KEY = _fernet_key(env("PII_ENCRYPTION_KEY"))
 
 ANYMAIL = {
     "BREVO_API_KEY": env("BREVO_API_KEY", default=""),
+    # (connect, read) timeout in seconds for outbound Brevo API calls. Without
+    # this, a slow/unresponsive provider blocks a gunicorn worker indefinitely
+    # (a hung socket never raises, so fail_silently does not help). See #157.
+    "REQUESTS_TIMEOUT": (30, 60),
 }
 
 EMAIL_BACKEND = env("EMAIL_BACKEND", default="anymail.backends.brevo.EmailBackend")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@parkshare.local")
+# Backstop for SMTP-based backends (Anymail honours ANYMAIL["REQUESTS_TIMEOUT"]).
+EMAIL_TIMEOUT = 60
 
 # ---------------------------------------------------------------------------
 # Web push — pywebpush / VAPID
