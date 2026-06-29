@@ -10,16 +10,16 @@ Covers the uncovered lines in notifications/views.py:
 
 import json
 import uuid
-from datetime import datetime, timedelta
+from contextlib import contextmanager
+from datetime import datetime
 from datetime import timezone as dt_timezone
+from unittest.mock import patch
 
 import factory
 import pytest
 from django.contrib.auth.models import AnonymousUser
-from django.test import RequestFactory, override_settings
-from django.utils.timezone import now
+from django.test import RequestFactory
 from psycopg2.extras import DateTimeTZRange
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -134,13 +134,15 @@ def test_push_subscribe_creates_subscription():
     org = OrganizationFactory()
     user = UserFactory(organization=org)
 
-    payload = json.dumps({
-        "endpoint": "https://push.example.com/test-endpoint-123",
-        "keys": {
-            "p256dh": "BNEzGrYOQuqxhLiVwH6YKp1234567890",
-            "auth": "auth1234567890",
-        },
-    })
+    payload = json.dumps(
+        {
+            "endpoint": "https://push.example.com/test-endpoint-123",
+            "keys": {
+                "p256dh": "BNEzGrYOQuqxhLiVwH6YKp1234567890",
+                "auth": "auth1234567890",
+            },
+        }
+    )
 
     request = _make_request("POST", user=user, body=payload, org=org)
     response = push_subscribe(request)
@@ -252,7 +254,6 @@ def test_push_unsubscribe_invalid_json_returns_400():
 def test_message_send_get_renders_form():
     """message_send GET renders the send form for the borrower."""
     from notifications.views import message_send
-    from parking.models import Booking
 
     org = OrganizationFactory()
     owner = UserFactory(organization=org)
@@ -400,6 +401,8 @@ def test_message_send_expired_booking_returns_400():
 @pytest.mark.django_db
 def test_message_reply_valid_token_get_renders_form():
     """message_reply GET with a valid token renders the reply form."""
+    from freezegun import freeze_time
+
     from notifications.models import RelayMessage
     from notifications.views import message_reply
 
@@ -427,9 +430,8 @@ def test_message_reply_valid_token_get_renders_form():
         token_expires_at=_utc(2030, 8, 1, 14),  # in the future
     )
 
-    from freezegun import freeze_time
-
-    request = _make_request("GET", user=AnonymousUser(), org=org)
+    # owner is to_user of the original message — the intended reply recipient
+    request = _make_request("GET", user=owner, org=org)
 
     # Freeze time so the token appears not expired
     with freeze_time(_utc(2030, 8, 1, 11)):
@@ -468,7 +470,8 @@ def test_message_reply_expired_token_returns_404():
         token_expires_at=_utc(2025, 1, 1, 14),  # expired
     )
 
-    request = _make_request("GET", user=AnonymousUser(), org=org)
+    # owner is to_user of the original message — authenticated recipient sees 404
+    request = _make_request("GET", user=owner, org=org)
     response = message_reply(request, token=token)
 
     assert response.status_code == 404
@@ -477,10 +480,6 @@ def test_message_reply_expired_token_returns_404():
 # ---------------------------------------------------------------------------
 # Helpers for patching scoped manager and relay
 # ---------------------------------------------------------------------------
-
-
-from contextlib import contextmanager
-from unittest.mock import MagicMock, patch
 
 
 @contextmanager
@@ -493,6 +492,7 @@ def _patch_scoped_get(booking):
 @contextmanager
 def _patch_send_relay():
     """Patch send_relay_message to be a no-op."""
-    with patch("notifications.views.send_relay_message"), \
-         patch("notifications.views.can_send_relay", return_value=True):
+    with patch("notifications.views.send_relay_message"), patch(
+        "notifications.views.can_send_relay", return_value=True
+    ):
         yield
